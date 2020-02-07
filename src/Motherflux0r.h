@@ -1,10 +1,11 @@
 #include <inttypes.h>
 #include <stdint.h>
+#include <CppPotpourri.h>
 
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
 
-#define TEST_PROG_VERSION          "v1.2"
+#define TEST_PROG_VERSION          "v1.3"
 #define TOUCH_DWELL_LONG_PRESS       1000  // Milliseconds for "long-press".
 #define E_VAL                      1.0184
 
@@ -88,6 +89,7 @@ enum class SensorID : uint8_t {
 };
 
 /* Struct for tracking application state. */
+// TODO: This should evolve into a class if we irradiate millions of copies of it.
 typedef struct {
   const char* const title;           // Name of tha application.
   const AppID       id;              // ID of the application.
@@ -122,12 +124,6 @@ typedef struct {
 #define ICON_BATTERY  11
 
 uint8_t* bitmapPointer(unsigned int idx);
-inline uint16_t strict_max(uint16_t a, uint16_t b) { return (a > b) ? a:b; };
-inline uint16_t strict_min(uint16_t a, uint16_t b) { return (a > b) ? b:a; };
-//inline uint32_t strict_max(uint32_t a, uint32_t b) { return (a > b) ? a:b; };
-//inline uint32_t strict_min(uint32_t a, uint32_t b) { return (a > b) ? b:a; };
-inline float strict_max(float a, float b) { return (a > b) ? a:b; };
-inline float strict_min(float a, float b) { return (a > b) ? b:a; };
 
 
 #endif    // __MOTHERFLUX0R_H__

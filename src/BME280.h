@@ -14,6 +14,14 @@
 *   a TwoWire pointer. Data operations are now guarded by hardware error checks.
 * Encapsulated data is now (mostly) condensed and aligned.
 *                                                  ---J. Ian Lindsay  2020.02.04
+*
+* Added read timing member and poll() fxn. Timing value is still hard-coded. But
+*   at least it takes the complexity out of the application.
+* Data is now always read uniformly, and is cached in the class.
+* Some style enforcement changes.
+* Unit settings are now fully encapsulated, but there is no way to set them.
+* Initialization and enabled flags are now being properly set and observed.
+*                                                  ---J. Ian Lindsay  2020.02.06
 */
 
 /*
@@ -162,17 +170,11 @@ class BME280 {
     inline bool  initialized() {    return _baro_flag(BME280_FLAG_INITIALIZED);     };
     inline bool  hasHumidity() {    return _baro_flag(BME280_FLAG_HAS_HUMIDITY);    };
 
+    int8_t poll();
 
-    // Read the temperature from the BME280 and return a float.
-    float temp(TempUnit unit = TempUnit::Celsius);
-
-    // Read the pressure from the BME280 and return a float with the
-    // specified unit.
-    float pres(PresUnit unit = PresUnit::Pa);
-
-    // Read the humidity from the BME280 and return a percentage
-    // as a float.
-    float hum();
+    inline float temp() {  return _air_temp;  };  // Temperature in real units.
+    inline float pres() {  return _pressure;  };  // Pressure in real units.
+    inline float hum() {   return _humidity;  };  // Humidity as a percentage.
 
     // Calculate the altitude based on the pressure with the
     // specified units.
@@ -188,17 +190,11 @@ class BME280 {
     // @param altitude in meters.
     // @param temp in Celsius.
     // @return the equivalent pressure at sea level.
-    float EquivalentSeaLevelPressure(float altitude, float temp, float pres);
+    float EquivalentSeaLevelPressure(float altitude, float temp, float pressure);
 
     // Calculate the dew point based on the temperature and
     // humidity with the specified units.
-    float DewPoint(float temp, float hum, TempUnit tempUnit = TempUnit::Celsius);
-
-    // Read the data from the BME280 in the specified unit.
-    bool read(
-      float* pressure, float* temperature, float* humidity,
-      TempUnit tempUnit = TempUnit::Celsius,
-      PresUnit presUnit = PresUnit::Pa);
+    float DewPoint(float temp, float hum);
 
     bool setSettings(const BME280Settings& settings);
     const BME280Settings& getSettings() const;
@@ -231,10 +227,16 @@ class BME280 {
 
 
   private:
+    uint8_t m_dig[32];
+    float      _air_temp    = 0.0;
+    float      _pressure    = 0.0;
+    float      _humidity    = 0.0;
+    uint32_t   _last_read   = 0;
+    uint16_t   _flags       = 0;
     LengthUnit _unit_length = LengthUnit::Meters;
     TempUnit   _unit_temp   = TempUnit::Celsius;
-    uint16_t   _flags       = 0;
-    uint8_t m_dig[32];
+    PresUnit   _unit_pres   = PresUnit::Pa;
+    uint8_t    PADDING      = 0;
 
     // Write values to BME280 registers.
     virtual bool WriteRegister(uint8_t addr, uint8_t data) =0;
@@ -242,6 +244,8 @@ class BME280 {
     // Read values from BME280 registers.
     virtual bool ReadRegister(uint8_t addr, uint8_t data[], uint8_t length) =0;
 
+    // Read the data from the BME280 in the specified unit.
+    bool _refresh_data();
 
     // Calculates registers based on settings.
     void CalculateRegisters(uint8_t& ctrlHum, uint8_t& ctrlMeas, uint8_t& config);
@@ -257,21 +261,10 @@ class BME280 {
     // successful.
     bool ReadTrim();
 
-    // Read the raw data from the BME280 into an array and return
-    // true if successful.
-    bool ReadData(int32_t data[8]);
-
-    // Calculate the temperature from the BME280 raw data and
-    // BME280 trim, return a float.
-    float CalculateTemperature(int32_t raw, int32_t& t_fine, TempUnit unit = TempUnit::Celsius);
-
-    // Calculate the humidity from the BME280 raw data and BME280
-    // trim, return a float.
+    /* Convert the raw data and the trim into real units, return a float. */
+    float CalculateTemperature(int32_t raw, int32_t& t_fine);
     float CalculateHumidity(int32_t raw, int32_t t_fine);
-
-    // Calculate the pressure from the BME280 raw data and BME280
-    // trim, return a float.
-    float CalculatePressure(int32_t raw, int32_t t_fine, PresUnit unit = PresUnit::Pa);
+    float CalculatePressure(int32_t raw, int32_t t_fine);
 };
 
 

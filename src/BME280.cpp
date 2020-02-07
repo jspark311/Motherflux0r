@@ -70,9 +70,34 @@ bool BME280::_priv_init() {
   if (0 == _read_chip_id()) {
     if (ReadTrim()) {
       ret = WriteSettings();
+      _baro_set_flag(BME280_FLAG_INITIALIZED, ret);
+      _baro_set_flag(BME280_FLAG_ENABLED, ret);
     }
   }
-  _baro_set_flag(BME280_FLAG_INITIALIZED, (0 == ret));
+  return ret;
+}
+
+
+/*
+* Poll the class for updates.
+* Returns...
+*   -3 if not initialized and enabled.
+*   -1 if data needed to be read, but doing so failed.
+*   0  if nothing needs doing.
+*   1  if data was read and is waiting.
+*/
+int8_t BME280::poll() {
+  int8_t ret = -3;
+  if (initialized() && enabled()) {
+    uint32_t now = millis();
+    uint32_t r_interval = 100;
+    if ((now - _last_read) >= r_interval) {
+      ret = _refresh_data() ? 1 : -1;
+    }
+    else {
+      ret = 0;
+    }
+  }
   return ret;
 }
 
@@ -153,23 +178,7 @@ bool BME280::ReadTrim() {
 }
 
 
-bool BME280::ReadData(int32_t data[SENSOR_DATA_LENGTH]) {
-  // For forced mode we need to write the mode to BME280 register before reading
-  bool success = (m_settings.mode == BME280Mode::Forced) ? WriteSettings() : true;
-
-  // Registers are in order. So we can start at the pressure register and read 8 bytes.
-  if (success) {
-    uint8_t buffer[SENSOR_DATA_LENGTH];
-    success = ReadRegister(PRESS_ADDR, buffer, SENSOR_DATA_LENGTH);
-    for(int i = 0; i < SENSOR_DATA_LENGTH; ++i) {
-      data[i] = static_cast<int32_t>(buffer[i]);
-    }
-  }
-  return success;
-}
-
-
-float BME280::CalculateTemperature(int32_t raw, int32_t& t_fine, TempUnit unit) {
+float BME280::CalculateTemperature(int32_t raw, int32_t& t_fine) {
   // Code based on calibration algorthim provided by Bosch.
   int32_t var1, var2, final;
   uint16_t dig_T1 = (m_dig[1] << 8) | m_dig[0];
@@ -179,7 +188,7 @@ float BME280::CalculateTemperature(int32_t raw, int32_t& t_fine, TempUnit unit) 
   var2 = (((((raw >> 4) - ((int32_t)dig_T1)) * ((raw >> 4) - ((int32_t)dig_T1))) >> 12) * ((int32_t)dig_T3)) >> 14;
   t_fine = var1 + var2;
   final = (t_fine * 5 + 128) >> 8;
-  return unit == TempUnit::Celsius ? final/100.0 : final/100.0*9.0/5.0 + 32.0;
+  return _unit_temp == TempUnit::Celsius ? final/100.0 : final/100.0*9.0/5.0 + 32.0;
 }
 
 
@@ -205,7 +214,7 @@ float BME280::CalculateHumidity(int32_t raw, int32_t t_fine) {
 }
 
 
-float BME280::CalculatePressure(int32_t raw, int32_t t_fine, PresUnit unit) {
+float BME280::CalculatePressure(int32_t raw, int32_t t_fine) {
    // Code based on calibration algorthim provided by Bosch.
    int64_t var1, var2, pressure;
    float final;
@@ -232,11 +241,10 @@ float BME280::CalculatePressure(int32_t raw, int32_t t_fine, PresUnit unit) {
    var1 = (((int64_t)dig_P9) * (pressure >> 13) * (pressure >> 13)) >> 25;
    var2 = (((int64_t)dig_P8) * pressure) >> 19;
    pressure = ((pressure + var1 + var2) >> 8) + (((int64_t)dig_P7) << 4);
-
    final = ((uint32_t)pressure)/256.0;
 
    // Conversion units courtesy of www.endmemo.com.
-   switch(unit){
+   switch (_unit_pres) {
       case PresUnit::hPa: /* hPa */
          final /= 100.0;
          break;
@@ -262,53 +270,30 @@ float BME280::CalculatePressure(int32_t raw, int32_t t_fine, PresUnit unit) {
 }
 
 
-float BME280::temp(TempUnit unit) {
+bool BME280::_refresh_data() {
   int32_t data[8];
+  uint8_t buffer[SENSOR_DATA_LENGTH];
   int32_t t_fine;
-  if(!ReadData(data)){ return NAN; }
-  uint32_t rawTemp   = (data[3] << 12) | (data[4] << 4) | (data[5] >> 4);
-  return CalculateTemperature(rawTemp, t_fine, unit);
-}
+  // For forced mode we need to write the mode to BME280 register before reading
+  bool ret = (m_settings.mode == BME280Mode::Forced) ? WriteSettings() : true;
 
-
-float BME280::pres(PresUnit unit) {
-  int32_t data[8];
-  int32_t t_fine;
-  if(!ReadData(data)){ return NAN; }
-  uint32_t rawTemp       = (data[3] << 12) | (data[4] << 4) | (data[5] >> 4);
-  uint32_t rawPressure = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4);
-  CalculateTemperature(rawTemp, t_fine);
-  return CalculatePressure(rawPressure, t_fine, unit);
-}
-
-
-float BME280::hum() {
-   int32_t data[8];
-   int32_t t_fine;
-   if(!ReadData(data)){ return NAN; }
-   uint32_t rawTemp = (data[3] << 12) | (data[4] << 4) | (data[5] >> 4);
-   uint32_t rawHumidity = (data[6] << 8) | data[7];
-   CalculateTemperature(rawTemp, t_fine);
-   return CalculateHumidity(rawHumidity, t_fine);
-}
-
-
-bool BME280::read(float* pressure, float* temp, float* humidity, TempUnit tempUnit, PresUnit presUnit) {
-   int32_t data[8];
-   int32_t t_fine;
-   if (!ReadData(data)) {
-      *pressure = NAN;
-      *temp = NAN;
-      *humidity = NAN;
-      return false;
-   }
-   uint32_t rawPressure = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4);
-   uint32_t rawTemp = (data[3] << 12) | (data[4] << 4) | (data[5] >> 4);
-   uint32_t rawHumidity = (data[6] << 8) | data[7];
-   *temp = CalculateTemperature(rawTemp, t_fine, tempUnit);
-   *pressure = CalculatePressure(rawPressure, t_fine, presUnit);
-   *humidity = CalculateHumidity(rawHumidity, t_fine);
-   return true;
+  // Registers are in order. So we can start at the pressure register and read 8 bytes.
+  if (ret) {
+    ret = ReadRegister(PRESS_ADDR, buffer, SENSOR_DATA_LENGTH);
+    for(int i = 0; i < SENSOR_DATA_LENGTH; ++i) {
+      data[i] = static_cast<int32_t>(buffer[i]);
+    }
+    if (ret) {
+      _last_read = millis();
+      uint32_t rawPressure = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4);
+      uint32_t rawTemp     = (data[3] << 12) | (data[4] << 4) | (data[5] >> 4);
+      uint32_t rawHumidity = (data[6] << 8)  | data[7];
+      _air_temp = CalculateTemperature(rawTemp,  t_fine);
+      _pressure = CalculatePressure(rawPressure, t_fine);
+      _humidity = CalculateHumidity(rawHumidity, t_fine);
+    }
+  }
+  return ret;
 }
 
 
@@ -339,16 +324,16 @@ float BME280::EquivalentSeaLevelPressure(float altitude, float temp, float pres)
 /*
 * Equations courtesy of Brian McNoldy from http://andrew.rsmas.miami.edu;
 */
-float BME280::DewPoint(float temp, float hum, TempUnit tempUnit) {
+float BME280::DewPoint(float temp, float hum) {
   float dewPoint = NAN;
   if (!isnan(temp) && !isnan(hum)) {
     if (TempUnit::Celsius == _unit_temp) {
       dewPoint = 243.04 * (log(hum/100.0) + ((17.625 * temp)/(243.04 + temp))) /(17.625 - log(hum/100.0) - ((17.625 * temp)/(243.04 + temp)));
     }
     else {
-      float ctemp = (temp - 32.0) * 5.0/9.0;
+      float ctemp = (temp - 32.0) / 1.8;
       dewPoint = 243.04 * (log(hum/100.0) + ((17.625 * ctemp)/(243.04 + ctemp))) /(17.625 - log(hum/100.0) - ((17.625 * ctemp)/(243.04 + ctemp)));
-      dewPoint = dewPoint * 9.0/5.0 + 32.0;
+      dewPoint = dewPoint * 1.8 + 32.0;
     }
   }
   return dewPoint;

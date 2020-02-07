@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <StringBuilder.h>
 #include <SensorFilter.h>
+#include <ParsingConsole.h>
 
 #include <Audio.h>
 #include <Wire.h>
@@ -21,7 +22,6 @@
 #include "DRV425.h"
 #include "TSL2561.h"
 #include "TMP102.h"
-#include "ParsingConsole.h"
 
 
 /*
@@ -158,7 +158,6 @@ static SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0)
 
 /* Cheeseball async support stuff. */
 static uint8_t  update_disp_rate  = 30;     // Update in Hz for the display
-static uint8_t  update_baro_rate  = 5;      // Update in Hz for baro.
 
 static uint32_t boot_time         = 0;      // millis() at boot.
 static uint32_t config_time       = 0;      // millis() at end of setup().
@@ -168,8 +167,6 @@ static uint32_t off_time_led_g    = 0;      // millis() when LED_G should be dis
 static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be disabled.
 static uint32_t off_time_display  = 0;      // millis() when the display should be blanked.
 static uint32_t last_interaction  = 0;      // millis() when the user last interacted.
-static uint32_t update_baro_last  = 0;      // millis() when the baro sensor last updated.
-static uint32_t update_baro_next  = 0;      // millis() when the baro sensor next updates.
 static uint32_t disp_update_last  = 0;      // millis() when the display last updated.
 static uint32_t disp_update_next  = 0;      // millis() when the display next updates.
 
@@ -1042,19 +1039,13 @@ int8_t read_uv_sensor() {
 * A long time ago, this was taken from the aped driver's demo code.
 */
 int8_t read_baro_sensor() {
-  int8_t ret = -1;
-  float air_pressure      = 0.0;
-  float air_temperature   = 0.0;
-  float humidity          = 0.0;
-  if (baro.read(&air_pressure, &air_temperature, &humidity, TempUnit::Celsius, PresUnit::Pa)) {
-    altitude  = baro.Altitude(air_pressure);
-    dew_point = baro.DewPoint(air_temperature, humidity);
-    sea_level = baro.EquivalentSeaLevelPressure(altitude, air_temperature, air_pressure);
-    graph_array_humidity.feedFilter(humidity);
-    graph_array_air_temp.feedFilter(air_temperature);
-    graph_array_pressure.feedFilter(air_pressure);
-    ret = 0;
-  }
+  int8_t ret = 0;
+  altitude  = baro.Altitude(baro.pres());
+  dew_point = baro.DewPoint(baro.temp(), baro.hum());
+  sea_level = baro.EquivalentSeaLevelPressure(altitude, baro.temp(), baro.pres());
+  graph_array_humidity.feedFilter(baro.hum());
+  graph_array_air_temp.feedFilter(baro.temp());
+  graph_array_pressure.feedFilter(baro.pres());
   return ret;
 }
 
@@ -1165,6 +1156,7 @@ int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
 }
 
 int callback_reboot(StringBuilder* text_return, StringBuilder* args) {
+  text_return->concat("Unimplemented\n");
   return 0;
 }
 
@@ -1387,10 +1379,33 @@ int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
     case 8:   active_app = AppID::TRICORDER;     break;
     case 9:   active_app = AppID::HOT_STANDBY;   break;
     case 10:  active_app = AppID::SUSPEND;       break;
-    default:  return -1;
+    default:
+      text_return->concatf("Unsupported app: %d\n", arg0);
+      return -1;
   }
   return 0;
 }
+
+int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
+  int arg0 = args->position_as_int(0);
+  switch ((SensorID) arg0) {
+    case SensorID::MAGNETOMETER:   magnetometer.printDebug(text_return);  break;
+    //case SensorID::BARO:           baro.printDebug(text_return);          break;
+    //case SensorID::LIGHT:          tsl2561.printDebug(text_return);       break;
+    //case SensorID::UV:             uv.printDebug(text_return);            break;
+    //case SensorID::THERMOPILE:     grideye.printDebug(text_return);       break;
+    //case SensorID::BATT_VOLTAGE:   tmp102.printDebug(text_return);        break;
+    case SensorID::IMU:                break;
+    case SensorID::MIC:                break;
+    case SensorID::GPS:                break;
+    case SensorID::TEMP:               break;
+    default:
+      text_return->concatf("Unsupported sensor: %d\n", arg0);
+      return -1;
+  }
+  return 0;
+}
+
 
 int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
   if (1 == args->count()) {
@@ -1494,7 +1509,7 @@ void setup() {
 
   display.setTextColor(WHITE);
   display.print("DRV425   ");
-  if (0 == magnetometer.init(&Wire1)) {
+  if (0 == magnetometer.init(&Wire1, &SPI)) {
     display.setTextColor(GREEN);
     display.println("found");
   }
@@ -1603,7 +1618,8 @@ void setup() {
   console.defineCommand("disp",  'd', arg_list_1_uint, "Display test", "", 1, callback_display_test);
   console.defineCommand("aout",  arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
   console.defineCommand("fft",   arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
-  console.defineCommand("synth", 's', arg_list_4_uuff, "Mix volumes for the FFT.", "", 2, callback_synth_set);
+  console.defineCommand("synth", arg_list_4_uuff, "Mix volumes for the FFT.", "", 2, callback_synth_set);
+  console.defineCommand("si",    's', arg_list_1_uint, "Sensor information.", "", 1, callback_sensor_info);
   console.defineCommand("app",   'a', arg_list_1_uint, "Select active application.", "", 1, callback_active_app);
   console.defineCommand("vol",   arg_list_1_float, "Audio volume.", "", 0, callback_audio_volume);
   console.setTXTerminator(LineTerm::CRLF);
@@ -1630,14 +1646,14 @@ void setup() {
   display.setTextColor(WHITE);
   display.print("USB      ");
   display.setTextColor(GREEN);
-  //while(!Serial) {}
   while (Serial.available()) {
     Serial.read();
   }
   display.println("Serial");
 
-  Serial.print("Motherflux0r ");
-  Serial.println(TEST_PROG_VERSION);
+  StringBuilder ptc("Motherflux0r ");
+  //ptc.concat(TEST_PROG_VERSION);
+  console.printToLog(&ptc);
 
   while (disp_update_next > millis()) {}
   if (touch->deviceFound()) {
@@ -1656,32 +1672,36 @@ void setup() {
 * Main loop
 *******************************************************************************/
 void loop() {
-  const uint8_t RX_BUF_LEN = 32;
-  char ser_buffer[RX_BUF_LEN];
-  uint8_t rx_len = 0;
   StringBuilder output;
-  bool cr_rxd = false;
-  memset(ser_buffer, 0, RX_BUF_LEN);
 
-  while ((RX_BUF_LEN > rx_len) && (Serial.available())) {
-    char c = Serial.read();
-    int8_t ret1 = console.feed(c);
-    switch (ret1) {
-      case -1:   // console buffered the data, but took no other action.
-      default:
-        ledOn(LED_B_PIN, 5, 500);
-        break;
-      case 0:   // A full line came in.
-        last_interaction  = millis();
-        ledOn(LED_R_PIN, 5, 500);
-        break;
-      case 1:   // A callback was called.
-        last_interaction  = millis();
-        ledOn(LED_G_PIN, 5, 500);
-        break;
+  if (Serial) {
+    const uint8_t RX_BUF_LEN = 32;
+    char ser_buffer[RX_BUF_LEN];
+    uint8_t rx_len = 0;
+    bool cr_rxd = false;
+    memset(ser_buffer, 0, RX_BUF_LEN);
+    while ((RX_BUF_LEN > rx_len) && (0 < Serial.available())) {
+      ser_buffer[rx_len++] = Serial.read();
     }
+    if (rx_len > 0) {
+      switch (console.feed(ser_buffer, rx_len)) {
+        case -1:   // console buffered the data, but took no other action.
+        default:
+          ledOn(LED_B_PIN, 5, 500);
+          break;
+        case 0:   // A full line came in.
+          last_interaction  = millis();
+          ledOn(LED_R_PIN, 5, 500);
+          break;
+        case 1:   // A callback was called.
+          last_interaction  = millis();
+          ledOn(LED_G_PIN, 5, 500);
+          break;
+      }
+    }
+    console.fetchLog(&output);
   }
-  console.fetchLog(&output);
+
 
   int8_t t_res = touch->poll();
   if (0 < t_res) {
@@ -1700,31 +1720,13 @@ void loop() {
   if (millis_now >= off_time_led_b) {   pinMode(LED_B_PIN, INPUT);     }
   if (millis_now >= off_time_vib) {     pinMode(VIBRATOR_PIN, INPUT);  }
 
-  if (0 < uv.poll()) {
-    read_uv_sensor();
-  }
-
-  if (update_baro_next <= millis_now) {
-    read_baro_sensor();
-    update_baro_last = millis();
-    update_baro_next = (1000 / update_baro_rate) + update_baro_last;
-  }
-
-  if (0 < tsl2561.poll()) {
-    read_visible_sensor();
-  }
-
-  if (0 < grideye.poll()) {
-    read_thermopile_sensor();
-  }
-
-  if (0 < tmp102.poll()) {
-    read_battery_temperature_sensor();
-  }
-
-  //if (1 == magnetometer.poll()) {
-    // Magnetometer data is fresh.
-  //}
+  /* Poll each sensor class. */
+  if (0 < baro.poll()) {           read_baro_sensor();                  }
+  if (0 < uv.poll()) {             read_uv_sensor();                    }
+  if (0 < tsl2561.poll()) {        read_visible_sensor();               }
+  if (0 < grideye.poll()) {        read_thermopile_sensor();            }
+  if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
+  //if (1 == magnetometer.poll()) {}
 
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
@@ -1738,10 +1740,9 @@ void loop() {
     updateDisplay();
     disp_update_last = millis_now;
     disp_update_next = (1000 / update_disp_rate) + disp_update_last;
-    //if (millis_now >= off_time_display) { display.fillScreen(BLACK);     }
   }
 
-  if (output.length() > 0) {
-    Serial.print((char*) output.string());
+  if ((Serial) && (output.length() > 0)) {
+    Serial.write(output.string(), output.length());
   }
 }
