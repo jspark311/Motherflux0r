@@ -134,11 +134,9 @@ static Vector3f64 acc_vect;   // Acceleration vector from the IMU.
 static Vector3f64 gyr_vect;   // Gyroscopic vector from the IMU.
 static Vector3f64 mag_vect0;  // Magnetism vector from the IMU.
 static Vector3f64 mag_vect1;  // Magnetism vector from the DRV425 complex.
-static float    temperature       = 0.0;    // TMP102
 static float    altitude          = 0.0;    // BME280
 static float    dew_point         = 0.0;    // BME280
 static float    sea_level         = 0.0;    // BME280
-static float    battery_voltage   = 0.0;    //
 static float    therm_pixels[64];
 static float    therm_field_min   = THERM_TEMP_MAX;
 static float    therm_field_max   = THERM_TEMP_MIN;
@@ -189,7 +187,6 @@ static uint32_t off_time_vib      = 0;      // millis() when vibrator should be 
 static uint32_t off_time_led_r    = 0;      // millis() when LED_R should be disabled.
 static uint32_t off_time_led_g    = 0;      // millis() when LED_G should be disabled.
 static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be disabled.
-static uint32_t off_time_display  = 0;      // millis() when the display should be blanked.
 static uint32_t last_interaction  = 0;      // millis() when the user last interacted.
 static uint32_t disp_update_last  = 0;      // millis() when the display last updated.
 static uint32_t disp_update_next  = 0;      // millis() when the display next updates.
@@ -251,59 +248,6 @@ void ledOn(uint8_t idx, uint32_t duration, uint16_t intensity = 3500) {
 void vibrateOn(uint32_t duration, uint16_t intensity = 4095) {
   analogWrite(VIBRATOR_PIN, intensity);
   off_time_vib = millis() + duration;
-}
-
-
-/*
-* Taken from:
-* https://forum.pjrc.com/threads/32677-Is-there-a-logarithmic-function-for-FFT-bin-selection-for-any-given-of-bands
-*/
-float FindE(int bands, int bins) {
-  float increment=0.1, eTest, n;
-  int b, count, d;
-
-  for (eTest = 1; eTest < bins; eTest += increment) {     // Find E through brute force calculations
-    count = 0;
-    for (b = 0; b < bands; b++) {                         // Calculate full log values
-      n = pow(eTest, b);
-      d = int(n + 0.5);
-      count += d;
-    }
-    if (count > bins) {     // We calculated over our last bin
-      eTest -= increment;   // Revert back to previous calculation increment
-      increment /= 10.0;    // Get a finer detailed calculation & increment a decimal point lower
-    }
-    else
-      if (count == bins)    // We found the correct E
-        return eTest;       // Return calculated E
-    if (increment < 0.0000001)        // Ran out of calculations. Return previous E. Last bin will be lower than (bins-1)
-      return (eTest - increment);
-  }
-  return 0;                 // Return error 0
-}
-
-void printFFTBins() {
-  float e, n;
-  int b, bands, bins, count=0, d;
-
-  bands = 96;                             // Frequency bands; (Adjust to desired value)
-  bins = 256;                             // FFT bins; (Adjust to desired value)
-
-  e = FindE(bands, bins);                 // Find calculated E value
-  if (e) {                                // If a value was returned continue
-    Serial.printf("E = %4.4f\n", e);      // Print calculated E value
-    for (b = 0; b < bands; b++) {         // Test and print the bins from the calculated E
-      n = pow(e, b);
-      d = int(n + 0.5);
-
-      Serial.printf( "%4d ", count);      // Print low bin
-      count += d - 1;
-      Serial.printf( "%4d\n", count);     // Print high bin
-      ++count;
-    }
-  }
-  else
-    Serial.println("Error\n");            // Error, something happened
 }
 
 
@@ -963,7 +907,7 @@ void draw_graph_obj(
     display.drawFastHLine(x, y+h, w, WHITE);
   }
   display.fillRect(x+1, y, w, h-1, BLACK);
-  if (w < data_len) {
+  if (w < (int32_t) data_len) {
     dataset += (data_len - w);
     data_len = w;
   }
@@ -1559,22 +1503,29 @@ int callback_synth_set(StringBuilder* text_return, StringBuilder* args) {
 
 
 int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
-  int arg0 = args->position_as_int(0);
-  switch (arg0) {
-    case 0:   active_app = AppID::APP_SELECT;    break;
-    case 1:   active_app = AppID::TOUCH_TEST;    break;
-    case 2:   active_app = AppID::CONFIGURATOR;  break;
-    case 3:   active_app = AppID::DATA_MGMT;     break;
-    case 4:   active_app = AppID::SYNTH_BOX;     break;
-    case 5:   active_app = AppID::COMMS_TEST;    break;
-    case 6:   active_app = AppID::META;          break;
-    case 7:   active_app = AppID::I2C_SCANNER;   break;
-    case 8:   active_app = AppID::TRICORDER;     break;
-    case 9:   active_app = AppID::HOT_STANDBY;   break;
-    case 10:  active_app = AppID::SUSPEND;       break;
-    default:
-      text_return->concatf("Unsupported app: %d\n", arg0);
-      return -1;
+  if (0 < args->count()) {
+    int arg0 = args->position_as_int(0);
+    switch (arg0) {
+      case 0:   active_app = AppID::APP_SELECT;    break;
+      case 1:   active_app = AppID::TOUCH_TEST;    break;
+      case 2:   active_app = AppID::CONFIGURATOR;  break;
+      case 3:   active_app = AppID::DATA_MGMT;     break;
+      case 4:   active_app = AppID::SYNTH_BOX;     break;
+      case 5:   active_app = AppID::COMMS_TEST;    break;
+      case 6:   active_app = AppID::META;          break;
+      case 7:   active_app = AppID::I2C_SCANNER;   break;
+      case 8:   active_app = AppID::TRICORDER;     break;
+      case 9:   active_app = AppID::HOT_STANDBY;   break;
+      case 10:  active_app = AppID::SUSPEND;       break;
+      default:
+        text_return->concatf("Unsupported app: %d\n", arg0);
+        return -1;
+    }
+  }
+  else {   // No arguments means print the app index list.
+    for (uint8_t i = 0; i < 11; i++) {
+      text_return->concatf("%2u: %s\n", i, getAppIDString((AppID) i));
+    }
   }
   return 0;
 }
@@ -1585,9 +1536,10 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
   switch ((SensorID) arg0) {
     case SensorID::MAGNETOMETER:   magnetometer.printDebug(text_return);  break;
     //case SensorID::BARO:           baro.printDebug(text_return);          break;
-    //case SensorID::LIGHT:          tsl2561.printDebug(text_return);       break;
+    //case SensorID::LIGHT:            break;
     //case SensorID::UV:             uv.printDebug(text_return);            break;
     //case SensorID::THERMOPILE:     grideye.printDebug(text_return);       break;
+    case SensorID::LUX:            //tsl2561.printDebug(text_return);       break;
     case SensorID::BATT_VOLTAGE:       break;
     case SensorID::IMU:                break;
     case SensorID::MIC:                break;
@@ -1600,15 +1552,126 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
   return 0;
 }
 
+int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args) {
+  int arg0 = args->position_as_int(0);
+  if (0 < args->count()) {
+    switch ((SensorID) arg0) {
+      case SensorID::MAGNETOMETER:
+        break;
+      case SensorID::BARO:
+        graph_array_humidity.printFilter(text_return);
+        graph_array_air_temp.printFilter(text_return);
+        graph_array_pressure.printFilter(text_return);
+        graph_array_psu_temp.printFilter(text_return);
+        break;
+      case SensorID::LIGHT:
+        graph_array_ana_light.printFilter(text_return);
+        break;
+      case SensorID::UV:
+        graph_array_uva.printFilter(text_return);
+        graph_array_uvb.printFilter(text_return);
+        graph_array_uvi.printFilter(text_return);
+        break;
+      case SensorID::THERMOPILE:
+        graph_array_therm_mean.printFilter(text_return);
+        break;
+      case SensorID::BATT_VOLTAGE:
+      case SensorID::IMU:
+      case SensorID::MIC:
+      case SensorID::GPS:
+      case SensorID::PSU_TEMP:
+        break;
+      case SensorID::LUX:
+        graph_array_visible.printFilter(text_return);
+        break;
+      default:
+        text_return->concatf("Unsupported sensor: %d\n", arg0);
+        return -1;
+    }
+  }
+  else {   // No arguments means print the sensor index list.
+    for (uint8_t i = 0; i < 11; i++) {
+      text_return->concatf("%2u: %s\n", i, getSensorIDString((SensorID) i));
+    }
+  }
+  return 0;
+}
 
-int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
+
+int callback_sensor_filter_set_strat(StringBuilder* text_return, StringBuilder* args) {
+  int ret = 0;
   int arg0 = args->position_as_int(0);
   int arg1 = args->position_as_int(1);
+  uint8_t arg2 = (2 < args->count()) ? args->position_as_int(2) : 255;
+
+  switch ((SensorID) arg0) {
+    case SensorID::MAGNETOMETER:
+      break;
+    case SensorID::BARO:
+      switch (arg2) {
+        case 0:    ret = graph_array_humidity.setStrategy((FilteringStrategy) arg1);   break;
+        case 1:    ret = graph_array_air_temp.setStrategy((FilteringStrategy) arg1);   break;
+        case 2:    ret = graph_array_pressure.setStrategy((FilteringStrategy) arg1);   break;
+        case 255:
+          if (0 == graph_array_humidity.setStrategy((FilteringStrategy) arg1)) {
+            if (0 == graph_array_air_temp.setStrategy((FilteringStrategy) arg1)) {
+              ret = graph_array_pressure.setStrategy((FilteringStrategy) arg1);
+            }
+          }
+          break;
+        default:
+          ret = -3;
+          break;
+      }
+      break;
+    case SensorID::LIGHT:    ret = graph_array_ana_light.setStrategy((FilteringStrategy) arg1);   break;
+    case SensorID::UV:
+      switch (arg2) {
+        case 0:    ret = graph_array_uva.setStrategy((FilteringStrategy) arg1);   break;
+        case 1:    ret = graph_array_uvb.setStrategy((FilteringStrategy) arg1);   break;
+        case 2:    ret = graph_array_uvi.setStrategy((FilteringStrategy) arg1);   break;
+        case 255:
+          if (0 == graph_array_uva.setStrategy((FilteringStrategy) arg1)) {
+            if (0 == graph_array_uvb.setStrategy((FilteringStrategy) arg1)) {
+              ret = graph_array_uvi.setStrategy((FilteringStrategy) arg1);
+            }
+          }
+          break;
+        default:
+          ret = -3;
+          break;
+      }
+      break;
+    case SensorID::THERMOPILE:    ret = graph_array_therm_mean.setStrategy((FilteringStrategy) arg1);  break;
+    case SensorID::BATT_VOLTAGE:
+    case SensorID::IMU:
+    case SensorID::MIC:
+    case SensorID::GPS:
+      break;
+    case SensorID::PSU_TEMP:      ret = graph_array_psu_temp.setStrategy((FilteringStrategy) arg1);    break;
+    case SensorID::LUX:           ret = graph_array_visible.setStrategy((FilteringStrategy) arg1);     break;
+    default:
+      text_return->concatf("Unsupported sensor: %d\n", arg0);
+      return -1;
+  }
+  if (-3 == ret) {
+    text_return->concatf("Unknown datum index (%u) for sensor: %d\n", arg2, arg0);
+  }
+  else {
+    text_return->concatf("Setting sensor %d filter strategy to %s returned %d.\n", arg0, getFilterStr((FilteringStrategy) arg1), ret);
+  }
+  return 0;
+}
+
+
+int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
   int ret = 0;
+  int arg0 = args->position_as_int(0);
+  //int arg1 = args->position_as_int(1);
   switch ((SensorID) arg0) {
     case SensorID::MAGNETOMETER:   break;
     case SensorID::BARO:           ret = baro.init(&Wire1);       break;
-    case SensorID::LIGHT:          ret = tsl2561.init(&Wire1);    break;
+    case SensorID::LUX:            ret = tsl2561.init(&Wire1);    break;
     case SensorID::UV:             ret = uv.init(&Wire1);         break;
     case SensorID::THERMOPILE:     ret = grideye.init(&Wire1);    break;
     case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);     break;
@@ -1616,6 +1679,7 @@ int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
     case SensorID::IMU:                break;
     case SensorID::MIC:                break;
     case SensorID::GPS:                break;
+    case SensorID::LIGHT:              break;
     default:
       text_return->concatf("Unsupported sensor: %d\n", arg0);
       return -1;
@@ -1632,7 +1696,7 @@ int callback_sensor_enable(StringBuilder* text_return, StringBuilder* args) {
   switch ((SensorID) arg0) {
     case SensorID::MAGNETOMETER:  magnetometer.power(arg1);   en = arg1;      break;
     case SensorID::BARO:          en = baro.enabled();            break;
-    case SensorID::LIGHT:         tsl2561.enabled(arg1);  en = tsl2561.enabled();   break;
+    case SensorID::LUX:           tsl2561.enabled(arg1);  en = tsl2561.enabled();   break;
     case SensorID::UV:            uv.enabled(arg1);       en = uv.enabled();        break;
     case SensorID::THERMOPILE:    grideye.enabled(arg1);  en = grideye.enabled();   break;
     case SensorID::BATT_VOLTAGE:  tmp102.enabled(arg1);   en = tmp102.enabled();    break;
@@ -1640,11 +1704,12 @@ int callback_sensor_enable(StringBuilder* text_return, StringBuilder* args) {
     case SensorID::MIC:           break;
     case SensorID::GPS:           break;
     case SensorID::PSU_TEMP:      break;
+    case SensorID::LIGHT:         break;
     default:
       text_return->concatf("Unsupported sensor: %d\n", arg0);
       return -1;
   }
-  text_return->concatf("Sensor %d is now %sabled\n", arg0, arg1?"en":"dis");
+  text_return->concatf("Sensor %d is now %sabled\n", arg0, en?"en":"dis");
   return 0;
 }
 
@@ -1757,8 +1822,8 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  graph_array_therm_mean.init();
   if (0 == grideye.init(&Wire1)) {
+    graph_array_therm_mean.init();
   }
   else {
     display.setTextColor(RED);
@@ -1930,10 +1995,12 @@ void setup() {
   console.defineCommand("aout",        arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
   console.defineCommand("fft",         arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
   console.defineCommand("synth",       arg_list_4_uuff, "Synth parameters.", "", 2, callback_synth_set);
-  console.defineCommand("si",          's', arg_list_1_uint, "Sensor information.", "", 1, callback_sensor_info);
+  console.defineCommand("si",          's', arg_list_1_uint, "Sensor information.", "", 0, callback_sensor_info);
+  console.defineCommand("sfi",         arg_list_1_uint, "Sensor filter info.", "", 0, callback_sensor_filter_info);
   console.defineCommand("sinit",       arg_list_2_uint, "Sensor initialize.", "", 1, callback_sensor_init);
   console.defineCommand("se",          arg_list_2_uint, "Sensor enable.", "", 1, callback_sensor_enable);
-  console.defineCommand("app",         'a', arg_list_1_uint, "Select active application.", "", 1, callback_active_app);
+  console.defineCommand("sfs",         arg_list_3_uint, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
+  console.defineCommand("app",         'a', arg_list_1_uint, "Select active application.", "", 0, callback_active_app);
   console.defineCommand("sprof",       arg_list_0, "Dump sensor profiler.", "", 0, callback_print_sensor_profiler);
   console.defineCommand("aprof",       arg_list_0, "Dump application profiler.", "", 0, callback_print_app_profiler);
   console.defineCommand("vol",         arg_list_1_float, "Audio volume.", "", 0, callback_audio_volume);
@@ -2006,7 +2073,7 @@ void loop() {
 
   if (Serial) {
     const uint8_t RX_BUF_LEN = 32;
-    char ser_buffer[RX_BUF_LEN];
+    uint8_t ser_buffer[RX_BUF_LEN];
     uint8_t rx_len = 0;
     bool cr_rxd = false;
     memset(ser_buffer, 0, RX_BUF_LEN);

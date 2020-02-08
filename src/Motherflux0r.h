@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <CppPotpourri.h>
+#include <StringBuilder.h>
 
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
@@ -85,8 +86,10 @@ enum class SensorID : uint8_t {
   GPS           = 6,  //
   THERMOPILE    = 7,  //
   PSU_TEMP      = 8,  // TMP102
-  BATT_VOLTAGE  = 9   //
+  BATT_VOLTAGE  = 9,  //
+  LUX           = 10  //
 };
+
 
 /* Struct for tracking application state. */
 // TODO: This should evolve into a class if we irradiate millions of copies of it.
@@ -110,6 +113,16 @@ typedef struct {
 } KeyCombo;
 
 
+/*******************************************************************************
+* Function prototypes
+*******************************************************************************/
+const char* const getAppIDString(AppID);
+const char* const getSensorIDString(SensorID);
+float FindE(int bands, int bins);
+void  printFFTBins(StringBuilder*);
+uint8_t* bitmapPointer(unsigned int idx);
+
+
 #define ICON_CANCEL    0
 #define ICON_ACCEPT    1
 #define ICON_THERMO    2
@@ -122,8 +135,6 @@ typedef struct {
 #define ICON_MIC       9
 #define ICON_MAGNET   10
 #define ICON_BATTERY  11
-
-uint8_t* bitmapPointer(unsigned int idx);
 
 
 #endif    // __MOTHERFLUX0R_H__

@@ -54,7 +54,7 @@ class TMP102 {
     inline bool  extendedMode() {     return _tmp_flag(TMP102_FLAG_EXTENDED_MODE);   };
     inline bool  unitsFahrenheit() {  return _tmp_flag(TMP102_FLAG_FREEDOM_UNITS);   };
     inline void  unitsFahrenheit(bool x) {   _tmp_set_flag(TMP102_FLAG_FREEDOM_UNITS, x); };
-    inline float temperature() {      return _temp;    };
+    inline float temperature() {      return _normalize_units_returned(_temp);       };
 
     bool   dataReady();        // Is data waiting for retrieval?
     int8_t enabled(bool);      // Sensor should be awake or asleep?
@@ -98,11 +98,11 @@ class TMP102 {
     uint16_t      _flags     = 0;
     TwoWire*      _bus       = nullptr;
     uint32_t      _last_read = 0;
-    float         _temp      = 0.0;
+    float         _temp      = 0.0;   // Stored as Celcius.
 
     int8_t  _open_ptr_register(uint8_t pointerReg); // Changes the pointer register
     uint8_t readRegister(bool registerNumber);  // reads 1 byte of from register
-    float   readTemp();        // Returns the temperature in selected units.
+    int8_t  _read_temp();
 
     int8_t   _ll_pin_init();
     int8_t   _write_register(uint8_t reg, uint8_t val);

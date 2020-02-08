@@ -78,8 +78,9 @@ int8_t TMP102::poll() {
   if (initialized() && enabled()) {
     ret = 0;
     if (dataReady()) {
-      _temp = readTemp();
-      ret = 1;  // TODO: need to rework return value.
+      if (0 == _read_temp()) {
+        ret = 1;
+      }
     }
 
     if (255 != _ALRT_PIN) {
@@ -105,7 +106,7 @@ int8_t TMP102::_open_ptr_register(uint8_t pointerReg) {
 
 
 uint8_t TMP102::readRegister(bool registerNumber){
-  uint8_t registerByte[2];  // We'll store the data from the registers here
+  uint8_t registerByte[2] = {0, 0};
   // Read current configuration register value
   _bus->requestFrom((uint8_t) _ADDR, (uint8_t) 2);   // Read two bytes from TMP102
   if (_bus->available()) {
@@ -116,15 +117,17 @@ uint8_t TMP102::readRegister(bool registerNumber){
 }
 
 
-float TMP102::readTemp() {
-  uint8_t registerByte[2];  // Store the data from the register here
-  int16_t digitalTemp;  // Temperature stored in TMP102 register
+int8_t TMP102::_read_temp() {
+  uint8_t registerByte[2] = {0, 0};
+  int8_t ret = -1;
+  int16_t digitalTemp = 0;    // Temperature stored in TMP102 register
   // Read Temperature
   // Change pointer address to temperature register (0)
   if (0 == _open_ptr_register(TEMPERATURE_REGISTER)) {
     // Read from temperature register
     registerByte[0] = readRegister(0);
     registerByte[1] = readRegister(1);
+    _last_read = millis();
 
     // Bit 0 of second byte will always be 0 in 12-bit readings and 1 in 13-bit
     if(registerByte[1]&0x01) {  // 13 bit mode
@@ -145,10 +148,11 @@ float TMP102::readTemp() {
         digitalTemp |= 0xF000;
       }
     }
-    _last_read = millis();
+    ret = 0;
+    // Convert digital reading to analog temperature (1-bit is equal to 0.0625 C)
+    _temp = digitalTemp * 0.0625;
   }
-  // Convert digital reading to analog temperature (1-bit is equal to 0.0625 C)
-  return _normalize_units_returned(digitalTemp * 0.0625);
+  return ret;
 }
 
 
