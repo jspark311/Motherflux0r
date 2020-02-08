@@ -5,6 +5,7 @@
 #include <StringBuilder.h>
 #include <SensorFilter.h>
 #include <ParsingConsole.h>
+#include <StopWatch.h>
 
 #include <Audio.h>
 #include <Wire.h>
@@ -155,6 +156,29 @@ static SensorFilter<float> graph_array_uvi(FilteringStrategy::RAW, 96, 0);
 static SensorFilter<float> graph_array_ana_light(FilteringStrategy::RAW, 96, 0);
 static SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
 static SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
+
+/* Profiling data */
+static StopWatch stopwatch_display;
+static StopWatch stopwatch_sensor_baro;
+static StopWatch stopwatch_sensor_uv;
+static StopWatch stopwatch_sensor_grideye;
+static StopWatch stopwatch_sensor_imu;
+static StopWatch stopwatch_sensor_lux;
+static StopWatch stopwatch_sensor_tmp102;
+static StopWatch stopwatch_sensor_mag;
+static StopWatch stopwatch_touch_poll;
+static StopWatch stopwatch_app_app_select;
+static StopWatch stopwatch_app_touch_test;
+static StopWatch stopwatch_app_configurator;
+static StopWatch stopwatch_app_data_mgmt;
+static StopWatch stopwatch_app_synthbox;
+static StopWatch stopwatch_app_comms;
+static StopWatch stopwatch_app_meta;
+static StopWatch stopwatch_app_i2c_scanner;
+static StopWatch stopwatch_app_tricorder;
+static StopWatch stopwatch_app_standby;
+static StopWatch stopwatch_app_suspend;
+
 
 /* Cheeseball async support stuff. */
 static uint8_t  update_disp_rate  = 30;     // Update in Hz for the display
@@ -309,6 +333,7 @@ void redraw_app_window(const char* title, uint8_t pages, uint8_t active_page) {
   drawn_app = active_app;
 }
 
+
 /*
 * Draws the meta app.
 */
@@ -326,7 +351,6 @@ void redraw_meta_window() {
     display.println("Date:   ");
     //display.print("UV: ");
   }
-
 
   display.setTextColor(CYAN, BLACK);
   display.setCursor(47, 19);
@@ -1062,17 +1086,61 @@ void draw_3vector(
 */
 void updateDisplay() {
   switch (active_app) {
-    case AppID::APP_SELECT:    redraw_app_select_window();   break;
-    case AppID::TOUCH_TEST:    redraw_touch_test_window();   break;
-    case AppID::CONFIGURATOR:  redraw_configurator_window(); break;
-    case AppID::DATA_MGMT:     redraw_data_mgmt_window();    break;
-    case AppID::SYNTH_BOX:     redraw_fft_window();          break;
-    case AppID::COMMS_TEST:    redraw_comms_root_window();   break;
-    case AppID::META:          redraw_meta_window();         break;
-    case AppID::I2C_SCANNER:   redraw_i2c_probe_window();    break;
-    case AppID::TRICORDER:     redraw_tricorder_window();    break;
-    case AppID::HOT_STANDBY:   redraw_hot_standby_window();  break;
-    case AppID::SUSPEND:       redraw_suspended_window();    break;
+    case AppID::APP_SELECT:
+      stopwatch_app_app_select.markStart();
+      redraw_app_select_window();
+      stopwatch_app_app_select.markStop();
+      break;
+    case AppID::TOUCH_TEST:
+      stopwatch_app_touch_test.markStart();
+      redraw_touch_test_window();
+      stopwatch_app_touch_test.markStop();
+      break;
+    case AppID::CONFIGURATOR:
+      stopwatch_app_configurator.markStart();
+      redraw_configurator_window();
+      stopwatch_app_configurator.markStop();
+      break;
+    case AppID::DATA_MGMT:
+      stopwatch_app_data_mgmt.markStart();
+      redraw_data_mgmt_window();
+      stopwatch_app_data_mgmt.markStop();
+      break;
+    case AppID::SYNTH_BOX:
+      stopwatch_app_synthbox.markStart();
+      redraw_fft_window();
+      stopwatch_app_synthbox.markStop();
+      break;
+    case AppID::COMMS_TEST:
+      stopwatch_app_comms.markStart();
+      redraw_comms_root_window();
+      stopwatch_app_comms.markStop();
+      break;
+    case AppID::META:
+      stopwatch_app_meta.markStart();
+      redraw_meta_window();
+      stopwatch_app_meta.markStop();
+      break;
+    case AppID::I2C_SCANNER:
+      stopwatch_app_i2c_scanner.markStart();
+      redraw_i2c_probe_window();
+      stopwatch_app_i2c_scanner.markStop();
+      break;
+    case AppID::TRICORDER:
+      stopwatch_app_tricorder.markStart();
+      redraw_tricorder_window();
+      stopwatch_app_tricorder.markStop();
+      break;
+    case AppID::HOT_STANDBY:
+      stopwatch_app_standby.markStart();
+      redraw_hot_standby_window();
+      stopwatch_app_standby.markStop();
+      break;
+    case AppID::SUSPEND:
+      stopwatch_app_suspend.markStart();
+      redraw_suspended_window();
+      stopwatch_app_suspend.markStop();
+      break;
   }
 }
 
@@ -1218,6 +1286,36 @@ int callback_reboot(StringBuilder* text_return, StringBuilder* args) {
   return 0;
 }
 
+
+int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* args) {
+  StopWatch::printDebugHeader(text_return);
+  stopwatch_display.printDebug("Display", text_return);
+  stopwatch_sensor_baro.printDebug("Baro", text_return);
+  stopwatch_sensor_uv.printDebug("UV", text_return);
+  stopwatch_sensor_grideye.printDebug("GridEye", text_return);
+  stopwatch_sensor_imu.printDebug("IMU", text_return);
+  stopwatch_sensor_lux.printDebug("TSL2561", text_return);
+  stopwatch_sensor_tmp102.printDebug("PSU Temp", text_return);
+  stopwatch_sensor_mag.printDebug("Magnetometer", text_return);
+  stopwatch_touch_poll.printDebug("Touch", text_return);
+  return 0;
+}
+
+int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args) {
+  StopWatch::printDebugHeader(text_return);
+  stopwatch_app_app_select.printDebug("APP_SELECT", text_return);
+  stopwatch_app_touch_test.printDebug("TOUCH TEST", text_return);
+  stopwatch_app_configurator.printDebug("CONFIGURATOR", text_return);
+  stopwatch_app_data_mgmt.printDebug("DATA MGMT", text_return);
+  stopwatch_app_synthbox.printDebug("SYNTH BOX", text_return);
+  stopwatch_app_comms.printDebug("COMMS", text_return);
+  stopwatch_app_meta.printDebug("META", text_return);
+  stopwatch_app_i2c_scanner.printDebug("I2C SCANNER", text_return);
+  stopwatch_app_tricorder.printDebug("TRICORDER", text_return);
+  stopwatch_app_standby.printDebug("STANDBY", text_return);
+  stopwatch_app_suspend.printDebug("SUSPEND", text_return);
+  return 0;
+}
 
 int callback_touch_info(StringBuilder* text_return, StringBuilder* args) {
   touch->printDebug(text_return);
@@ -1659,8 +1757,8 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
+  graph_array_therm_mean.init();
   if (0 == grideye.init(&Wire1)) {
-    graph_array_therm_mean.init();
   }
   else {
     display.setTextColor(RED);
@@ -1692,10 +1790,10 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
+  graph_array_pressure.init();
+  graph_array_humidity.init();
+  graph_array_air_temp.init();
   if (0 == baro.init(&Wire1)) {
-    graph_array_pressure.init();
-    graph_array_humidity.init();
-    graph_array_air_temp.init();
   }
   else {
     display.setTextColor(RED);
@@ -1711,10 +1809,10 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
+  graph_array_uva.init();
+  graph_array_uvb.init();
+  graph_array_uvi.init();
   if (VEML6075_ERROR_SUCCESS == uv.init(&Wire1)) {
-    graph_array_uva.init();
-    graph_array_uvb.init();
-    graph_array_uvi.init();
   }
   else {
     display.setTextColor(RED, BLACK);
@@ -1750,9 +1848,9 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
+  graph_array_psu_temp.init();
   //if (0 == tmp102.init(&Wire)) {
   if (false) {
-    graph_array_psu_temp.init();
   }
   else {
     display.setTextColor(RED, BLACK);
@@ -1826,17 +1924,19 @@ void setup() {
   console.defineCommand("touchreset",  arg_list_0, "Reset SX8634", "", 0, callback_touch_reset);
   console.defineCommand("touchinfo",   arg_list_0, "SX8634 info", "", 0, callback_touch_info);
   console.defineCommand("touchmode",   arg_list_1_uint, "Get/set SX8634 mode", "", 0, callback_touch_mode);
-  console.defineCommand("led",   arg_list_3_uint, "LED Test", "", 1, callback_led_test);
-  console.defineCommand("vib",   'v', arg_list_2_uint, "Vibrator test", "", 0, callback_vibrator_test);
-  console.defineCommand("disp",  'd', arg_list_1_uint, "Display test", "", 1, callback_display_test);
-  console.defineCommand("aout",  arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
-  console.defineCommand("fft",   arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
-  console.defineCommand("synth", arg_list_4_uuff, "Mix volumes for the FFT.", "", 2, callback_synth_set);
-  console.defineCommand("si",    's', arg_list_1_uint, "Sensor information.", "", 1, callback_sensor_info);
-  console.defineCommand("sinit", arg_list_2_uint, "Sensor initialize.", "", 1, callback_sensor_init);
-  console.defineCommand("se",    arg_list_2_uint, "Sensor enable.", "", 1, callback_sensor_enable);
-  console.defineCommand("app",   'a', arg_list_1_uint, "Select active application.", "", 1, callback_active_app);
-  console.defineCommand("vol",   arg_list_1_float, "Audio volume.", "", 0, callback_audio_volume);
+  console.defineCommand("led",         arg_list_3_uint, "LED Test", "", 1, callback_led_test);
+  console.defineCommand("vib",         'v', arg_list_2_uint, "Vibrator test", "", 0, callback_vibrator_test);
+  console.defineCommand("disp",        'd', arg_list_1_uint, "Display test", "", 1, callback_display_test);
+  console.defineCommand("aout",        arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
+  console.defineCommand("fft",         arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
+  console.defineCommand("synth",       arg_list_4_uuff, "Synth parameters.", "", 2, callback_synth_set);
+  console.defineCommand("si",          's', arg_list_1_uint, "Sensor information.", "", 1, callback_sensor_info);
+  console.defineCommand("sinit",       arg_list_2_uint, "Sensor initialize.", "", 1, callback_sensor_init);
+  console.defineCommand("se",          arg_list_2_uint, "Sensor enable.", "", 1, callback_sensor_enable);
+  console.defineCommand("app",         'a', arg_list_1_uint, "Select active application.", "", 1, callback_active_app);
+  console.defineCommand("sprof",       arg_list_0, "Dump sensor profiler.", "", 0, callback_print_sensor_profiler);
+  console.defineCommand("aprof",       arg_list_0, "Dump application profiler.", "", 0, callback_print_app_profiler);
+  console.defineCommand("vol",         arg_list_1_float, "Audio volume.", "", 0, callback_audio_volume);
   console.setTXTerminator(LineTerm::CRLF);
   console.setRXTerminator(LineTerm::CR);
   console.localEcho(true);
@@ -1932,14 +2032,19 @@ void loop() {
     console.fetchLog(&output);
   }
 
+  stopwatch_touch_poll.markStart();
   int8_t t_res = touch->poll();
   if (0 < t_res) {
     // Something changed in the hardware.
   }
+  stopwatch_touch_poll.markStop();
+
   if (imu_irq_fired) {
     imu_irq_fired = false;
+    stopwatch_sensor_imu.markStart();
     read_imu();
     //imu.clearInterrupts();
+    stopwatch_sensor_imu.markStop();
   }
 
   /* Run our async cleanup stuff. */
@@ -1950,12 +2055,25 @@ void loop() {
   if (millis_now >= off_time_vib) {     pinMode(VIBRATOR_PIN, INPUT);  }
 
   /* Poll each sensor class. */
+  stopwatch_sensor_baro.markStart();
   if (0 < baro.poll()) {           read_baro_sensor();                  }
+  stopwatch_sensor_baro.markStop();
+  stopwatch_sensor_uv.markStart();
   if (0 < uv.poll()) {             read_uv_sensor();                    }
+  stopwatch_sensor_uv.markStop();
+  stopwatch_sensor_lux.markStart();
   if (0 < tsl2561.poll()) {        read_visible_sensor();               }
+  stopwatch_sensor_lux.markStop();
+  stopwatch_sensor_grideye.markStart();
   if (0 < grideye.poll()) {        read_thermopile_sensor();            }
+  stopwatch_sensor_grideye.markStop();
+  stopwatch_sensor_tmp102.markStart();
   //if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
+  stopwatch_sensor_tmp102.markStop();
+  stopwatch_sensor_mag.markStart();
   //if (1 == magnetometer.poll()) {}
+  stopwatch_sensor_mag.markStop();
+
 
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
@@ -1966,7 +2084,9 @@ void loop() {
 
   millis_now = millis();
   if (disp_update_next <= millis_now) {
+    stopwatch_display.markStart();
     updateDisplay();
+    stopwatch_display.markStop();
     disp_update_last = millis_now;
     disp_update_next = (1000 / update_disp_rate) + disp_update_last;
   }
