@@ -157,15 +157,14 @@ int8_t TSL2561::init(TwoWire* b) {
     _i2c = b;
     /* Make sure we're actually connected */
     uint8_t x = _read8(TSL2561_REGISTER_ID);
-    if (x & 0x05) { // ID code for TSL2561
-      ret = -2;
-    }
-    else {
-      _tsl_set_flag(TSL2561_FLAG_DEVICE_PRESENT, true);
-      highGain(false);   // Set default integration time and gain.
-      _tsl_set_flag(TSL2561_FLAG_INITIALIZED, true);
-      enable();
-      ret = 0;
+    ret = -2;
+    _tsl_set_flag(TSL2561_FLAG_DEVICE_PRESENT, !(x & 0x05)); // ID code for TSL2561. Excludes TSL2560.
+    if (devFound()) {
+      ret = highGain(false);
+      if (0 == ret) {   // Set default integration time and gain.
+        ret = enabled(true);
+        _tsl_set_flag(TSL2561_FLAG_INITIALIZED, (0 == ret));
+      }
     }
   }
   return ret;
@@ -222,9 +221,11 @@ int8_t TSL2561::integrationTime(TSLIntegrationTime time) {
       case TSLIntegrationTime::MS_101:
       case TSLIntegrationTime::MS_402:
         val |= (uint8_t) time;
-        _write8(0x80 | TSL2561_REGISTER_TIMING, val);
-        _tsl_clear_flag(TSL2561_FLAG_INTEGRATION_MASK);
-        _tsl_set_flag(((uint8_t) time) << 6);
+        if (0 == _write8(0x80 | TSL2561_REGISTER_TIMING, val)) {
+          _tsl_clear_flag(TSL2561_FLAG_INTEGRATION_MASK);
+          _tsl_set_flag(((uint8_t) time) << 6);
+          ret = 0;
+        }
         break;
       case TSLIntegrationTime::INVALID:
         ret = -2;
@@ -239,13 +240,17 @@ int8_t TSL2561::integrationTime(TSLIntegrationTime time) {
 * @brief  Adjusts the gain on the TSL2561 (adjusts the sensitivity to light)
 * @param gain The value we'd like to set the gain to
 */
-void TSL2561::highGain(bool x) {
+int8_t TSL2561::highGain(bool x) {
+  int8_t ret = -1;
   if (devFound()) {
     /* Update the timing register */
     uint8_t val = (x ? 0x10 : 0x00) | ((_flags >> 6) & 0x03);
-    _write8(0x80 | TSL2561_REGISTER_TIMING, val);
-    _tsl_set_flag(TSL2561_FLAG_GAIN_16X, x);
+    if (0 == _write8(0x80 | TSL2561_REGISTER_TIMING, val)) {
+      ret = 0;
+      _tsl_set_flag(TSL2561_FLAG_GAIN_16X, x);
+    }
   }
+  return ret;
 }
 
 
@@ -340,21 +345,14 @@ int8_t TSL2561::getLuminosity() {
 /**
 * Enable the device by setting the control bit to 0x03
 */
-int8_t TSL2561::enable() {
-  int8_t ret = 0;
-  _write8(0x80 | TSL2561_REGISTER_CONTROL, 0x03);
-  _tsl_set_flag(TSL2561_FLAG_ENABLED);
-  return ret;
-}
-
-
-/**
-* Disable the device by clearing the control bits 0x03
-*/
-int8_t TSL2561::disable() {
-  int8_t ret = 0;
-  _write8(0x80 | TSL2561_REGISTER_CONTROL, 0x00);
-  _tsl_clear_flag(TSL2561_FLAG_ENABLED);
+int8_t TSL2561::enabled(bool x) {
+  int8_t ret = -1;
+  if (devFound()) {
+    ret = _write8(0x80 | TSL2561_REGISTER_CONTROL, x ? 0x03 : 0x00);
+    if (0 == ret) {
+      _tsl_set_flag(TSL2561_FLAG_ENABLED, x);
+    }
+  }
   return ret;
 }
 
@@ -468,11 +466,11 @@ int8_t TSL2561::_ll_pin_init() {
 * @param  reg I2C register to write the value to
 * @param  value The 8-bit value we're writing to the register
 */
-void TSL2561::_write8 (uint8_t reg, uint8_t value) {
+int8_t TSL2561::_write8 (uint8_t reg, uint8_t value) {
   _i2c->beginTransmission(_ADDR);
   _i2c->write(reg);
   _i2c->write(value);
-  _i2c->endTransmission();
+  return _i2c->endTransmission();
 }
 
 

@@ -146,8 +146,7 @@ class GridEYE {
     int8_t setFramerate10FPS();
     inline bool isFramerate10FPS() {   return _amg_flag(GRIDEYE_FLAG_10FPS);  };
 
-    int8_t wake();
-    int8_t sleep();
+    int8_t enabled(bool);
     int8_t refresh();
     int8_t standby60seconds();
     int8_t standby10seconds();

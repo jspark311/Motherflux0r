@@ -68,7 +68,7 @@ int8_t GridEYE::init(TwoWire* b) {
     _i2c = b;
     if (0 == setFramerate10FPS()) {
       _amg_set_flag(GRIDEYE_FLAG_DEVICE_PRESENT);
-      if (0 == wake()) {
+      if (0 == enabled(true)) {
         _amg_set_flag(GRIDEYE_FLAG_INITIALIZED);
         ret = 0;
       }
@@ -161,22 +161,10 @@ int8_t GridEYE::setFramerate10FPS() {
 /**
 *
 */
-int8_t GridEYE::wake() {
-  int8_t ret = _write_register(POWER_CONTROL_REGISTER, 0x00);
+int8_t GridEYE::enabled(bool x) {
+  int8_t ret = _write_register(POWER_CONTROL_REGISTER, x ? 0x00 : 0x10);
   if (0 == ret) {
-    _amg_set_flag(GRIDEYE_FLAG_ENABLED);
-  }
-  return ret;
-}
-
-
-/**
-*
-*/
-int8_t GridEYE::sleep(){
-  int8_t ret = _write_register(POWER_CONTROL_REGISTER, 0x10);
-  if (0 == ret) {
-    _amg_clear_flag(GRIDEYE_FLAG_ENABLED);
+    _amg_set_flag(GRIDEYE_FLAG_ENABLED, x);
   }
   return ret;
 }

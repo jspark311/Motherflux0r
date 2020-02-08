@@ -84,14 +84,13 @@ class TSL2561 {
 
     int8_t init(TwoWire*);
     int8_t poll();
-    int8_t enable();
-    int8_t disable();
+    int8_t enabled(bool);
 
     /* TSL2561 Functions */
     int8_t integrationTime(TSLIntegrationTime);
     inline TSLIntegrationTime integrationTime() {  return (TSLIntegrationTime) ((_flags >> 6) & 0x03);  };
 
-    void    highGain(bool);
+    int8_t  highGain(bool);
     int8_t  calculateLux();
     int8_t  getLuminosity();
     inline uint16_t getBroadband() {   return _broadband;  };
@@ -118,7 +117,7 @@ class TSL2561 {
 
     void     _read_data_registers(uint16_t *broadband, uint16_t *ir);
     int8_t   _ll_pin_init();
-    void     _write8(uint8_t reg, uint8_t value);
+    int8_t   _write8(uint8_t reg, uint8_t value);
     uint8_t  _read8(uint8_t reg);
     uint16_t _read16(uint8_t reg);
 

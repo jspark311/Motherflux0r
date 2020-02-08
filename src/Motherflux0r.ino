@@ -997,6 +997,67 @@ void draw_graph_obj(
 
 
 /*
+* Given a filter object, and parameters for the graph, draw the data to the
+*   display.
+*/
+void draw_progress_bar(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_base, bool draw_val, float percent
+) {
+  if (draw_base) {   // Draw the basic frame and axes?
+    display.fillRect(x, y, w, h, BLACK);
+    display.drawRoundRect(x, y, w, h, 3, WHITE);
+  }
+  uint8_t pix_width = percent * (w-2);
+  display.fillRoundRect(x+1, y+1, pix_width, h-2, 3, color);
+
+  if (draw_val && ((h-4) >= 7)) {
+    // If we have space to do so, and the application requested it, draw the
+    //   progress value in the middle of the bar.
+    int txt_x = x+3;
+    int txt_y = y+3;
+    display.setTextSize(0);
+    display.setCursor(txt_x, txt_y);
+    display.setTextColor(WHITE);
+    display.print(percent * 100.0);
+    display.print("%");
+  }
+}
+
+
+/*
+* Given a vector object, and parameters for the graph, draw the data to the
+*   display. The given vector must be normalized.
+*/
+void draw_3vector(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_axes, bool draw_val, float vx, float vy, float vz
+) {
+  const int PERSPECTIVE_SCALE = 1;
+  int origin_x = x + (w >> 1);
+  int origin_y = y + (h >> 1);
+  if (draw_axes) {   // Draw the axes? The origin is in the middle of the field.
+    display.drawFastVLine(origin_x, y, h, WHITE);
+    display.drawFastHLine(x, origin_y, w, WHITE);
+    display.drawLine(x, (y+h), w, y, WHITE);
+    // Only 1/8 of a cube (all vector components are positive).
+    //display.drawFastVLine(x, y, h, WHITE);
+    //display.drawFastHLine(x, (y+h), w, WHITE);
+    //display.drawLine(x, (y+h), w>>1, y>>1, WHITE);
+  }
+  // Project the vector onto the x/y plane.
+  // To give a sense of depth, we use a triangle where only a line is required.
+  // We want the y-axis to be northward on the display. So we have to change the
+  //   sign of that component.
+  Vector3<int> projected(vx * (w >> 1), vy*(h >> 1) * -1, 0);   // TODO: z is unimplemented
+  int x1 = origin_x + projected.x - PERSPECTIVE_SCALE;
+  int y1 = origin_y + projected.y;
+  int x2 = origin_x + projected.x;
+  int y2 = origin_y + projected.y - PERSPECTIVE_SCALE;
+  display.fillTriangle(origin_x, origin_y, x1, y1, x2, y2, color);
+}
+
+/*
 * Called at the frame-rate interval for the display.
 */
 void updateDisplay() {
@@ -1023,7 +1084,6 @@ void updateDisplay() {
 
 /*
 * Reads the VEML6075 and adds the data to the pile.
-* A long time ago, this was taken from the aped driver's demo code.
 */
 int8_t read_uv_sensor() {
   int8_t ret = 0;
@@ -1036,7 +1096,6 @@ int8_t read_uv_sensor() {
 
 /*
 * Reads the BME280 and adds the data to the pile.
-* A long time ago, this was taken from the aped driver's demo code.
 */
 int8_t read_baro_sensor() {
   int8_t ret = 0;
@@ -1104,7 +1163,6 @@ int8_t read_thermopile_sensor() {
   therm_field_stdev = sqrt(deviation_sum / 64);
   return ret;
 }
-
 
 
 
@@ -1287,7 +1345,43 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       display.fillCircle(32, 32, 7, 0xFF00);
       display.drawCircle(32, 32, 14, 0x00FF);
       break;
-    case 9:
+    case 9:    // Progress bar test
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar(0, 0, 95, 12, BLUE, true, false, (i * 0.01));
+        delay(40);
+      }
+
+      draw_progress_bar(0, 14, 95, 7, BLUE, true, false, 0.0);  delay(250);
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar(0, 14, 95, 7, BLUE, false, false, (i * 0.01));
+        delay(40);
+      }
+
+      draw_progress_bar(0, 23, 32, 7, BLUE, true, false, 0.0);
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar(0, 23, 32, 7, BLUE, false, false, (i * 0.01));
+        delay(40);
+      }
+
+      draw_progress_bar(34, 23, 51, 7, RED, true, false, 0.0);
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar(34, 23, 51, 7, RED, false, false, (i * 0.01));
+        delay(40);
+      }
+
+      draw_progress_bar(0, 34, 95, 14, GREEN, true, false, 0.0);
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar(0, 34, 95, 14, GREEN, false, true, (i * 0.01));
+        delay(40);
+      }
+      break;
+    case 10:    // Vector display test
+      display.fillScreen(BLACK);
+      draw_3vector(0, 0, 50, 50, RED,    true,  false, 1.0, 0.0, 0.0);
+      draw_3vector(0, 0, 50, 50, GREEN,  false, false, 0.0, 1.0, 0.0);
+      draw_3vector(0, 0, 50, 50, BLUE,   false, false, 0.0, 0.0, 1.0);
+      draw_3vector(0, 0, 50, 50, YELLOW, false, false, 1.0, 1.0, 0.0);
+      draw_3vector(0, 0, 50, 50, CYAN,   false, false, 0.13, 0.65, 0.0);
       break;
     default:
       return -1;
@@ -1365,6 +1459,7 @@ int callback_synth_set(StringBuilder* text_return, StringBuilder* args) {
   return 0;
 }
 
+
 int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
   int arg0 = args->position_as_int(0);
   switch (arg0) {
@@ -1386,6 +1481,7 @@ int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
   return 0;
 }
 
+
 int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
   int arg0 = args->position_as_int(0);
   switch ((SensorID) arg0) {
@@ -1394,15 +1490,63 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
     //case SensorID::LIGHT:          tsl2561.printDebug(text_return);       break;
     //case SensorID::UV:             uv.printDebug(text_return);            break;
     //case SensorID::THERMOPILE:     grideye.printDebug(text_return);       break;
-    //case SensorID::BATT_VOLTAGE:   tmp102.printDebug(text_return);        break;
+    case SensorID::BATT_VOLTAGE:       break;
     case SensorID::IMU:                break;
     case SensorID::MIC:                break;
     case SensorID::GPS:                break;
-    case SensorID::TEMP:               break;
+    //case SensorID::PSU_TEMP:       tmp102.printDebug(text_return);        break;
     default:
       text_return->concatf("Unsupported sensor: %d\n", arg0);
       return -1;
   }
+  return 0;
+}
+
+
+int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
+  int arg0 = args->position_as_int(0);
+  int arg1 = args->position_as_int(1);
+  int ret = 0;
+  switch ((SensorID) arg0) {
+    case SensorID::MAGNETOMETER:   break;
+    case SensorID::BARO:           ret = baro.init(&Wire1);       break;
+    case SensorID::LIGHT:          ret = tsl2561.init(&Wire1);    break;
+    case SensorID::UV:             ret = uv.init(&Wire1);         break;
+    case SensorID::THERMOPILE:     ret = grideye.init(&Wire1);    break;
+    case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);     break;
+    case SensorID::BATT_VOLTAGE:       break;
+    case SensorID::IMU:                break;
+    case SensorID::MIC:                break;
+    case SensorID::GPS:                break;
+    default:
+      text_return->concatf("Unsupported sensor: %d\n", arg0);
+      return -1;
+  }
+  text_return->concatf("Sensor %d init() returned %d\n", arg0, ret);
+  return 0;
+}
+
+
+int callback_sensor_enable(StringBuilder* text_return, StringBuilder* args) {
+  int arg0  = args->position_as_int(0);
+  bool arg1 = (1 < args->count()) ? (1 == args->position_as_int(1)) : true;
+  bool en   = false;
+  switch ((SensorID) arg0) {
+    case SensorID::MAGNETOMETER:  magnetometer.power(arg1);   en = arg1;      break;
+    case SensorID::BARO:          en = baro.enabled();            break;
+    case SensorID::LIGHT:         tsl2561.enabled(arg1);  en = tsl2561.enabled();   break;
+    case SensorID::UV:            uv.enabled(arg1);       en = uv.enabled();        break;
+    case SensorID::THERMOPILE:    grideye.enabled(arg1);  en = grideye.enabled();   break;
+    case SensorID::BATT_VOLTAGE:  tmp102.enabled(arg1);   en = tmp102.enabled();    break;
+    case SensorID::IMU:           break;
+    case SensorID::MIC:           break;
+    case SensorID::GPS:           break;
+    case SensorID::PSU_TEMP:      break;
+    default:
+      text_return->concatf("Unsupported sensor: %d\n", arg0);
+      return -1;
+  }
+  text_return->concatf("Sensor %d is now %sabled\n", arg0, arg1?"en":"dis");
   return 0;
 }
 
@@ -1423,6 +1567,9 @@ int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
 *******************************************************************************/
 void setup() {
   boot_time = millis();
+  float percent_setup = 0.0;
+  char* init_step_str = "";
+  int cursor_height = 26;
   Serial.begin(115200);   // USB
 
   pinMode(IMU_IRQ_PIN, INPUT_PULLUP);
@@ -1490,87 +1637,147 @@ void setup() {
 
   display.begin();
   display.fillScreen(BLACK);
-  display.setCursor(0,0);
-  display.println("Motherflux0r ");
+  display.setCursor(14, 0);
+  display.setTextSize(1);
+  display.println("Motherflux0r");
+  display.setTextSize(0);
   //display.setTextColor(CYAN);
   //display.println(TEST_PROG_VERSION);
+  draw_progress_bar(0, 11, 95, 12, GREEN, true, false, percent_setup);
 
+  init_step_str = "Audio           ";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
-  display.print("GridEye  ");
+  display.setCursor(4, 14);
+  display.print(init_step_str);
+  delay(10);
+
+  init_step_str = "GridEye         ";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  display.setTextColor(WHITE);
+  display.setCursor(4, 14);
+  display.print(init_step_str);
   if (0 == grideye.init(&Wire1)) {
     graph_array_therm_mean.init();
-    display.setTextColor(GREEN);
-    display.println("found");
   }
   else {
     display.setTextColor(RED);
-    display.println("absent");
+    display.setCursor(0, cursor_height);
+    display.print(init_step_str);
+    cursor_height += 8;
   }
+  delay(10);
 
+  init_step_str = "Magnetometer    ";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
-  display.print("DRV425   ");
+  display.setCursor(4, 14);
+  display.print(init_step_str);
   if (0 == magnetometer.init(&Wire1, &SPI)) {
-    display.setTextColor(GREEN);
-    display.println("found");
   }
   else {
     display.setTextColor(RED);
-    display.println("absent");
+    display.setCursor(0, cursor_height);
+    display.print(init_step_str);
+    cursor_height += 8;
   }
+  delay(10);
 
+  init_step_str = "Baro            ";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
-  display.print("Baro     ");
+  display.setCursor(4, 14);
+  display.print(init_step_str);
   if (0 == baro.init(&Wire1)) {
     graph_array_pressure.init();
     graph_array_humidity.init();
     graph_array_air_temp.init();
-    display.setTextColor(GREEN);
-    display.println("found");
   }
   else {
     display.setTextColor(RED);
-    display.println("absent");
+    display.setCursor(0, cursor_height);
+    display.print(init_step_str);
+    cursor_height += 8;
   }
+  delay(10);
 
+  init_step_str = "UVI";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
-  display.print("UVI      ");
+  display.setCursor(4, 14);
+  display.print(init_step_str);
   if (VEML6075_ERROR_SUCCESS == uv.init(&Wire1)) {
     graph_array_uva.init();
     graph_array_uvb.init();
     graph_array_uvi.init();
-    display.setTextColor(GREEN);
-    display.println("found");
   }
   else {
-    display.setTextColor(RED);
-    display.println("absent");
+    display.setTextColor(RED, BLACK);
+    display.setCursor(0, cursor_height);
+    display.print(init_step_str);
+    cursor_height += 8;
   }
+  delay(10);
 
+  init_step_str = "Lux ";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
-  display.print("TSL2561  ");
-  if (0 == tsl2561.init(&Wire1)) {
-    graph_array_visible.init();
-    tsl2561.autogain(true);
+  display.setCursor(4, 14);
+  display.print(init_step_str);
+  graph_array_visible.init();
+  int8_t lux_ret = tsl2561.init(&Wire1);
+  if (0 == lux_ret) {
     tsl2561.integrationTime(TSLIntegrationTime::MS_101);
-    display.setTextColor(GREEN);
-    display.println("found");
+  }
+  else {
+    display.setTextColor(RED, BLACK);
+    display.setCursor(0, cursor_height);
+    display.print(init_step_str);
+    display.print(lux_ret);
+    cursor_height += 8;
+  }
+  delay(10);
+
+  init_step_str = "PSU Temperature";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  display.setTextColor(WHITE);
+  display.setCursor(4, 14);
+  display.print(init_step_str);
+  //if (0 == tmp102.init(&Wire)) {
+  if (false) {
+    graph_array_psu_temp.init();
+  }
+  else {
+    display.setTextColor(RED, BLACK);
+    display.setCursor(0, cursor_height);
+    display.print(init_step_str);
+    cursor_height += 8;
+  }
+  delay(10);
+
+  init_step_str = "Inertial        ";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  display.setTextColor(WHITE);
+  display.setCursor(4, 14);
+  display.print(init_step_str);
+  //if (0 == imu.init(&Wire)) {
+  if (false) {
   }
   else {
     display.setTextColor(RED);
-    display.println("absent");
+    display.setCursor(0, cursor_height);
+    display.print(init_step_str);
+    cursor_height += 8;
   }
-
-  display.setTextColor(WHITE);
-  display.print("TMP102   ");
-  //if (0 == tmp102.init(&Wire)) {
-  //  graph_array_psu_temp.init();
-  //  display.setTextColor(GREEN);
-  //  display.println("found");
-  //}
-  //else {
-    display.setTextColor(RED);
-    display.println("absent");
-  //}
+  delay(10);
 
   //imu.begin(IMU_CS_PIN, SPI, 10000000);
   //imu.swReset();
@@ -1604,9 +1811,15 @@ void setup() {
     //attachInterrupt(digitalPinToInterrupt(IMU_IRQ_PIN), imu_isr_fxn, FALLING);
   }
 
+  init_step_str = "Console         ";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  display.setTextColor(WHITE);
+  display.setCursor(4, 14);
+  display.print(init_step_str);
 
   disp_update_last = millis();
-  disp_update_next = disp_update_last + 1000;
+  disp_update_next = disp_update_last + 1800;
   console.defineCommand("help",        '?', arg_list_1_str, "Prints help to console.", "", 0, callback_help);
   console.defineCommand("history",     arg_list_0, "Print command history.", "", 0, callback_print_history);
   console.defineCommand("reboot",      arg_list_0, "Reboot the controller.", "", 0, callback_reboot);
@@ -1620,6 +1833,8 @@ void setup() {
   console.defineCommand("fft",   arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
   console.defineCommand("synth", arg_list_4_uuff, "Mix volumes for the FFT.", "", 2, callback_synth_set);
   console.defineCommand("si",    's', arg_list_1_uint, "Sensor information.", "", 1, callback_sensor_info);
+  console.defineCommand("sinit", arg_list_2_uint, "Sensor initialize.", "", 1, callback_sensor_init);
+  console.defineCommand("se",    arg_list_2_uint, "Sensor enable.", "", 1, callback_sensor_enable);
   console.defineCommand("app",   'a', arg_list_1_uint, "Select active application.", "", 1, callback_active_app);
   console.defineCommand("vol",   arg_list_1_float, "Audio volume.", "", 0, callback_audio_volume);
   console.setTXTerminator(LineTerm::CRLF);
@@ -1627,8 +1842,27 @@ void setup() {
   console.localEcho(true);
   console.init();
 
+  StringBuilder ptc("Motherflux0r ");
+  //ptc.concat(TEST_PROG_VERSION);
+  console.printToLog(&ptc);
+  delay(10);
+
+  init_step_str = "Touchpad        ";
   touch = new SX8634(&_touch_opts);
-  touch->init(&Wire);
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  display.setTextColor(WHITE);
+  display.setCursor(4, 14);
+  display.print(init_step_str);
+  if (0 == touch->init(&Wire)) {
+  }
+  else {
+    display.setTextColor(RED);
+    display.setCursor(0, cursor_height);
+    display.print(init_step_str);
+    cursor_height += 8;
+  }
+  delay(10);
 
   disp_update_last = millis();
   disp_update_next = disp_update_last + 3000;
@@ -1638,22 +1872,16 @@ void setup() {
   //display.print((config_time - boot_time), DEC);
   //display.println("ms");
 
+  init_step_str = "USB        ";
+  percent_setup += 0.08;
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
-  display.print("Touch    ");
-  display.setTextColor(GREEN);
-  display.println(touch->getModeStr(touch->operationalMode()));
-
-  display.setTextColor(WHITE);
-  display.print("USB      ");
-  display.setTextColor(GREEN);
+  display.setCursor(4, 14);
+  display.print(init_step_str);
   while (Serial.available()) {
     Serial.read();
   }
-  display.println("Serial");
-
-  StringBuilder ptc("Motherflux0r ");
-  //ptc.concat(TEST_PROG_VERSION);
-  console.printToLog(&ptc);
+  //display.println("Serial");
 
   while (disp_update_next > millis()) {}
   if (touch->deviceFound()) {
@@ -1664,6 +1892,8 @@ void setup() {
     touch->setSliderFxn(cb_slider);
     touch->setLongpressFxn(cb_longpress);
   }
+  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, 1.0);
+  delay(50);
 }
 
 
@@ -1702,7 +1932,6 @@ void loop() {
     console.fetchLog(&output);
   }
 
-
   int8_t t_res = touch->poll();
   if (0 < t_res) {
     // Something changed in the hardware.
@@ -1725,7 +1954,7 @@ void loop() {
   if (0 < uv.poll()) {             read_uv_sensor();                    }
   if (0 < tsl2561.poll()) {        read_visible_sensor();               }
   if (0 < grideye.poll()) {        read_thermopile_sensor();            }
-  if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
+  //if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
   //if (1 == magnetometer.poll()) {}
 
   if ((last_interaction + 100000) <= millis_now) {

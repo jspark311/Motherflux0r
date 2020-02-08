@@ -84,7 +84,7 @@ enum class SensorID : uint8_t {
   UV            = 5,  //
   GPS           = 6,  //
   THERMOPILE    = 7,  //
-  TEMP          = 8,  // TMP102
+  PSU_TEMP      = 8,  // TMP102
   BATT_VOLTAGE  = 9   //
 };
 

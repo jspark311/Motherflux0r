@@ -100,7 +100,7 @@ class TMP102 {
     uint32_t      _last_read = 0;
     float         _temp      = 0.0;
 
-    int8_t  openPointerRegister(uint8_t pointerReg); // Changes the pointer register
+    int8_t  _open_ptr_register(uint8_t pointerReg); // Changes the pointer register
     uint8_t readRegister(bool registerNumber);  // reads 1 byte of from register
     float   readTemp();        // Returns the temperature in selected units.
 

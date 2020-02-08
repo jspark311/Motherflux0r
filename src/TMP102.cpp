@@ -35,14 +35,28 @@ int8_t TMP102::init(TwoWire* b) {
   if (nullptr != b) {
     _bus = b;
     if (0 == ret) {
-      ret = conversionRate(TMP102DataRate::RATE_4_HZ);
+      // Here (and only here) we replicate the code for _open_ptr_register and
+      //   write a formed config byte. Since this part doesn't have an identity
+      //   register, we cope by basing our idea of its presence on success here.
+      _bus->beginTransmission(_ADDR);  // Connect to TMP102
+      _bus->write(CONFIG_REGISTER);    // Open config register
+      ret = _bus->endTransmission();   // Did someone answer?
       if (0 == ret) {
-        ret = extendedMode(true);
         _tmp_set_flag(TMP102_FLAG_DEVICE_PRESENT);
-        ret = enabled(true);
+        uint8_t registerByte[2] = {0, 0};   // Default (bit-cleared) state is enabled.
+        registerByte[1] |= ((uint8_t) TMP102DataRate::RATE_4_HZ) << 6;  // Conversion rate
+        registerByte[1] |= 1 << 4;  // Exentended mode
+        _bus->beginTransmission(_ADDR);  // Set configuration registers
+        _bus->write(CONFIG_REGISTER);    // Point to configuration register
+        _bus->write(registerByte[0]);    // Write first byte
+        _bus->write(registerByte[1]);    // Write second byte
+        ret = _bus->endTransmission();   // Close communication with TMP102
         if (0 == ret) {
-          _tmp_set_flag(TMP102_FLAG_INITIALIZED);
+          _tmp_set_flag(TMP102_FLAG_EXTENDED_MODE | TMP102_FLAG_ENABLED | TMP102_FLAG_INITIALIZED);
         }
+      }
+      else {
+        _tmp_clear_flag(TMP102_FLAG_DEVICE_PRESENT | TMP102_FLAG_EXTENDED_MODE | TMP102_FLAG_ENABLED | TMP102_FLAG_INITIALIZED);
       }
     }
   }
@@ -79,10 +93,14 @@ int8_t TMP102::poll() {
 }
 
 
-int8_t TMP102::openPointerRegister(uint8_t pointerReg) {
-  _bus->beginTransmission(_ADDR); // Connect to TMP102
-  _bus->write(pointerReg); // Open specified register
-  return _bus->endTransmission(); // Close communication with TMP102
+int8_t TMP102::_open_ptr_register(uint8_t pointerReg) {
+  int8_t ret = -1;
+  if (devFound()) {
+    _bus->beginTransmission(_ADDR); // Connect to TMP102
+    _bus->write(pointerReg); // Open specified register
+    ret = _bus->endTransmission(); // Close communication with TMP102
+  }
+  return ret;
 }
 
 
@@ -103,31 +121,32 @@ float TMP102::readTemp() {
   int16_t digitalTemp;  // Temperature stored in TMP102 register
   // Read Temperature
   // Change pointer address to temperature register (0)
-  openPointerRegister(TEMPERATURE_REGISTER);
-  // Read from temperature register
-  registerByte[0] = readRegister(0);
-  registerByte[1] = readRegister(1);
+  if (0 == _open_ptr_register(TEMPERATURE_REGISTER)) {
+    // Read from temperature register
+    registerByte[0] = readRegister(0);
+    registerByte[1] = readRegister(1);
 
-  // Bit 0 of second byte will always be 0 in 12-bit readings and 1 in 13-bit
-  if(registerByte[1]&0x01) {  // 13 bit mode
-    // Combine bytes to create a signed int
-    digitalTemp = ((registerByte[0]) << 5) | (registerByte[1] >> 3);
-    // Temperature data can be + or -, if it should be negative,
-    // convert 13 bit to 16 bit and use the 2s compliment.
-    if(digitalTemp > 0xFFF) {
-      digitalTemp |= 0xE000;
+    // Bit 0 of second byte will always be 0 in 12-bit readings and 1 in 13-bit
+    if(registerByte[1]&0x01) {  // 13 bit mode
+      // Combine bytes to create a signed int
+      digitalTemp = ((registerByte[0]) << 5) | (registerByte[1] >> 3);
+      // Temperature data can be + or -, if it should be negative,
+      // convert 13 bit to 16 bit and use the 2s compliment.
+      if(digitalTemp > 0xFFF) {
+        digitalTemp |= 0xE000;
+      }
     }
-  }
-  else {  // 12 bit mode
-    // Combine bytes to create a signed int
-    digitalTemp = ((registerByte[0]) << 4) | (registerByte[1] >> 4);
-    // Temperature data can be + or -, if it should be negative,
-    // convert 12 bit to 16 bit and use the 2s compliment.
-    if(digitalTemp > 0x7FF) {
-      digitalTemp |= 0xF000;
+    else {  // 12 bit mode
+      // Combine bytes to create a signed int
+      digitalTemp = ((registerByte[0]) << 4) | (registerByte[1] >> 4);
+      // Temperature data can be + or -, if it should be negative,
+      // convert 12 bit to 16 bit and use the 2s compliment.
+      if(digitalTemp > 0x7FF) {
+        digitalTemp |= 0xF000;
+      }
     }
+    _last_read = millis();
   }
-  _last_read = millis();
   // Convert digital reading to analog temperature (1-bit is equal to 0.0625 C)
   return _normalize_units_returned(digitalTemp * 0.0625);
 }
@@ -150,25 +169,25 @@ int8_t TMP102::conversionRate(TMP102DataRate r) {
   uint8_t registerByte[2]; // Store the data from the register here
   if (rate < 4) {
     // Change pointer address to configuration register (0x01)
-    openPointerRegister(CONFIG_REGISTER);
+    if (0 == _open_ptr_register(CONFIG_REGISTER)) {
+      // Read current configuration register value
+      registerByte[0] = readRegister(0);
+      registerByte[1] = readRegister(1);
 
-    // Read current configuration register value
-    registerByte[0] = readRegister(0);
-    registerByte[1] = readRegister(1);
+      // Load new conversion rate
+      registerByte[1] &= 0x3F;  // Clear CR0/1 (bit 6 and 7 of second byte)
+      registerByte[1] |= rate << 6;  // Shift in new conversion rate
 
-    // Load new conversion rate
-    registerByte[1] &= 0x3F;  // Clear CR0/1 (bit 6 and 7 of second byte)
-    registerByte[1] |= rate << 6;  // Shift in new conversion rate
-
-    // Set configuration registers
-    _bus->beginTransmission(_ADDR);
-    _bus->write(CONFIG_REGISTER);   // Point to configuration register
-    _bus->write(registerByte[0]);  // Write first byte
-    _bus->write(registerByte[1]);  // Write second byte
-    ret = _bus->endTransmission();      // Close communication with TMP102
-    if (0 == ret) {
-      _tmp_clear_flag(TMP102_FLAG_DATA_RATE_MASK);
-      _tmp_set_flag((uint16_t)(rate << 6));
+      // Set configuration registers
+      _bus->beginTransmission(_ADDR);
+      _bus->write(CONFIG_REGISTER);   // Point to configuration register
+      _bus->write(registerByte[0]);  // Write first byte
+      _bus->write(registerByte[1]);  // Write second byte
+      ret = _bus->endTransmission();      // Close communication with TMP102
+      if (0 == ret) {
+        _tmp_clear_flag(TMP102_FLAG_DATA_RATE_MASK);
+        _tmp_set_flag((uint16_t)(rate << 6));
+      }
     }
   }
   return ret;
@@ -180,24 +199,24 @@ int8_t TMP102::extendedMode(bool mode) {
   uint8_t registerByte[2]; // Store the data from the register here
 
   // Change pointer address to configuration register (0x01)
-  openPointerRegister(CONFIG_REGISTER);
+  if (0 == _open_ptr_register(CONFIG_REGISTER)) {
+    // Read current configuration register value
+    registerByte[0] = readRegister(0);
+    registerByte[1] = readRegister(1);
 
-  // Read current configuration register value
-  registerByte[0] = readRegister(0);
-  registerByte[1] = readRegister(1);
+    // Load new value for extention mode
+    registerByte[1] &= 0xEF;    // Clear EM (bit 4 of second byte)
+    registerByte[1] |= mode<<4;  // Shift in new exentended mode bit
 
-  // Load new value for extention mode
-  registerByte[1] &= 0xEF;    // Clear EM (bit 4 of second byte)
-  registerByte[1] |= mode<<4;  // Shift in new exentended mode bit
-
-  // Set configuration registers
-  _bus->beginTransmission(_ADDR);
-  _bus->write(CONFIG_REGISTER);    // Point to configuration register
-  _bus->write(registerByte[0]);    // Write first byte
-  _bus->write(registerByte[1]);    // Write second byte
-  ret = _bus->endTransmission();   // Close communication with TMP102
-  if (0 == ret) {
-    _tmp_set_flag(TMP102_FLAG_EXTENDED_MODE, mode);
+    // Set configuration registers
+    _bus->beginTransmission(_ADDR);
+    _bus->write(CONFIG_REGISTER);    // Point to configuration register
+    _bus->write(registerByte[0]);    // Write first byte
+    _bus->write(registerByte[1]);    // Write second byte
+    ret = _bus->endTransmission();   // Close communication with TMP102
+    if (0 == ret) {
+      _tmp_set_flag(TMP102_FLAG_EXTENDED_MODE, mode);
+    }
   }
   return ret;
 }
@@ -205,31 +224,25 @@ int8_t TMP102::extendedMode(bool mode) {
 
 int8_t TMP102::enabled(bool x) {
   int8_t ret = -1;
-  uint8_t registerByte; // Store the data from the register here
+  if (devFound()) {
+    // Change pointer address to configuration register (0x01)
+    if (0 == _open_ptr_register(CONFIG_REGISTER)) {
+      // Read current configuration register value and clear or set SD (bit 0 of first byte)
+      uint8_t registerByte = readRegister(0);
+      registerByte = x ? (registerByte &= 0xFE) : (registerByte |= 0x01);
 
-  // Change pointer address to configuration register (0x01)
-  openPointerRegister(CONFIG_REGISTER);
-
-  // Read current configuration register value
-  registerByte = readRegister(0);
-
-  if (x) {
-    registerByte &= 0xFE;  // Clear SD (bit 0 of first byte)
-  }
-  else {
-    registerByte |= 0x01;  // Set SD (bit 0 of first byte)
-  }
-
-  // Set configuration register
-  _bus->beginTransmission(_ADDR);
-  _bus->write(CONFIG_REGISTER);  // Point to configuration register
-  _bus->write(registerByte);     // Write first byte
-  ret = _bus->endTransmission();       // Close communication with TMP102
-  if (0 == ret) {
-    _tmp_set_flag(TMP102_FLAG_ENABLED, x);
+      _bus->beginTransmission(_ADDR);  // ...and re-write it.
+      _bus->write(CONFIG_REGISTER);    // Point to configuration register.
+      _bus->write(registerByte);       // Write first byte.
+      ret = _bus->endTransmission();   // Close communication with TMP102.
+      if (0 == ret) {       // Only change the flag if the write worked.
+        _tmp_set_flag(TMP102_FLAG_ENABLED, x);
+      }
+    }
   }
   return ret;
 }
+
 
 
 int8_t TMP102::alertPolarity(bool polarity) {
@@ -237,114 +250,120 @@ int8_t TMP102::alertPolarity(bool polarity) {
   uint8_t registerByte; // Store the data from the register here
 
   // Change pointer address to configuration register (1)
-  openPointerRegister(CONFIG_REGISTER);
+  if (0 == _open_ptr_register(CONFIG_REGISTER)) {
+    // Read current configuration register value
+    registerByte = readRegister(0);
 
-  // Read current configuration register value
-  registerByte = readRegister(0);
+    // Load new value for polarity
+    registerByte &= 0xFB; // Clear POL (bit 2 of registerByte)
+    registerByte |= polarity<<2;  // Shift in new POL bit
 
-  // Load new value for polarity
-  registerByte &= 0xFB; // Clear POL (bit 2 of registerByte)
-  registerByte |= polarity<<2;  // Shift in new POL bit
-
-  // Set configuration register
-  _bus->beginTransmission(_ADDR);
-  _bus->write(CONFIG_REGISTER);  // Point to configuration register
-  _bus->write(registerByte);      // Write first byte
-  ret = _bus->endTransmission();       // Close communication with TMP102
-  if (0 == ret) {
-    _tmp_set_flag(TMP102_FLAG_ALRT_ACTIVE_HIGH, polarity);
+    // Set configuration register
+    _bus->beginTransmission(_ADDR);
+    _bus->write(CONFIG_REGISTER);  // Point to configuration register
+    _bus->write(registerByte);      // Write first byte
+    ret = _bus->endTransmission();       // Close communication with TMP102
+    if (0 == ret) {
+      _tmp_set_flag(TMP102_FLAG_ALRT_ACTIVE_HIGH, polarity);
+    }
   }
   return ret;
 }
 
 
 bool TMP102::alert() {
-  uint8_t registerByte; // Store the data from the register here
+  // TODO: Read the alert pin if possible.
+  uint8_t registerByte = 0; // Store the data from the register here
   // Change pointer address to configuration register (1)
-  openPointerRegister(CONFIG_REGISTER);
-  registerByte = readRegister(1);   // Read current configuration register value
-  registerByte &= 0x20;  // Clear everything but the alert bit (bit 5)
+  if (0 == _open_ptr_register(CONFIG_REGISTER)) {
+    registerByte = readRegister(1);   // Read current configuration register value
+    registerByte &= 0x20;  // Clear everything but the alert bit (bit 5)
+  }
   return registerByte>>5;
 }
 
 
 int8_t TMP102::setLowTemp(float degrees) {
   int8_t ret = -1;
-  uint8_t registerByte[2];  // Store the data from the register here
-  float temperature = _normalize_units_accepted(degrees);
+  if (devFound()) {
+    float temperature = _normalize_units_accepted(degrees);
+    uint8_t registerByte[2];  // Store the data from the register here
+    // Convert analog temperature to digital value
+    temperature = temperature / 0.0625;
+    // Split temperature into separate bytes
+    if (extendedMode()) {  // 13-bit mode
+      registerByte[0] = int(temperature)>>5;
+      registerByte[1] = (int(temperature)<<3);
+    }
+    else {  // 12-bit mode
+      registerByte[0] = int(temperature)>>4;
+      registerByte[1] = int(temperature)<<4;
+    }
 
-  // Convert analog temperature to digital value
-  temperature = temperature / 0.0625;
-  // Split temperature into separate bytes
-  if (extendedMode()) {  // 13-bit mode
-    registerByte[0] = int(temperature)>>5;
-    registerByte[1] = (int(temperature)<<3);
+    // Write to T_LOW Register
+    _bus->beginTransmission(_ADDR);
+    _bus->write(T_LOW_REGISTER);   // Point to T_LOW
+    _bus->write(registerByte[0]);  // Write first byte
+    _bus->write(registerByte[1]);  // Write second byte
+    ret = _bus->endTransmission();      // Close communication with TMP102
   }
-  else {  // 12-bit mode
-    registerByte[0] = int(temperature)>>4;
-    registerByte[1] = int(temperature)<<4;
-  }
-
-  // Write to T_LOW Register
-  _bus->beginTransmission(_ADDR);
-  _bus->write(T_LOW_REGISTER);   // Point to T_LOW
-  _bus->write(registerByte[0]);  // Write first byte
-  _bus->write(registerByte[1]);  // Write second byte
-  ret = _bus->endTransmission();      // Close communication with TMP102
   return ret;
 }
 
 
 int8_t TMP102::setHighTemp(float degrees) {
   int8_t ret = -1;
-  uint8_t registerByte[2];  // Store the data from the register here
-  float temperature = _normalize_units_accepted(degrees);
+  if (devFound()) {
+    uint8_t registerByte[2];  // Store the data from the register here
+    float temperature = _normalize_units_accepted(degrees);
 
-  temperature = temperature / 0.0625;
-  // Split temperature into separate bytes
-  if(extendedMode()) {  // 13-bit mode
-    registerByte[0] = int(temperature)>>5;
-    registerByte[1] = (int(temperature)<<3);
-  }
-  else {  // 12-bit mode
-    registerByte[0] = int(temperature)>>4;
-    registerByte[1] = int(temperature)<<4;
-  }
+    temperature = temperature / 0.0625;
+    // Split temperature into separate bytes
+    if(extendedMode()) {  // 13-bit mode
+      registerByte[0] = int(temperature)>>5;
+      registerByte[1] = (int(temperature)<<3);
+    }
+    else {  // 12-bit mode
+      registerByte[0] = int(temperature)>>4;
+      registerByte[1] = int(temperature)<<4;
+    }
 
-  // Write to T_HIGH Register
-  _bus->beginTransmission(_ADDR);
-  _bus->write(T_HIGH_REGISTER);      // Point to T_HIGH register
-  _bus->write(registerByte[0]);      // Write first byte
-  _bus->write(registerByte[1]);      // Write second byte
-  ret = _bus->endTransmission();    // Close communication with TMP102
+    // Write to T_HIGH Register
+    _bus->beginTransmission(_ADDR);
+    _bus->write(T_HIGH_REGISTER);      // Point to T_HIGH register
+    _bus->write(registerByte[0]);      // Write first byte
+    _bus->write(registerByte[1]);      // Write second byte
+    ret = _bus->endTransmission();    // Close communication with TMP102
+  }
   return ret;
 }
 
 
 float TMP102::readLowTemp() {
-  uint8_t registerByte[2];  // Store the data from the register here
-  int16_t digitalTemp;    // Store the digital temperature value here
+  int16_t digitalTemp = 0;    // Store the digital temperature value here
 
-  openPointerRegister(T_LOW_REGISTER);
-  registerByte[0] = readRegister(0);
-  registerByte[1] = readRegister(1);
+  if (0 == _open_ptr_register(T_LOW_REGISTER)) {
+    uint8_t registerByte[2];  // Store the data from the register here
+    registerByte[0] = readRegister(0);
+    registerByte[1] = readRegister(1);
 
-  if (extendedMode()) {  // 13 bit mode
-    // Combine bytes to create a signed int
-    digitalTemp = ((registerByte[0]) << 5) | (registerByte[1] >> 3);
-    // Temperature data can be + or -, if it should be negative,
-    // convert 13 bit to 16 bit and use the 2s compliment.
-    if(digitalTemp > 0xFFF) {
-      digitalTemp |= 0xE000;
+    if (extendedMode()) {  // 13 bit mode
+      // Combine bytes to create a signed int
+      digitalTemp = ((registerByte[0]) << 5) | (registerByte[1] >> 3);
+      // Temperature data can be + or -, if it should be negative,
+      // convert 13 bit to 16 bit and use the 2s compliment.
+      if(digitalTemp > 0xFFF) {
+        digitalTemp |= 0xE000;
+      }
     }
-  }
-  else { // 12 bit mode
-    // Combine bytes to create a signed int
-    digitalTemp = ((registerByte[0]) << 4) | (registerByte[1] >> 4);
-    // Temperature data can be + or -, if it should be negative,
-    // convert 12 bit to 16 bit and use the 2s compliment.
-    if(digitalTemp > 0x7FF) {
-      digitalTemp |= 0xF000;
+    else { // 12 bit mode
+      // Combine bytes to create a signed int
+      digitalTemp = ((registerByte[0]) << 4) | (registerByte[1] >> 4);
+      // Temperature data can be + or -, if it should be negative,
+      // convert 12 bit to 16 bit and use the 2s compliment.
+      if(digitalTemp > 0x7FF) {
+        digitalTemp |= 0xF000;
+      }
     }
   }
   // Convert digital reading to analog temperature (1-bit is equal to 0.0625 C)
@@ -353,29 +372,30 @@ float TMP102::readLowTemp() {
 
 
 float TMP102::readHighTemp() {
-  uint8_t registerByte[2];  // Store the data from the register here
   int16_t digitalTemp;    // Store the digital temperature value here
 
-  openPointerRegister(T_HIGH_REGISTER);
-  registerByte[0] = readRegister(0);
-  registerByte[1] = readRegister(1);
+  if (0 == _open_ptr_register(T_HIGH_REGISTER)) {
+    uint8_t registerByte[2];  // Store the data from the register here
+    registerByte[0] = readRegister(0);
+    registerByte[1] = readRegister(1);
 
-  if (extendedMode()) { // 13 bit mode
-    // Combine bytes to create a signed int
-    digitalTemp = ((registerByte[0]) << 5) | (registerByte[1] >> 3);
-    // Temperature data can be + or -, if it should be negative,
-    // convert 13 bit to 16 bit and use the 2s compliment.
-    if (digitalTemp > 0xFFF) {
-      digitalTemp |= 0xE000;
+    if (extendedMode()) { // 13 bit mode
+      // Combine bytes to create a signed int
+      digitalTemp = ((registerByte[0]) << 5) | (registerByte[1] >> 3);
+      // Temperature data can be + or -, if it should be negative,
+      // convert 13 bit to 16 bit and use the 2s compliment.
+      if (digitalTemp > 0xFFF) {
+        digitalTemp |= 0xE000;
+      }
     }
-  }
-  else {  // 12 bit mode
-    // Combine bytes to create a signed int
-    digitalTemp = ((registerByte[0]) << 4) | (registerByte[1] >> 4);
-    // Temperature data can be + or -, if it should be negative,
-    // convert 12 bit to 16 bit and use the 2s compliment.
-    if(digitalTemp > 0x7FF) {
-      digitalTemp |= 0xF000;
+    else {  // 12 bit mode
+      // Combine bytes to create a signed int
+      digitalTemp = ((registerByte[0]) << 4) | (registerByte[1] >> 4);
+      // Temperature data can be + or -, if it should be negative,
+      // convert 12 bit to 16 bit and use the 2s compliment.
+      if(digitalTemp > 0x7FF) {
+        digitalTemp |= 0xF000;
+      }
     }
   }
   // Convert digital reading to analog temperature (1-bit is equal to 0.0625 C)
@@ -388,43 +408,42 @@ int8_t TMP102::setFault(uint8_t faultSetting) {
   uint8_t registerByte; // Store the data from the register here
   faultSetting = faultSetting&3; // Make sure rate is not set higher than 3.
   // Change pointer address to configuration register (0x01)
-  openPointerRegister(CONFIG_REGISTER);
+  if (0 == _open_ptr_register(CONFIG_REGISTER)) {
+    // Read current configuration register value
+    registerByte = readRegister(0);
 
-  // Read current configuration register value
-  registerByte = readRegister(0);
+    // Load new conversion rate
+    registerByte &= 0xE7;  // Clear F0/1 (bit 3 and 4 of first byte)
+    registerByte |= faultSetting<<3;  // Shift new fault setting
 
-  // Load new conversion rate
-  registerByte &= 0xE7;  // Clear F0/1 (bit 3 and 4 of first byte)
-  registerByte |= faultSetting<<3;  // Shift new fault setting
-
-  // Set configuration registers
-  _bus->beginTransmission(_ADDR);
-  _bus->write(CONFIG_REGISTER);   // Point to configuration register
-  _bus->write(registerByte);     // Write byte to register
-  ret = _bus->endTransmission();       // Close communication with TMP102
+    // Set configuration registers
+    _bus->beginTransmission(_ADDR);
+    _bus->write(CONFIG_REGISTER);   // Point to configuration register
+    _bus->write(registerByte);     // Write byte to register
+    ret = _bus->endTransmission();       // Close communication with TMP102
+  }
   return ret;
 }
 
 
 int8_t TMP102::setAlertMode(bool mode) {
   int8_t ret = -1;
-  uint8_t registerByte; // Store the data from the register here
-
   // Change pointer address to configuration register (1)
-  openPointerRegister(CONFIG_REGISTER);
+  if (0 == _open_ptr_register(CONFIG_REGISTER)) {
+    uint8_t registerByte; // Store the data from the register here
+    // Read current configuration register value
+    registerByte = readRegister(0);
 
-  // Read current configuration register value
-  registerByte = readRegister(0);
+    // Load new conversion rate
+    registerByte &= 0xFD;  // Clear old TM bit (bit 1 of first byte)
+    registerByte |= mode<<1;  // Shift in new TM bit
 
-  // Load new conversion rate
-  registerByte &= 0xFD;  // Clear old TM bit (bit 1 of first byte)
-  registerByte |= mode<<1;  // Shift in new TM bit
-
-  // Set configuration registers
-  _bus->beginTransmission(_ADDR);
-  _bus->write(CONFIG_REGISTER);   // Point to configuration register
-  _bus->write(registerByte);     // Write byte to register
-  ret = _bus->endTransmission();       // Close communication with TMP102
+    // Set configuration registers
+    _bus->beginTransmission(_ADDR);
+    _bus->write(CONFIG_REGISTER);   // Point to configuration register
+    _bus->write(registerByte);     // Write byte to register
+    ret = _bus->endTransmission();       // Close communication with TMP102
+  }
   return ret;
 }
 
