@@ -118,6 +118,9 @@ typedef struct {
 *******************************************************************************/
 const char* const getAppIDString(AppID);
 const char* const getSensorIDString(SensorID);
+void listAllSensors(StringBuilder*);
+void listAllApplications(StringBuilder*);
+
 float FindE(int bands, int bins);
 void  printFFTBins(StringBuilder*);
 uint8_t* bitmapPointer(unsigned int idx);

@@ -134,14 +134,10 @@ static Vector3f64 acc_vect;   // Acceleration vector from the IMU.
 static Vector3f64 gyr_vect;   // Gyroscopic vector from the IMU.
 static Vector3f64 mag_vect0;  // Magnetism vector from the IMU.
 static Vector3f64 mag_vect1;  // Magnetism vector from the DRV425 complex.
-static float    altitude          = 0.0;    // BME280
-static float    dew_point         = 0.0;    // BME280
-static float    sea_level         = 0.0;    // BME280
-static float    therm_pixels[64];
-static float    therm_field_min   = THERM_TEMP_MAX;
-static float    therm_field_max   = THERM_TEMP_MIN;
-static float    therm_field_stdev = 0.0;
-static double   therm_field_sum   = 0.0;
+static float    altitude            = 0.0;    // BME280
+static float    dew_point           = 0.0;    // BME280
+static float    sea_level           = 0.0;    // BME280
+static float    therm_midpoint_lock = 0.0;    // GidEye
 
 /* Data buffers for sensors. */
 static SensorFilter<float> graph_array_pressure(FilteringStrategy::RAW, 96, 0);
@@ -154,8 +150,10 @@ static SensorFilter<float> graph_array_uvi(FilteringStrategy::RAW, 96, 0);
 static SensorFilter<float> graph_array_ana_light(FilteringStrategy::RAW, 96, 0);
 static SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
 static SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
+static SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0);
 
 /* Profiling data */
+static StopWatch stopwatch_main_loop_time;
 static StopWatch stopwatch_display;
 static StopWatch stopwatch_sensor_baro;
 static StopWatch stopwatch_sensor_uv;
@@ -176,11 +174,11 @@ static StopWatch stopwatch_app_i2c_scanner;
 static StopWatch stopwatch_app_tricorder;
 static StopWatch stopwatch_app_standby;
 static StopWatch stopwatch_app_suspend;
+static SensorFilter<float> graph_array_cpu_time(FilteringStrategy::MOVING_MED, 96, 0);
+static SensorFilter<float> graph_array_frame_rate(FilteringStrategy::RAW, 96, 0);
 
 
 /* Cheeseball async support stuff. */
-static uint8_t  update_disp_rate  = 30;     // Update in Hz for the display
-
 static uint32_t boot_time         = 0;      // millis() at boot.
 static uint32_t config_time       = 0;      // millis() at end of setup().
 static uint32_t off_time_vib      = 0;      // millis() when vibrator should be disabled.
@@ -190,6 +188,8 @@ static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be dis
 static uint32_t last_interaction  = 0;      // millis() when the user last interacted.
 static uint32_t disp_update_last  = 0;      // millis() when the display last updated.
 static uint32_t disp_update_next  = 0;      // millis() when the display next updates.
+static uint32_t disp_update_rate  = 30;     // Update in Hz for the display
+
 
 /* Console junk... */
 ParsingConsole console(128);
@@ -283,33 +283,99 @@ void redraw_app_window(const char* title, uint8_t pages, uint8_t active_page) {
 */
 void redraw_meta_window() {
   if (drawn_app != active_app) {
-    redraw_app_window("Meta", 0, 0);
-    display.setCursor(0, 11);
-    display.setTextColor(WHITE);
-    display.print("Firmware ");
-    display.setTextColor(CYAN);
-    display.println(TEST_PROG_VERSION);
-    display.setTextColor(WHITE);
-    display.println("Touch:  ");
-    display.println("Uptime: ");
-    display.println("Date:   ");
-    //display.print("UV: ");
+    dirty_slider = true;
   }
 
-  display.setTextColor(CYAN, BLACK);
-  display.setCursor(47, 19);
-  SX8634OpMode tmode = touch->operationalMode();
-  display.print(touch->getModeStr(tmode));
-  display.setCursor(47, 27);
-  display.print(millis() - boot_time);
-  //display.setCursor(47, 43);
-  //display.setTextColor(uv.devFound() ? GREEN : RED, BLACK);
-  //display.print("*");
-  //display.setTextColor(uv.initialized() ? GREEN : RED, BLACK);
-  //display.print("*");
-  //display.setTextColor(uv.enabled() ? GREEN : RED, BLACK);
-  //display.print("*");
-  //display.print(uv.poll());
+  if (dirty_slider) {   // Initial frame changes go here.
+    redraw_app_window("Meta", 0, 0);
+    if (touch->sliderValue() <= 7) {
+      // Basic firmware stuff
+      display.setCursor(0, 11);
+      display.setTextSize(0);
+      display.setTextColor(WHITE);
+      display.print("Firmware ");
+      display.setTextColor(CYAN);
+      display.println(TEST_PROG_VERSION);
+      display.setTextColor(CYAN);
+      display.println(__DATE__);
+      display.println(__TIME__);
+      display.setTextColor(WHITE);
+      display.println("Touch:  ");
+      display.println("Uptime: ");
+      display.print("FPS:    ");
+    }
+    else if (touch->sliderValue() <= 22) {
+      display.setCursor(0, 11);
+      display.setTextSize(0);
+      display.setTextColor(WHITE);
+      display.println("ML Worst");
+      display.println("ML Best");
+      display.println("ML Mean");
+      display.println("ML Last");
+    }
+    dirty_slider = false;
+  }
+
+  if (touch->sliderValue() <= 7) {
+    display.setTextColor(CYAN, BLACK);
+    display.setCursor(47, 35);
+    SX8634OpMode tmode = touch->operationalMode();
+    display.print(touch->getModeStr(tmode));
+    display.setCursor(47, 43);
+    display.print(millis() - boot_time);
+    display.setCursor(47, 51);
+    display.print(disp_update_rate);
+  }
+  else if (touch->sliderValue() <= 15) {
+    if (graph_array_frame_rate.dirty()) {
+      draw_graph_obj(
+        0, 10, 96, 45, CYAN,
+        true, touch->buttonPressed(1), touch->buttonPressed(4),
+        &graph_array_frame_rate
+      );
+      display.setTextSize(0);
+      display.setCursor(0, 56);
+      display.setTextColor(WHITE);
+      display.print("Framerate:  ");
+      display.setTextColor(CYAN, BLACK);
+      display.print(graph_array_frame_rate.value());
+    }
+  }
+  else if (touch->sliderValue() <= 22) {
+    display.setTextColor(CYAN, BLACK);
+    display.setCursor(52, 11);
+    display.print(stopwatch_main_loop_time.worstTime());
+    display.setCursor(52, 19);
+    display.print(stopwatch_main_loop_time.bestTime());
+    display.setCursor(52, 27);
+    display.print(stopwatch_main_loop_time.meanTime());
+    display.setCursor(52, 35);
+    display.print(stopwatch_main_loop_time.lastTime());
+  }
+  else if (touch->sliderValue() <= 30) {
+  }
+  else if (touch->sliderValue() <= 37) {
+  }
+  else if (touch->sliderValue() <= 45) {
+  }
+  else if (touch->sliderValue() <= 52) {
+  }
+  else {
+    // CPU load metrics
+    if (graph_array_cpu_time.dirty()) {
+      draw_graph_obj(
+        0, 10, 96, 45, 0xFE00,
+        true, touch->buttonPressed(1), touch->buttonPressed(4),
+        &graph_array_cpu_time
+      );
+      display.setTextSize(0);
+      display.setCursor(0, 56);
+      display.setTextColor(WHITE);
+      display.print("Load:  ");
+      display.setTextColor(GREEN, BLACK);
+      display.print(graph_array_cpu_time.value());
+    }
+  }
 
   if (dirty_button) {
     if (touch->buttonPressed(0)) {
@@ -486,25 +552,10 @@ void redraw_touch_test_window() {
 }
 
 
-void add_to_graph_data_array(float* arr, float x) {
-  for (uint8_t i = 0; i < 95; i++) {
-    *(arr + i) = *(arr + i + 1);
-  }
-  *(arr + 95) = x;
-}
-
-
-
-
 /*
 * Draws the tricorder app.
 */
 void redraw_tricorder_window() {
-  const uint8_t PIXEL_SIZE  = 4;
-  const uint8_t TEXT_OFFSET = (PIXEL_SIZE*8)+5;
-  const float TEMP_RANGE = THERM_TEMP_MAX - THERM_TEMP_MIN;
-  const float BINSIZE_T  = TEMP_RANGE / (PIXEL_SIZE * 8);  // Space of display gives scale size.
-
   if (drawn_app != active_app) {
     redraw_app_window("Tricorder", 0, 0);
     dirty_slider = true;
@@ -668,10 +719,31 @@ void redraw_tricorder_window() {
     display.setTextColor(YELLOW, BLACK);
     display.print("Magnetometer");
   }
-  else {
-    // Thermopile
+  else {    // Thermopile
     if (graph_array_therm_mean.dirty()) {
-      const float MIDPOINT_T = therm_field_max - ((therm_field_max - therm_field_min) / 2);
+      const uint8_t PIXEL_SIZE  = 4;
+      const uint8_t TEXT_OFFSET = (PIXEL_SIZE*8)+5;
+      const float TEMP_RANGE = THERM_TEMP_MAX - THERM_TEMP_MIN;
+      const float BINSIZE_T  = TEMP_RANGE / (PIXEL_SIZE * 8);  // Space of display gives scale size.
+      float* therm_pixels = graph_array_therm_frame.memPtr();
+      float  therm_field_min = graph_array_therm_frame.minValue();
+      float  therm_field_max = graph_array_therm_frame.maxValue();
+      bool lock_range_to_current = touch->buttonPressed(1);
+      bool lock_range_to_absolute = lock_range_to_current;
+
+      if (!(lock_range_to_absolute | lock_range_to_current)) {
+        therm_midpoint_lock = therm_field_max - ((therm_field_max - therm_field_min) / 2);
+      }
+      else if (lock_range_to_absolute) {
+        therm_field_max = THERM_TEMP_MAX;
+        therm_field_min = THERM_TEMP_MIN;
+      }
+      else {  // Lock to current range. Use the filtered mean so that it drifts.
+        therm_field_max = graph_array_therm_mean.value() + therm_midpoint_lock;
+        therm_field_min = graph_array_therm_mean.value() - therm_midpoint_lock;
+      }
+      const float MIDPOINT_T = lock_range_to_absolute ? (TEMP_RANGE / 2.0) : therm_midpoint_lock;
+
       for (uint8_t i = 0; i < 64; i++) {
         uint x = (i & 0x07) * PIXEL_SIZE;
         uint y = (i >> 3) * PIXEL_SIZE;
@@ -707,7 +779,7 @@ void redraw_tricorder_window() {
       display.setTextColor(WHITE);
       display.print("STDEV: ");
       display.setTextColor(RED, BLACK);
-      display.println(therm_field_stdev);
+      display.println(graph_array_therm_frame.stdevValue());
     }
   }
 
@@ -740,35 +812,35 @@ void redraw_app_select_window() {
     display.print("Fxn: ");
     display.setTextColor(MAGENTA, BLACK);
     if (touch->sliderValue() <= 7) {
-      display.println("Touch Diag");
+      display.print("Touch Diag");
       app_page = AppID::TOUCH_TEST;
     }
     else if (touch->sliderValue() <= 15) {
-      display.println("Settings");
+      display.print("Settings");
       app_page = AppID::CONFIGURATOR;
     }
     else if (touch->sliderValue() <= 22) {
-      display.println("Data MGMT");
+      display.print("Data MGMT");
       app_page = AppID::DATA_MGMT;
     }
     else if (touch->sliderValue() <= 30) {
-      display.println("Synth Box");
+      display.print("Synth Box");
       app_page = AppID::SYNTH_BOX;
     }
     else if (touch->sliderValue() <= 37) {
-      display.println("Comms");
+      display.print("Comms");
       app_page = AppID::COMMS_TEST;
     }
     else if (touch->sliderValue() <= 45) {
-      display.println("Meta");
+      display.print("Meta");
       app_page = AppID::META;
     }
     else if (touch->sliderValue() <= 52) {
-      display.println("I2C Scanner");
+      display.print("I2C Scanner");
       app_page = AppID::I2C_SCANNER;
     }
     else {
-      display.println("Tricorder");
+      display.print("Tricorder");
       app_page = AppID::TRICORDER;
     }
     dirty_slider = false;
@@ -956,6 +1028,25 @@ void draw_graph_obj(
   const uint16_t DATA_SIZE = filt->windowSize();
   const uint16_t LAST_SIDX = filt->lastIndex();
   const float*   F_MEM     = filt->memPtr();
+  float tmp_data[DATA_SIZE];
+  for (uint16_t i = 0; i < DATA_SIZE; i++) {
+    tmp_data[i] = *(F_MEM + ((i + LAST_SIDX) % DATA_SIZE));
+  }
+  draw_graph_obj(x, y, w, h, color, draw_base, draw_v_ticks, draw_h_ticks, tmp_data, (uint32_t) DATA_SIZE);
+}
+
+/*
+* Given a filter object, and parameters for the graph, draw the data to the
+*   display.
+*/
+void draw_graph_obj(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
+  SensorFilter<uint32_t>* filt
+) {
+  const uint16_t  DATA_SIZE = filt->windowSize();
+  const uint16_t  LAST_SIDX = filt->lastIndex();
+  const uint32_t* F_MEM     = filt->memPtr();
   float tmp_data[DATA_SIZE];
   for (uint16_t i = 0; i < DATA_SIZE; i++) {
     tmp_data[i] = *(F_MEM + ((i + LAST_SIDX) % DATA_SIZE));
@@ -1153,26 +1244,13 @@ int8_t read_battery_temperature_sensor() {
 */
 int8_t read_thermopile_sensor() {
   int8_t ret = 0;
-  therm_field_min   = THERM_TEMP_MAX;   // Reset range markers.
-  therm_field_max   = THERM_TEMP_MIN;   // Reset range markers.
-  therm_field_sum   = 0.0;
   for (uint8_t i = 0; i < 8; i++) {
     for (uint8_t n = 0; n < 8; n++) {
-      uint8_t pix_idx = (7 - n) | (i << 3);  // Sensor is rotated 90-deg.
-      uint8_t arr_idx = (n << 3) | (i);
-      therm_pixels[arr_idx] = grideye.getPixelTemperature(pix_idx);
-      therm_field_min = strict_min(therm_pixels[arr_idx], therm_field_min);
-      therm_field_max = strict_max(therm_pixels[arr_idx], therm_field_max);
-      therm_field_sum += therm_pixels[arr_idx];
+      uint8_t pix_idx = (7 - i) | (n << 3);  // Sensor is rotated 90-deg.
+      graph_array_therm_frame.feedFilter(grideye.getPixelTemperature(pix_idx));
     }
   }
-  float therm_field_mean = therm_field_sum / 64.0;
-  graph_array_therm_mean.feedFilter(therm_field_mean);
-  double deviation_sum = 0.0;
-  for (uint8_t i = 0; i < 64; i++) {
-    deviation_sum += sq(therm_pixels[i] - therm_field_mean);
-  }
-  therm_field_stdev = sqrt(deviation_sum / 64);
+  graph_array_therm_mean.feedFilter(graph_array_therm_frame.value());
   return ret;
 }
 
@@ -1233,7 +1311,6 @@ int callback_reboot(StringBuilder* text_return, StringBuilder* args) {
 
 int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* args) {
   StopWatch::printDebugHeader(text_return);
-  stopwatch_display.printDebug("Display", text_return);
   stopwatch_sensor_baro.printDebug("Baro", text_return);
   stopwatch_sensor_uv.printDebug("UV", text_return);
   stopwatch_sensor_grideye.printDebug("GridEye", text_return);
@@ -1247,6 +1324,8 @@ int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* ar
 
 int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args) {
   StopWatch::printDebugHeader(text_return);
+  stopwatch_main_loop_time.printDebug("Main loop", text_return);
+  stopwatch_display.printDebug("Display", text_return);
   stopwatch_app_app_select.printDebug("APP_SELECT", text_return);
   stopwatch_app_touch_test.printDebug("TOUCH TEST", text_return);
   stopwatch_app_configurator.printDebug("CONFIGURATOR", text_return);
@@ -1298,26 +1377,31 @@ int callback_touch_mode(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+int callback_display_rate(StringBuilder* text_return, StringBuilder* args) {
+  if (args->count() > 0) {
+    int rate_int = args->position_as_int(0);
+    disp_update_rate = (rate_int > 0) ? rate_int : 0;
+  }
+  if (disp_update_rate) {
+    text_return->concatf("Display capped at %ufps.\n", disp_update_rate);
+  }
+  else {
+    text_return->concat("Display framerate is not limited.\n");
+  }
+  return 0;
+}
+
+
 int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
   int arg0 = args->position_as_int(0);
   uint32_t millis_0 = millis();
   uint32_t millis_1 = millis_0;
   switch (arg0) {
-    case 0:
-      display.fillScreen(BLACK);
-      break;
-    case 1:
-      redraw_app_window("Test App Title", 0, 0);
-      break;
-    case 2:
-      redraw_touch_test_window();
-      break;
-    case 3:
-      redraw_tricorder_window();
-      break;
-    case 4:
-      redraw_fft_window();
-      break;
+    case 0:    display.fillScreen(BLACK);                   break;
+    case 1:    redraw_app_window("Test App Title", 0, 0);   break;
+    case 2:    redraw_touch_test_window();                  break;
+    case 3:    redraw_tricorder_window();                   break;
+    case 4:    redraw_fft_window();                         break;
     case 5:
       display.setAddrWindow(0, 0, 96, 64);
       for (uint8_t h = 0; h < 64; h++) {
@@ -1523,31 +1607,34 @@ int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
     }
   }
   else {   // No arguments means print the app index list.
-    for (uint8_t i = 0; i < 11; i++) {
-      text_return->concatf("%2u: %s\n", i, getAppIDString((AppID) i));
-    }
+    listAllApplications(text_return);
   }
   return 0;
 }
 
 
 int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
-  int arg0 = args->position_as_int(0);
-  switch ((SensorID) arg0) {
-    case SensorID::MAGNETOMETER:   magnetometer.printDebug(text_return);  break;
-    //case SensorID::BARO:           baro.printDebug(text_return);          break;
-    //case SensorID::LIGHT:            break;
-    //case SensorID::UV:             uv.printDebug(text_return);            break;
-    //case SensorID::THERMOPILE:     grideye.printDebug(text_return);       break;
-    case SensorID::LUX:            //tsl2561.printDebug(text_return);       break;
-    case SensorID::BATT_VOLTAGE:       break;
-    case SensorID::IMU:                break;
-    case SensorID::MIC:                break;
-    case SensorID::GPS:                break;
-    //case SensorID::PSU_TEMP:       tmp102.printDebug(text_return);        break;
-    default:
-      text_return->concatf("Unsupported sensor: %d\n", arg0);
-      return -1;
+  if (0 < args->count()) {
+    int arg0 = args->position_as_int(0);
+    switch ((SensorID) arg0) {
+      case SensorID::MAGNETOMETER:   magnetometer.printDebug(text_return);  break;
+      //case SensorID::BARO:           baro.printDebug(text_return);          break;
+      //case SensorID::LIGHT:            break;
+      //case SensorID::UV:             uv.printDebug(text_return);            break;
+      //case SensorID::THERMOPILE:     grideye.printDebug(text_return);       break;
+      //case SensorID::LUX:            tsl2561.printDebug(text_return);       break;
+      //case SensorID::BATT_VOLTAGE:       break;
+      //case SensorID::IMU:                break;
+      //case SensorID::MIC:                break;
+      //case SensorID::GPS:                break;
+      //case SensorID::PSU_TEMP:       tmp102.printDebug(text_return);        break;
+      default:
+        text_return->concatf("Unsupported sensor: %d\n", arg0);
+        return -1;
+    }
+  }
+  else {   // No arguments means print the sensor index list.
+    listAllSensors(text_return);
   }
   return 0;
 }
@@ -1559,6 +1646,7 @@ int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args)
       case SensorID::MAGNETOMETER:
         break;
       case SensorID::BARO:
+        text_return->concat("Baro Filters:\n");
         graph_array_humidity.printFilter(text_return);
         graph_array_air_temp.printFilter(text_return);
         graph_array_pressure.printFilter(text_return);
@@ -1568,12 +1656,15 @@ int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args)
         graph_array_ana_light.printFilter(text_return);
         break;
       case SensorID::UV:
+        text_return->concat("UV Filters:\n");
         graph_array_uva.printFilter(text_return);
         graph_array_uvb.printFilter(text_return);
         graph_array_uvi.printFilter(text_return);
         break;
       case SensorID::THERMOPILE:
+        text_return->concat("GridEye Filters:\n");
         graph_array_therm_mean.printFilter(text_return);
+        graph_array_therm_frame.printFilter(text_return);
         break;
       case SensorID::BATT_VOLTAGE:
       case SensorID::IMU:
@@ -1582,6 +1673,7 @@ int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args)
       case SensorID::PSU_TEMP:
         break;
       case SensorID::LUX:
+        text_return->concat("Lux Filters:\n");
         graph_array_visible.printFilter(text_return);
         break;
       default:
@@ -1590,12 +1682,31 @@ int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args)
     }
   }
   else {   // No arguments means print the sensor index list.
-    for (uint8_t i = 0; i < 11; i++) {
-      text_return->concatf("%2u: %s\n", i, getSensorIDString((SensorID) i));
+    listAllSensors(text_return);
+  }
+  return 0;
+}
+
+int callback_meta_filter_info(StringBuilder* text_return, StringBuilder* args) {
+  int arg0 = args->position_as_int(0);
+  if (0 < args->count()) {
+    switch (arg0) {
+      case 0:
+        text_return->concat("CPU Time Filter:\n");
+        graph_array_cpu_time.printFilter(text_return);
+        break;
+      case 1:
+        text_return->concat("Framerate Filter:\n");
+        graph_array_frame_rate.printFilter(text_return);
+        break;
+      default:
+        text_return->concatf("Unsupported filter: %d\n", arg0);
+        return -1;
     }
   }
   return 0;
 }
+
 
 
 int callback_sensor_filter_set_strat(StringBuilder* text_return, StringBuilder* args) {
@@ -1642,7 +1753,20 @@ int callback_sensor_filter_set_strat(StringBuilder* text_return, StringBuilder* 
           break;
       }
       break;
-    case SensorID::THERMOPILE:    ret = graph_array_therm_mean.setStrategy((FilteringStrategy) arg1);  break;
+    case SensorID::THERMOPILE:
+      switch (arg2) {
+        case 0:    ret = graph_array_therm_frame.setStrategy((FilteringStrategy) arg1);  break;
+        case 1:    ret = graph_array_therm_mean.setStrategy((FilteringStrategy) arg1);   break;
+        case 255:
+          if (0 == graph_array_therm_frame.setStrategy((FilteringStrategy) arg1)) {
+            ret = graph_array_therm_mean.setStrategy((FilteringStrategy) arg1);
+          }
+          break;
+        default:
+          ret = -3;
+          break;
+      }
+      break;
     case SensorID::BATT_VOLTAGE:
     case SensorID::IMU:
     case SensorID::MIC:
@@ -1664,52 +1788,78 @@ int callback_sensor_filter_set_strat(StringBuilder* text_return, StringBuilder* 
 }
 
 
-int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
-  int ret = 0;
+int callback_meta_filter_set_strat(StringBuilder* text_return, StringBuilder* args) {
+  int ret = -1;
   int arg0 = args->position_as_int(0);
-  //int arg1 = args->position_as_int(1);
-  switch ((SensorID) arg0) {
-    case SensorID::MAGNETOMETER:   break;
-    case SensorID::BARO:           ret = baro.init(&Wire1);       break;
-    case SensorID::LUX:            ret = tsl2561.init(&Wire1);    break;
-    case SensorID::UV:             ret = uv.init(&Wire1);         break;
-    case SensorID::THERMOPILE:     ret = grideye.init(&Wire1);    break;
-    case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);     break;
-    case SensorID::BATT_VOLTAGE:       break;
-    case SensorID::IMU:                break;
-    case SensorID::MIC:                break;
-    case SensorID::GPS:                break;
-    case SensorID::LIGHT:              break;
+  uint8_t arg1 = args->position_as_int(1);
+  switch (arg0) {
+    case 0:    ret = graph_array_cpu_time.setStrategy((FilteringStrategy) arg1);     break;
+    case 1:    ret = graph_array_frame_rate.setStrategy((FilteringStrategy) arg1);   break;
     default:
-      text_return->concatf("Unsupported sensor: %d\n", arg0);
+      text_return->concatf("Unsupported filter: %d\n", arg0);
       return -1;
   }
-  text_return->concatf("Sensor %d init() returned %d\n", arg0, ret);
+  text_return->concatf("Setting meta filter %d strategy to %s returned %d.\n", arg0, getFilterStr((FilteringStrategy) arg1), ret);
+  return 0;
+}
+
+
+int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
+  int ret = -1;
+  if (1 == args->count()) {
+    int arg0 = args->position_as_int(0);
+    //int arg1 = args->position_as_int(1);
+    switch ((SensorID) arg0) {
+      //case SensorID::MAGNETOMETER:   break;
+      case SensorID::BARO:           ret = baro.init(&Wire1);       break;
+      case SensorID::LUX:            ret = tsl2561.init(&Wire1);    break;
+      case SensorID::UV:             ret = uv.init(&Wire1);         break;
+      case SensorID::THERMOPILE:     ret = grideye.init(&Wire1);    break;
+      case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);     break;
+      //case SensorID::BATT_VOLTAGE:       break;
+      //case SensorID::IMU:                break;
+      //case SensorID::MIC:                break;
+      //case SensorID::GPS:                break;
+      //case SensorID::LIGHT:              break;
+      default:
+        text_return->concatf("Unsupported sensor: %d\n", arg0);
+        return -1;
+    }
+    text_return->concatf("Sensor %d init() returned %d\n", arg0, ret);
+  }
+  else {   // No arguments means print the sensor index list.
+    listAllSensors(text_return);
+  }
   return 0;
 }
 
 
 int callback_sensor_enable(StringBuilder* text_return, StringBuilder* args) {
-  int arg0  = args->position_as_int(0);
-  bool arg1 = (1 < args->count()) ? (1 == args->position_as_int(1)) : true;
-  bool en   = false;
-  switch ((SensorID) arg0) {
-    case SensorID::MAGNETOMETER:  magnetometer.power(arg1);   en = arg1;      break;
-    case SensorID::BARO:          en = baro.enabled();            break;
-    case SensorID::LUX:           tsl2561.enabled(arg1);  en = tsl2561.enabled();   break;
-    case SensorID::UV:            uv.enabled(arg1);       en = uv.enabled();        break;
-    case SensorID::THERMOPILE:    grideye.enabled(arg1);  en = grideye.enabled();   break;
-    case SensorID::BATT_VOLTAGE:  tmp102.enabled(arg1);   en = tmp102.enabled();    break;
-    case SensorID::IMU:           break;
-    case SensorID::MIC:           break;
-    case SensorID::GPS:           break;
-    case SensorID::PSU_TEMP:      break;
-    case SensorID::LIGHT:         break;
-    default:
-      text_return->concatf("Unsupported sensor: %d\n", arg0);
-      return -1;
+  if (0 <= args->count()) {
+    int arg0  = args->position_as_int(0);
+    bool arg1 = (1 < args->count()) ? (1 == args->position_as_int(1)) : true;
+    bool en   = false;
+    switch ((SensorID) arg0) {
+      case SensorID::MAGNETOMETER:  magnetometer.power(arg1);   en = arg1;      break;
+      case SensorID::BARO:          en = baro.enabled();            break;
+      case SensorID::LUX:           tsl2561.enabled(arg1);  en = tsl2561.enabled();   break;
+      case SensorID::UV:            uv.enabled(arg1);       en = uv.enabled();        break;
+      case SensorID::THERMOPILE:    grideye.enabled(arg1);  en = grideye.enabled();   break;
+      case SensorID::BATT_VOLTAGE:  tmp102.enabled(arg1);   en = tmp102.enabled();    break;
+      case SensorID::IMU:           break;
+      case SensorID::MIC:           break;
+      case SensorID::GPS:           break;
+      case SensorID::PSU_TEMP:      break;
+      case SensorID::LIGHT:         break;
+      default:
+        text_return->concatf("Unsupported sensor: %d\n", arg0);
+        return -1;
+    }
+    text_return->concatf("Sensor %d is now %sabled\n", arg0, en?"en":"dis");
   }
-  text_return->concatf("Sensor %d is now %sabled\n", arg0, en?"en":"dis");
+  else {   // No arguments means print the sensor index list.
+    listAllSensors(text_return);
+  }
   return 0;
 }
 
@@ -1796,7 +1946,21 @@ void setup() {
   ampR.gain(0.4);
 
   analogWriteResolution(12);
+
+  /* Allocate memory for the filters. */
+  graph_array_pressure.init();
+  graph_array_humidity.init();
+  graph_array_air_temp.init();
+  graph_array_psu_temp.init();
+  graph_array_uva.init();
+  graph_array_uvb.init();
+  graph_array_uvi.init();
   graph_array_ana_light.init();
+  graph_array_visible.init();
+  graph_array_therm_mean.init();
+  graph_array_therm_frame.init();
+  graph_array_cpu_time.init();
+  graph_array_frame_rate.init();
 
   display.begin();
   display.fillScreen(BLACK);
@@ -1804,11 +1968,9 @@ void setup() {
   display.setTextSize(1);
   display.println("Motherflux0r");
   display.setTextSize(0);
-  //display.setTextColor(CYAN);
-  //display.println(TEST_PROG_VERSION);
   draw_progress_bar(0, 11, 95, 12, GREEN, true, false, percent_setup);
 
-  init_step_str = "Audio           ";
+  init_step_str = (const char*) "Audio           ";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
@@ -1816,14 +1978,13 @@ void setup() {
   display.print(init_step_str);
   delay(10);
 
-  init_step_str = "GridEye         ";
+  init_step_str = (const char*) "GridEye         ";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
   if (0 == grideye.init(&Wire1)) {
-    graph_array_therm_mean.init();
   }
   else {
     display.setTextColor(RED);
@@ -1833,7 +1994,7 @@ void setup() {
   }
   delay(10);
 
-  init_step_str = "Magnetometer    ";
+  init_step_str = (const char*) "Magnetometer    ";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
@@ -1849,15 +2010,12 @@ void setup() {
   }
   delay(10);
 
-  init_step_str = "Baro            ";
+  init_step_str = (const char*) "Baro            ";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  graph_array_pressure.init();
-  graph_array_humidity.init();
-  graph_array_air_temp.init();
   if (0 == baro.init(&Wire1)) {
   }
   else {
@@ -1868,15 +2026,12 @@ void setup() {
   }
   delay(10);
 
-  init_step_str = "UVI";
+  init_step_str = (const char*) "UVI";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  graph_array_uva.init();
-  graph_array_uvb.init();
-  graph_array_uvi.init();
   if (VEML6075_ERROR_SUCCESS == uv.init(&Wire1)) {
   }
   else {
@@ -1887,13 +2042,12 @@ void setup() {
   }
   delay(10);
 
-  init_step_str = "Lux ";
+  init_step_str = (const char*) "Lux ";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  graph_array_visible.init();
   int8_t lux_ret = tsl2561.init(&Wire1);
   if (0 == lux_ret) {
     tsl2561.integrationTime(TSLIntegrationTime::MS_101);
@@ -1907,15 +2061,13 @@ void setup() {
   }
   delay(10);
 
-  init_step_str = "PSU Temperature";
+  init_step_str = (const char*) "PSU Temperature";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  graph_array_psu_temp.init();
-  //if (0 == tmp102.init(&Wire)) {
-  if (false) {
+  if (0 == tmp102.init(&Wire)) {
   }
   else {
     display.setTextColor(RED, BLACK);
@@ -1925,7 +2077,7 @@ void setup() {
   }
   delay(10);
 
-  init_step_str = "Inertial        ";
+  init_step_str = (const char*) "Inertial        ";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
@@ -1974,7 +2126,7 @@ void setup() {
     //attachInterrupt(digitalPinToInterrupt(IMU_IRQ_PIN), imu_isr_fxn, FALLING);
   }
 
-  init_step_str = "Console         ";
+  init_step_str = (const char*) "Console         ";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
@@ -1992,14 +2144,17 @@ void setup() {
   console.defineCommand("led",         arg_list_3_uint, "LED Test", "", 1, callback_led_test);
   console.defineCommand("vib",         'v', arg_list_2_uint, "Vibrator test", "", 0, callback_vibrator_test);
   console.defineCommand("disp",        'd', arg_list_1_uint, "Display test", "", 1, callback_display_test);
+  console.defineCommand("disprate",    arg_list_1_uint, "Display frame rate", "", 0, callback_display_rate);
   console.defineCommand("aout",        arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
   console.defineCommand("fft",         arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
   console.defineCommand("synth",       arg_list_4_uuff, "Synth parameters.", "", 2, callback_synth_set);
   console.defineCommand("si",          's', arg_list_1_uint, "Sensor information.", "", 0, callback_sensor_info);
   console.defineCommand("sfi",         arg_list_1_uint, "Sensor filter info.", "", 0, callback_sensor_filter_info);
-  console.defineCommand("sinit",       arg_list_2_uint, "Sensor initialize.", "", 1, callback_sensor_init);
-  console.defineCommand("se",          arg_list_2_uint, "Sensor enable.", "", 1, callback_sensor_enable);
+  console.defineCommand("mfi",         arg_list_1_uint, "Meta filter info.", "", 1, callback_meta_filter_info);
+  console.defineCommand("sinit",       arg_list_2_uint, "Sensor initialize.", "", 0, callback_sensor_init);
+  console.defineCommand("se",          arg_list_2_uint, "Sensor enable.", "", 0, callback_sensor_enable);
   console.defineCommand("sfs",         arg_list_3_uint, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
+  console.defineCommand("mfs",         arg_list_3_uint, "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
   console.defineCommand("app",         'a', arg_list_1_uint, "Select active application.", "", 0, callback_active_app);
   console.defineCommand("sprof",       arg_list_0, "Dump sensor profiler.", "", 0, callback_print_sensor_profiler);
   console.defineCommand("aprof",       arg_list_0, "Dump application profiler.", "", 0, callback_print_app_profiler);
@@ -2014,7 +2169,7 @@ void setup() {
   console.printToLog(&ptc);
   delay(10);
 
-  init_step_str = "Touchpad        ";
+  init_step_str = (const char*) "Touchpad        ";
   touch = new SX8634(&_touch_opts);
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
@@ -2032,19 +2187,20 @@ void setup() {
   delay(10);
 
   disp_update_last = millis();
-  disp_update_next = disp_update_last + 3000;
+  disp_update_next = disp_update_last + 2000;
 
   config_time = millis();
   //display.setTextColor(GREEN);
   //display.print((config_time - boot_time), DEC);
   //display.println("ms");
 
-  init_step_str = "USB        ";
+  init_step_str = (const char*) "USB        ";
   percent_setup += 0.08;
   draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
+  while (!Serial) {}
   while (Serial.available()) {
     Serial.read();
   }
@@ -2069,6 +2225,7 @@ void setup() {
 * Main loop
 *******************************************************************************/
 void loop() {
+  stopwatch_main_loop_time.markStart();
   StringBuilder output;
 
   if (Serial) {
@@ -2098,14 +2255,12 @@ void loop() {
     }
     console.fetchLog(&output);
   }
-
   stopwatch_touch_poll.markStart();
   int8_t t_res = touch->poll();
   if (0 < t_res) {
     // Something changed in the hardware.
   }
   stopwatch_touch_poll.markStop();
-
   if (imu_irq_fired) {
     imu_irq_fired = false;
     stopwatch_sensor_imu.markStart();
@@ -2113,7 +2268,6 @@ void loop() {
     //imu.clearInterrupts();
     stopwatch_sensor_imu.markStop();
   }
-
   /* Run our async cleanup stuff. */
   uint32_t millis_now = millis();
   if (millis_now >= off_time_led_r) {   pinMode(LED_R_PIN, INPUT);     }
@@ -2135,12 +2289,11 @@ void loop() {
   if (0 < grideye.poll()) {        read_thermopile_sensor();            }
   stopwatch_sensor_grideye.markStop();
   stopwatch_sensor_tmp102.markStart();
-  //if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
+  if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
   stopwatch_sensor_tmp102.markStop();
   stopwatch_sensor_mag.markStart();
   //if (1 == magnetometer.poll()) {}
   stopwatch_sensor_mag.markStop();
-
 
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
@@ -2151,14 +2304,19 @@ void loop() {
 
   millis_now = millis();
   if (disp_update_next <= millis_now) {
+    // TODO: for some reason this hard-locks the program occasionally.
     stopwatch_display.markStart();
     updateDisplay();
     stopwatch_display.markStop();
+    // For tracking framerate, convert from period in micros to hz...
+    graph_array_frame_rate.feedFilter(1000000.0 / stopwatch_display.meanTime());
     disp_update_last = millis_now;
-    disp_update_next = (1000 / update_disp_rate) + disp_update_last;
+    disp_update_next = (0 != disp_update_rate) ? (1000 / disp_update_rate) + disp_update_last : disp_update_last;
   }
 
   if ((Serial) && (output.length() > 0)) {
     Serial.write(output.string(), output.length());
   }
+  stopwatch_main_loop_time.markStop();
+  graph_array_cpu_time.feedFilter(stopwatch_main_loop_time.meanTime()/1000.0);
 }

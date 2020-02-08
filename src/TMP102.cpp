@@ -105,7 +105,7 @@ int8_t TMP102::_open_ptr_register(uint8_t pointerReg) {
 }
 
 
-uint8_t TMP102::readRegister(bool registerNumber){
+uint8_t TMP102::_read_register(bool registerNumber){
   uint8_t registerByte[2] = {0, 0};
   // Read current configuration register value
   _bus->requestFrom((uint8_t) _ADDR, (uint8_t) 2);   // Read two bytes from TMP102
@@ -125,8 +125,8 @@ int8_t TMP102::_read_temp() {
   // Change pointer address to temperature register (0)
   if (0 == _open_ptr_register(TEMPERATURE_REGISTER)) {
     // Read from temperature register
-    registerByte[0] = readRegister(0);
-    registerByte[1] = readRegister(1);
+    registerByte[0] = _read_register(0);
+    registerByte[1] = _read_register(1);
     _last_read = millis();
 
     // Bit 0 of second byte will always be 0 in 12-bit readings and 1 in 13-bit
@@ -175,8 +175,8 @@ int8_t TMP102::conversionRate(TMP102DataRate r) {
     // Change pointer address to configuration register (0x01)
     if (0 == _open_ptr_register(CONFIG_REGISTER)) {
       // Read current configuration register value
-      registerByte[0] = readRegister(0);
-      registerByte[1] = readRegister(1);
+      registerByte[0] = _read_register(0);
+      registerByte[1] = _read_register(1);
 
       // Load new conversion rate
       registerByte[1] &= 0x3F;  // Clear CR0/1 (bit 6 and 7 of second byte)
@@ -205,8 +205,8 @@ int8_t TMP102::extendedMode(bool mode) {
   // Change pointer address to configuration register (0x01)
   if (0 == _open_ptr_register(CONFIG_REGISTER)) {
     // Read current configuration register value
-    registerByte[0] = readRegister(0);
-    registerByte[1] = readRegister(1);
+    registerByte[0] = _read_register(0);
+    registerByte[1] = _read_register(1);
 
     // Load new value for extention mode
     registerByte[1] &= 0xEF;    // Clear EM (bit 4 of second byte)
@@ -232,7 +232,7 @@ int8_t TMP102::enabled(bool x) {
     // Change pointer address to configuration register (0x01)
     if (0 == _open_ptr_register(CONFIG_REGISTER)) {
       // Read current configuration register value and clear or set SD (bit 0 of first byte)
-      uint8_t registerByte = readRegister(0);
+      uint8_t registerByte = _read_register(0);
       registerByte = x ? (registerByte &= 0xFE) : (registerByte |= 0x01);
 
       _bus->beginTransmission(_ADDR);  // ...and re-write it.
@@ -256,7 +256,7 @@ int8_t TMP102::alertPolarity(bool polarity) {
   // Change pointer address to configuration register (1)
   if (0 == _open_ptr_register(CONFIG_REGISTER)) {
     // Read current configuration register value
-    registerByte = readRegister(0);
+    registerByte = _read_register(0);
 
     // Load new value for polarity
     registerByte &= 0xFB; // Clear POL (bit 2 of registerByte)
@@ -280,7 +280,7 @@ bool TMP102::alert() {
   uint8_t registerByte = 0; // Store the data from the register here
   // Change pointer address to configuration register (1)
   if (0 == _open_ptr_register(CONFIG_REGISTER)) {
-    registerByte = readRegister(1);   // Read current configuration register value
+    registerByte = _read_register(1);   // Read current configuration register value
     registerByte &= 0x20;  // Clear everything but the alert bit (bit 5)
   }
   return registerByte>>5;
@@ -348,8 +348,8 @@ float TMP102::readLowTemp() {
 
   if (0 == _open_ptr_register(T_LOW_REGISTER)) {
     uint8_t registerByte[2];  // Store the data from the register here
-    registerByte[0] = readRegister(0);
-    registerByte[1] = readRegister(1);
+    registerByte[0] = _read_register(0);
+    registerByte[1] = _read_register(1);
 
     if (extendedMode()) {  // 13 bit mode
       // Combine bytes to create a signed int
@@ -380,8 +380,8 @@ float TMP102::readHighTemp() {
 
   if (0 == _open_ptr_register(T_HIGH_REGISTER)) {
     uint8_t registerByte[2];  // Store the data from the register here
-    registerByte[0] = readRegister(0);
-    registerByte[1] = readRegister(1);
+    registerByte[0] = _read_register(0);
+    registerByte[1] = _read_register(1);
 
     if (extendedMode()) { // 13 bit mode
       // Combine bytes to create a signed int
@@ -414,7 +414,7 @@ int8_t TMP102::setFault(uint8_t faultSetting) {
   // Change pointer address to configuration register (0x01)
   if (0 == _open_ptr_register(CONFIG_REGISTER)) {
     // Read current configuration register value
-    registerByte = readRegister(0);
+    registerByte = _read_register(0);
 
     // Load new conversion rate
     registerByte &= 0xE7;  // Clear F0/1 (bit 3 and 4 of first byte)
@@ -436,7 +436,7 @@ int8_t TMP102::setAlertMode(bool mode) {
   if (0 == _open_ptr_register(CONFIG_REGISTER)) {
     uint8_t registerByte; // Store the data from the register here
     // Read current configuration register value
-    registerByte = readRegister(0);
+    registerByte = _read_register(0);
 
     // Load new conversion rate
     registerByte &= 0xFD;  // Clear old TM bit (bit 1 of first byte)

@@ -3,6 +3,10 @@
 #include <stdint.h>
 #include <CppPotpourri.h>
 
+/*******************************************************************************
+* Enum support functions
+*******************************************************************************/
+
 const char* const getSensorIDString(SensorID e) {
   switch (e) {
     case SensorID::BARO:          return "BARO";
@@ -36,6 +40,19 @@ const char* const getAppIDString(AppID e) {
     case AppID::SUSPEND:          return "SUSPEND";
   }
   return "UNKNOWN";
+}
+
+
+void listAllSensors(StringBuilder* output) {
+  for (uint8_t i = 0; i < 11; i++) {
+    output->concatf("%2u: %s\n", i, getSensorIDString((SensorID) i));
+  }
+}
+
+void listAllApplications(StringBuilder* output) {
+  for (uint8_t i = 0; i < 11; i++) {
+    output->concatf("%2u: %s\n", i, getAppIDString((AppID) i));
+  }
 }
 
 

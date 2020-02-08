@@ -101,7 +101,7 @@ class TMP102 {
     float         _temp      = 0.0;   // Stored as Celcius.
 
     int8_t  _open_ptr_register(uint8_t pointerReg); // Changes the pointer register
-    uint8_t readRegister(bool registerNumber);  // reads 1 byte of from register
+    uint8_t _read_register(bool registerNumber);  // reads 1 byte of from register
     int8_t  _read_temp();
 
     int8_t   _ll_pin_init();
