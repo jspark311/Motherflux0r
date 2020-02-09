@@ -188,7 +188,7 @@ static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be dis
 static uint32_t last_interaction  = 0;      // millis() when the user last interacted.
 static uint32_t disp_update_last  = 0;      // millis() when the display last updated.
 static uint32_t disp_update_next  = 0;      // millis() when the display next updates.
-static uint32_t disp_update_rate  = 30;     // Update in Hz for the display
+static uint32_t disp_update_rate  = 5;      // Update in Hz for the display
 
 
 /* Console junk... */
@@ -2259,6 +2259,7 @@ void loop() {
   int8_t t_res = touch->poll();
   if (0 < t_res) {
     // Something changed in the hardware.
+    disp_update_rate  = 30;
   }
   stopwatch_touch_poll.markStop();
   if (imu_irq_fired) {
@@ -2304,7 +2305,9 @@ void loop() {
 
   millis_now = millis();
   if (disp_update_next <= millis_now) {
-    // TODO: for some reason this hard-locks the program occasionally.
+    // TODO: for some reason this hard-locks the program occasionally if the
+    //   framerate is too high at boot. I suspect it has something to do with
+    //   touchpad driver.
     stopwatch_display.markStart();
     updateDisplay();
     stopwatch_display.markStop();
