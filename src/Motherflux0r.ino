@@ -17,7 +17,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1331.h>
 #include "VEML6075.h"
-#include <ICM_20948.h>
+#include "ICM20948.h"
 #include "BME280.h"
 #include "AMG88xx.h"
 #include "DRV425.h"
@@ -2094,11 +2094,11 @@ void setup() {
   }
   delay(10);
 
-  //imu.begin(IMU_CS_PIN, SPI, 10000000);
-  //imu.swReset();
-  //imu.sleep(false);
-  //imu.lowPower(false);
-  //imu.setSampleMode((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), ICM_20948_Sample_Mode_Continuous);
+  imu.begin(IMU_CS_PIN, SPI, 7000000);
+  imu.swReset();
+  imu.sleep(false);
+  imu.lowPower(false);
+  imu.setSampleMode((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr | ICM_20948_Internal_Mag), ICM_20948_Sample_Mode_Continuous);
   ICM_20948_fss_t myFSS;  // This uses a "Full Scale Settings" structure that can contain values for all configurable sensors
   myFSS.a = gpm2;         // gpm2, gpm4, gpm8, gpm16
   myFSS.g = dps250;       // dps250, dps500, dps1000, dps2000
