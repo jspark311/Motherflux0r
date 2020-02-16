@@ -25,13 +25,6 @@
 #include "TMP102.h"
 
 
-/*
-CHANGELOG:
-===========================================================================
-1.0:
----------------------------------------------------------------------------
-*/
-
 /*******************************************************************************
 * Global constants
 *******************************************************************************/
@@ -120,7 +113,7 @@ static SX8634* touch = nullptr;
 
 
 /* Sensor representations... */
-DRV425 magnetometer(DRV425_ADC_IRQ_PIN, DRV425_GPIO_IRQ_PIN, 255, DRV425_CS_PIN);   // No GPIO reset pin.
+DRV425 magneto(DRV425_ADC_IRQ_PIN, DRV425_GPIO_IRQ_PIN, 255, DRV425_CS_PIN);   // No GPIO reset pin.
 TMP102 tmp102(0x49, 255);    // No connection to the alert pin.
 GridEYE grideye(0x69, AMG8866_IRQ_PIN);
 VEML6075 uv;
@@ -151,6 +144,7 @@ static SensorFilter<float> graph_array_ana_light(FilteringStrategy::RAW, 96, 0);
 static SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
 static SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
 static SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0);
+static SensorFilter<float> graph_array_mag_confidence(FilteringStrategy::RAW, 96, 0);
 
 /* Profiling data */
 static StopWatch stopwatch_main_loop_time;
@@ -188,7 +182,7 @@ static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be dis
 static uint32_t last_interaction  = 0;      // millis() when the user last interacted.
 static uint32_t disp_update_last  = 0;      // millis() when the display last updated.
 static uint32_t disp_update_next  = 0;      // millis() when the display next updates.
-static uint32_t disp_update_rate  = 5;      // Update in Hz for the display
+static uint32_t disp_update_rate  = 1;      // Update in Hz for the display
 
 
 /* Console junk... */
@@ -482,12 +476,48 @@ void redraw_comms_root_window() {
 }
 
 
+static uint32_t last_i2c_scan = 0;
+
 /*
 * Draws the I2C app.
 */
 void redraw_i2c_probe_window() {
   if (drawn_app != active_app) {
     redraw_app_window("I2C Scanner", 0, 0);
+  }
+  StringBuilder disp_str;
+
+  if ((last_i2c_scan + 330) <= millis()) {
+    if (touch->buttonPressed(4)) {
+      redraw_app_window("I2C Probe Wire", 0, 0);
+      for (uint8_t addr = 0; addr < 0x80; addr++) {
+        Wire.beginTransmission(addr);
+        if (0 == Wire.endTransmission()) {
+          disp_str.concatf("0x%02x ", addr);
+          display.drawPixel(addr & 0x1F, 11 + (addr >> 5), RED);
+        }
+      }
+      if (disp_str.length() > 0) {
+        display.setCursor(0, 20);
+        display.print((char*) disp_str.string());
+      }
+      last_i2c_scan = millis();
+    }
+    else if (touch->buttonPressed(1)) {
+      redraw_app_window("I2C Probe Wire1", 0, 0);
+      for (uint8_t addr = 0; addr < 0x80; addr++) {
+        Wire1.beginTransmission(addr);
+        if (0 == Wire1.endTransmission()) {
+          disp_str.concatf("0x%02x ", addr);
+          display.drawPixel(addr & 0x1F, 11 + (addr >> 5), RED);
+        }
+      }
+      if (disp_str.length() > 0) {
+        display.setCursor(0, 20);
+        display.print((char*) disp_str.string());
+      }
+      last_i2c_scan = millis();
+    }
   }
 
   if (dirty_button) {
@@ -715,9 +745,37 @@ void redraw_tricorder_window() {
     //imu.temp();
   }
   else if (touch->sliderValue() <= 52) {
-    display.setCursor(0, 11);
-    display.setTextColor(YELLOW, BLACK);
+    display.setCursor(0, 0);
+    display.setTextColor(0xFC00, BLACK);
     display.print("Magnetometer");
+    if (!touch->buttonPressed(5)) {
+      StringBuilder temp0;
+      StringBuilder temp1;
+      StringBuilder temp2;
+      float bearing = 0.0;
+      Vector3f64* mag_vect = magneto.getFieldVector();
+      magneto.getBearing(touch->buttonPressed(4) ? HeadingType::TRUE_NORTH : HeadingType::MAGNETIC_NORTH, &bearing);
+      temp0.concatf("uT<%.2f, %.2f, %.2f>", mag_vect->x, mag_vect->y, mag_vect->z);
+      temp1.concatf("||uT|| = %.4f", mag_vect->length());
+      temp1.concatf("Bearing %.4f", bearing);
+      display.setTextColor(WHITE, BLACK);
+      display.println((char*) temp0.string());
+      display.println((char*) temp1.string());
+      display.println((char*) temp2.string());
+    }
+    else {
+      draw_graph_obj(
+        0, 10, 96, 45, 0xF81F,
+        true, touch->buttonPressed(1), touch->buttonPressed(4),
+        &graph_array_mag_confidence
+      );
+      display.setTextSize(0);
+      display.setCursor(0, 56);
+      display.setTextColor(WHITE);
+      display.print("Confidence: ");
+      display.setTextColor(0xFC00, BLACK);
+      display.print(graph_array_mag_confidence.value());
+    }
   }
   else {    // Thermopile
     if (graph_array_therm_mean.dirty()) {
@@ -729,8 +787,7 @@ void redraw_tricorder_window() {
       float  therm_field_min = graph_array_therm_frame.minValue();
       float  therm_field_max = graph_array_therm_frame.maxValue();
       bool lock_range_to_current = touch->buttonPressed(1);
-      bool lock_range_to_absolute = lock_range_to_current;
-
+      bool lock_range_to_absolute = touch->buttonPressed(5);
       if (!(lock_range_to_absolute | lock_range_to_current)) {
         therm_midpoint_lock = therm_field_max - ((therm_field_max - therm_field_min) / 2);
       }
@@ -1617,7 +1674,7 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
   if (0 < args->count()) {
     int arg0 = args->position_as_int(0);
     switch ((SensorID) arg0) {
-      case SensorID::MAGNETOMETER:   magnetometer.printDebug(text_return);  break;
+      case SensorID::MAGNETOMETER:   magneto.printDebug(text_return);  break;
       //case SensorID::BARO:           baro.printDebug(text_return);          break;
       //case SensorID::LIGHT:            break;
       //case SensorID::UV:             uv.printDebug(text_return);            break;
@@ -1804,6 +1861,123 @@ int callback_meta_filter_set_strat(StringBuilder* text_return, StringBuilder* ar
 }
 
 
+int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) {
+  int ret = -3;
+  if (0 < args->count()) {
+    ret = 0;
+    switch (args->position_as_int(0)) {
+      case 0:
+        switch (args->position_as_int(1)) {
+          default:
+          case 0:   magneto.printChannelValues(text_return);   break;
+          case 1:   magneto.printRegs(text_return);            break;
+          case 2:   magneto.printPins(text_return);            break;
+          case 3:   magneto.printData(text_return);            break;
+          case 4:   magneto.printTimings(text_return);         break;
+          case 5:
+            text_return->concatf("ADC Temperature: %u.\n", (uint8_t) magneto.getTemperature());
+            break;
+        }
+        break;
+
+      case 1:
+        stopwatch_sensor_mag.markStart();
+        ret = magneto.poll();
+        stopwatch_sensor_mag.markStop();
+        break;
+
+      case 2:
+        if (1 < args->count()) {
+          ret = magneto.setGain((MCP356xGain) args->position_as_int(1));
+        }
+        text_return->concatf("Gain is now %u.\n", 1 << ((uint8_t) magneto.getGain()));
+        break;
+
+      case 3:
+        if (1 < args->count()) {
+          ret = magneto.setOversamplingRatio((MCP356xOversamplingRatio) args->position_as_int(1));
+        }
+        text_return->concatf("Oversampling ratio is now %u.\n", (uint8_t) magneto.getOversamplingRatio());
+        break;
+
+      case 4:
+        switch (args->position_as_int(1)) {
+          default:
+          case 0:   magneto.printDebug(text_return);               break;
+          case 1:   magneto.printField(text_return);               break;
+          case 2:   magneto.printfilter(text_return);              break;
+          case 3:   magneto.printBearing(HeadingType::MAGNETIC_NORTH, text_return);  break;
+        }
+        break;
+
+      case 5:
+        if (1 < args->count()) {
+          magneto.setMagGnomon((GnomonType) args->position_as_int(1));
+        }
+        magneto.printSpatialTransforms(text_return);
+        break;
+
+      case 6:
+        text_return->concatf("Filter depth: %u.\n", (uint8_t) magneto.getTemperature());
+        break;
+      case 7:
+        text_return->concatf("Filter type: %u.\n", (uint8_t) magneto.getTemperature());
+        break;
+
+
+      case 8:
+        if (1 < args->count()) {
+          bool en = (0 != args->position_as_int(1));
+          magneto.setBandwidth(en ? DRV425Bandwidth::BW0 : DRV425Bandwidth::BW1);
+          text_return->concatf("Magnetometer bandwidth is %s\n", en ? "BW0" : "BW1");
+        }
+        break;
+      case 9:
+        if (1 < args->count()) {
+          bool en = (0 != args->position_as_int(1));
+          magneto.power(en);
+        }
+        text_return->concatf("Magnetometer power is %s\n", magneto.power() ? "on" : "off");
+        break;
+      case 10:
+        ret = magneto.init(&Wire1, &SPI);
+        break;
+      case 11:
+        ret = magneto.reset();
+        break;
+      case 12:
+        ret = magneto.refresh();
+        break;
+      default:
+        break;
+    }
+  }
+  if (-3 == ret) {
+    text_return->concat("-< Magnetometer functions >----------------------------\n");
+    text_return->concat("0:  (ADC) Info\n");
+    text_return->concat("1:  (ADC) Poll\n");
+    text_return->concat("2:  (ADC) Gain\n");
+    text_return->concat("3:  (ADC) Oversampling ratio\n");
+    text_return->concat("4:  (CPS) Info\n");
+    text_return->concat("5:  (CPS) Gnomons\n");
+    text_return->concat("6:  (CPS) Filter depth\n");
+    text_return->concat("7:  (CPS) Filter type\n");
+    text_return->concat("8:  (MAG) Bandwidth\n");
+    text_return->concat("9:  (MAG) Power\n");
+    text_return->concat("10: (MAG) Init\n");
+    text_return->concat("11: (MAG) Reset\n");
+    text_return->concat("12: (MAG) Refresh\n");
+  }
+  else if (0 != ret) {
+    text_return->concatf("Function returned %d\n", ret);
+  }
+  else {
+    text_return->concat("Success\n");
+  }
+  return ret;
+}
+
+
 int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
   int ret = -1;
   if (1 == args->count()) {
@@ -1835,12 +2009,12 @@ int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
 
 
 int callback_sensor_enable(StringBuilder* text_return, StringBuilder* args) {
-  if (0 <= args->count()) {
+  if (0 < args->count()) {
     int arg0  = args->position_as_int(0);
     bool arg1 = (1 < args->count()) ? (1 == args->position_as_int(1)) : true;
     bool en   = false;
     switch ((SensorID) arg0) {
-      case SensorID::MAGNETOMETER:  magnetometer.power(arg1);   en = arg1;      break;
+      case SensorID::MAGNETOMETER:  magneto.power(arg1);    en = magneto.power();     break;
       case SensorID::BARO:          en = baro.enabled();            break;
       case SensorID::LUX:           tsl2561.enabled(arg1);  en = tsl2561.enabled();   break;
       case SensorID::UV:            uv.enabled(arg1);       en = uv.enabled();        break;
@@ -1961,6 +2135,7 @@ void setup() {
   graph_array_therm_frame.init();
   graph_array_cpu_time.init();
   graph_array_frame_rate.init();
+  graph_array_mag_confidence.init();
 
   display.begin();
   display.fillScreen(BLACK);
@@ -1992,7 +2167,6 @@ void setup() {
     display.print(init_step_str);
     cursor_height += 8;
   }
-  delay(10);
 
   init_step_str = (const char*) "Magnetometer    ";
   percent_setup += 0.08;
@@ -2000,7 +2174,11 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  if (0 == magnetometer.init(&Wire1, &SPI)) {
+  magneto.setOptions(COMPASS_FLAG_TILT_COMPENSATE, true);
+  magneto.setOptions(COMPASS_FLAG_INVERT_X | COMPASS_FLAG_INVERT_Z, true);
+  magneto.setGnomons(GnomonType::LH_NEG_Y, GnomonType::LH_POS_Z);
+  if (0 == magneto.init(&Wire1, &SPI)) {
+    magneto.setGravity(0.0, 0.0, 1.0);
   }
   else {
     display.setTextColor(RED);
@@ -2008,7 +2186,6 @@ void setup() {
     display.print(init_step_str);
     cursor_height += 8;
   }
-  delay(10);
 
   init_step_str = (const char*) "Baro            ";
   percent_setup += 0.08;
@@ -2024,7 +2201,6 @@ void setup() {
     display.print(init_step_str);
     cursor_height += 8;
   }
-  delay(10);
 
   init_step_str = (const char*) "UVI";
   percent_setup += 0.08;
@@ -2040,7 +2216,6 @@ void setup() {
     display.print(init_step_str);
     cursor_height += 8;
   }
-  delay(10);
 
   init_step_str = (const char*) "Lux ";
   percent_setup += 0.08;
@@ -2075,7 +2250,6 @@ void setup() {
     display.print(init_step_str);
     cursor_height += 8;
   }
-  delay(10);
 
   init_step_str = (const char*) "Inertial        ";
   percent_setup += 0.08;
@@ -2092,7 +2266,6 @@ void setup() {
     display.print(init_step_str);
     cursor_height += 8;
   }
-  delay(10);
 
   imu.begin(IMU_CS_PIN, SPI, 7000000);
   imu.swReset();
@@ -2151,6 +2324,7 @@ void setup() {
   console.defineCommand("si",          's', arg_list_1_uint, "Sensor information.", "", 0, callback_sensor_info);
   console.defineCommand("sfi",         arg_list_1_uint, "Sensor filter info.", "", 0, callback_sensor_filter_info);
   console.defineCommand("mfi",         arg_list_1_uint, "Meta filter info.", "", 1, callback_meta_filter_info);
+  console.defineCommand("mag",         'm', arg_list_2_uint, "Magnetometer functions.", "", 0, callback_magnetometer_fxns);
   console.defineCommand("sinit",       arg_list_2_uint, "Sensor initialize.", "", 0, callback_sensor_init);
   console.defineCommand("se",          arg_list_2_uint, "Sensor enable.", "", 0, callback_sensor_enable);
   console.defineCommand("sfs",         arg_list_3_uint, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
@@ -2167,7 +2341,6 @@ void setup() {
   StringBuilder ptc("Motherflux0r ");
   //ptc.concat(TEST_PROG_VERSION);
   console.printToLog(&ptc);
-  delay(10);
 
   init_step_str = (const char*) "Touchpad        ";
   touch = new SX8634(&_touch_opts);
@@ -2184,7 +2357,6 @@ void setup() {
     display.print(init_step_str);
     cursor_height += 8;
   }
-  delay(10);
 
   disp_update_last = millis();
   disp_update_next = disp_update_last + 2000;
@@ -2277,6 +2449,14 @@ void loop() {
   if (millis_now >= off_time_vib) {     pinMode(VIBRATOR_PIN, INPUT);  }
 
   /* Poll each sensor class. */
+  stopwatch_sensor_mag.markStart();
+  if (2 == magneto.poll()) {
+    Vector3f64* mag_vect = magneto.getFieldVector();
+    // TODO: Move into Compass class.
+    // TODO: Should be confidence
+    graph_array_mag_confidence.feedFilter(mag_vect->length());
+  }
+  stopwatch_sensor_mag.markStop();
   stopwatch_sensor_baro.markStart();
   if (0 < baro.poll()) {           read_baro_sensor();                  }
   stopwatch_sensor_baro.markStop();
@@ -2292,9 +2472,6 @@ void loop() {
   stopwatch_sensor_tmp102.markStart();
   if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
   stopwatch_sensor_tmp102.markStop();
-  stopwatch_sensor_mag.markStart();
-  //if (1 == magnetometer.poll()) {}
-  stopwatch_sensor_mag.markStop();
 
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
