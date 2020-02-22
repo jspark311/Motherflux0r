@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <CppPotpourri.h>
 #include <StringBuilder.h>
+#include <SensorFilter.h>
 
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
@@ -93,6 +94,16 @@ enum class SensorID : uint8_t {
 };
 
 
+enum class DataVis : uint8_t {
+  NONE          = 0,  // A time-series graph.
+  GRAPH         = 1,  // A time-series graph.
+  VECTOR        = 2,  // A projected 3-space vector.
+  COMPASS       = 3,  // A compass render.
+  FIELD         = 4,  // A 2d array.
+  TEXT          = 5   // Prefer alphanumeric readout.
+};
+
+
 /* Struct for tracking application state. */
 // TODO: This should evolve into a class if we irradiate millions of copies of it.
 typedef struct {
@@ -120,6 +131,7 @@ typedef struct {
 *******************************************************************************/
 const char* const getAppIDString(AppID);
 const char* const getSensorIDString(SensorID);
+const char* const getDataVisString(DataVis);
 void listAllSensors(StringBuilder*);
 void listAllApplications(StringBuilder*);
 
@@ -127,6 +139,45 @@ float FindE(int bands, int bins);
 void  printFFTBins(StringBuilder*);
 uint8_t* bitmapPointer(unsigned int idx);
 
+/* Display helper routines */
+void draw_graph_obj(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
+  float* dataset, uint32_t data_len
+);
+
+void draw_graph_obj(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
+  SensorFilter<float>* filt
+);
+
+void draw_graph_obj(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
+  SensorFilter<uint32_t>* filt
+);
+
+void draw_progress_bar(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_base, bool draw_val, float percent
+);
+
+void draw_compass(
+  int x, int y, int w, int h,
+  bool scale_needle, bool draw_val, float bearing_field, float bearing_true_north
+);
+
+void draw_3vector(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_axes, bool draw_val, float vx, float vy, float vz
+);
+
+void draw_data_view_selector(
+  int x, int y, int w, int h,
+  DataVis opt0, DataVis opt1, DataVis opt2, DataVis opt3, DataVis opt4, DataVis opt5,
+  DataVis selected
+);
 
 #define ICON_CANCEL    0
 #define ICON_ACCEPT    1
