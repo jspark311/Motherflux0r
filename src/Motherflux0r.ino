@@ -733,9 +733,10 @@ void redraw_tricorder_window() {
     display.setCursor(0, 11);
     display.setTextColor(YELLOW, BLACK);
     display.print("IMU");
-    //imu.accX();
-    //imu.accY();
-    //imu.accZ();
+    StringBuilder temp0;
+    temp0.concatf("uT<%.2f, %.2f, %.2f>", imu.accX(), imu.accY(), imu.accZ());
+    display.setTextColor(WHITE, BLACK);
+    display.println((char*) temp0.string());
     //imu.gyrX();
     //imu.gyrY();
     //imu.gyrZ();
@@ -749,19 +750,16 @@ void redraw_tricorder_window() {
     display.setTextColor(0xFC00, BLACK);
     display.print("Magnetometer");
     if (!touch->buttonPressed(5)) {
-      StringBuilder temp0;
-      StringBuilder temp1;
-      StringBuilder temp2;
-      float bearing = 0.0;
-      Vector3f64* mag_vect = magneto.getFieldVector();
-      magneto.getBearing(touch->buttonPressed(4) ? HeadingType::TRUE_NORTH : HeadingType::MAGNETIC_NORTH, &bearing);
-      temp0.concatf("uT<%.2f, %.2f, %.2f>", mag_vect->x, mag_vect->y, mag_vect->z);
-      temp1.concatf("||uT|| = %.4f", mag_vect->length());
-      temp1.concatf("Bearing %.4f", bearing);
       display.setTextColor(WHITE, BLACK);
-      display.println((char*) temp0.string());
-      display.println((char*) temp1.string());
-      display.println((char*) temp2.string());
+      Vector3f64* mag_vect = magneto.getFieldVector();
+      float bearing_north = 0.0;
+      float bearing_mag = 0.0;
+      magneto.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
+      magneto.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
+      draw_compass(0, 11, 44, 44, false, touch->buttonPressed(4), bearing_mag, bearing_north);
+      display.setCursor(0, 57);
+      display.print(mag_vect->length());
+      display.print(" uT");
     }
     else {
       draw_graph_obj(
@@ -1142,6 +1140,28 @@ void draw_progress_bar(
 
 
 /*
+*/
+void draw_compass(
+  int x, int y, int w, int h,
+  bool scale_needle, bool draw_val, float bearing_field, float bearing_true_north
+) {
+  const int PERSPECTIVE_SCALE = 1;
+  int origin_x = x + (w >> 1);
+  int origin_y = y + (h >> 1);
+  int maximal_extent = (strict_min((int16_t) w, (int16_t) h) >> 1) - 1;
+  display.fillCircle(origin_x, origin_y, maximal_extent, BLACK);
+  display.drawCircle(origin_x, origin_y, maximal_extent, WHITE);
+  int needle_tip_n_x = (cos(bearing_field) * maximal_extent) + origin_x;
+  int needle_tip_n_y = (sin(bearing_field) * maximal_extent) + origin_y;
+  int needle_tip_s_x = needle_tip_n_x - (maximal_extent << 1);
+  int needle_tip_s_y = needle_tip_n_y - (maximal_extent << 1);
+  display.drawLine(origin_x, origin_y, needle_tip_n_x, needle_tip_n_y, RED);
+  display.drawLine(origin_x, origin_y, needle_tip_s_x, needle_tip_s_y, WHITE);
+  //display.fillTriangle(origin_x, origin_y, x1, y1, x2, y2, color);
+}
+
+
+/*
 * Given a vector object, and parameters for the graph, draw the data to the
 *   display. The given vector must be normalized.
 */
@@ -1172,6 +1192,7 @@ void draw_3vector(
   int y2 = origin_y + projected.y - PERSPECTIVE_SCALE;
   display.fillTriangle(origin_x, origin_y, x1, y1, x2, y2, color);
 }
+
 
 /*
 * Called at the frame-rate interval for the display.
@@ -1273,7 +1294,8 @@ int8_t read_baro_sensor() {
 * Reads the IMU and optionally integrates for orientation.
 */
 int8_t read_imu() {
-  int8_t ret = -1;
+  int8_t ret = 0;
+  imu.getAGMT();
   return ret;
 }
 
@@ -1309,6 +1331,17 @@ int8_t read_thermopile_sensor() {
   }
   graph_array_therm_mean.feedFilter(graph_array_therm_frame.value());
   return ret;
+}
+
+/*
+* Reads the magnetometer and adds the data to the pile.
+*/
+int8_t read_magnetometer_sensor() {
+  Vector3f64* mag_vect = magneto.getFieldVector();
+  // TODO: Move into Compass class.
+  // TODO: Should be confidence
+  graph_array_mag_confidence.feedFilter(mag_vect->length());
+  return 0;
 }
 
 
@@ -1367,6 +1400,16 @@ int callback_reboot(StringBuilder* text_return, StringBuilder* args) {
 
 
 int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* args) {
+  if (args->count() > 0) {
+    stopwatch_sensor_baro.reset();
+    stopwatch_sensor_uv.reset();
+    stopwatch_sensor_grideye.reset();
+    stopwatch_sensor_imu.reset();
+    stopwatch_sensor_lux.reset();
+    stopwatch_sensor_tmp102.reset();
+    stopwatch_sensor_mag.reset();
+    stopwatch_touch_poll.reset();
+  }
   StopWatch::printDebugHeader(text_return);
   stopwatch_sensor_baro.printDebug("Baro", text_return);
   stopwatch_sensor_uv.printDebug("UV", text_return);
@@ -1379,7 +1422,23 @@ int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* ar
   return 0;
 }
 
+
 int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args) {
+  if (args->count() > 0) {
+    stopwatch_main_loop_time.reset();
+    stopwatch_display.reset();
+    stopwatch_app_app_select.reset();
+    stopwatch_app_touch_test.reset();
+    stopwatch_app_configurator.reset();
+    stopwatch_app_data_mgmt.reset();
+    stopwatch_app_synthbox.reset();
+    stopwatch_app_comms.reset();
+    stopwatch_app_meta.reset();
+    stopwatch_app_i2c_scanner.reset();
+    stopwatch_app_tricorder.reset();
+    stopwatch_app_standby.reset();
+    stopwatch_app_suspend.reset();
+  }
   StopWatch::printDebugHeader(text_return);
   stopwatch_main_loop_time.printDebug("Main loop", text_return);
   stopwatch_display.printDebug("Display", text_return);
@@ -1397,16 +1456,19 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
   return 0;
 }
 
+
 int callback_touch_info(StringBuilder* text_return, StringBuilder* args) {
   touch->printDebug(text_return);
   return 0;
 }
+
 
 int callback_touch_reset(StringBuilder* text_return, StringBuilder* args) {
   text_return->concat("SX8634 reset ");
   text_return->concat((0 == touch->reset()) ? "succeded" : "failed");
   return 0;
 }
+
 
 int callback_touch_mode(StringBuilder* text_return, StringBuilder* args) {
   if (args->count() > 0) {
@@ -2257,7 +2319,37 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  //if (0 == imu.init(&Wire)) {
+  //if (ICM_20948_Stat_Ok == imu.begin(IMU_CS_PIN, SPI, 6000000)) {
+  //  imu.swReset();
+  //  imu.sleep(false);
+  //  imu.lowPower(false);
+  //  imu.setSampleMode((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr | ICM_20948_Internal_Mag), ICM_20948_Sample_Mode_Continuous);
+  //  ICM_20948_fss_t myFSS;  // This uses a "Full Scale Settings" structure that can contain values for all configurable sensors
+  //  myFSS.a = gpm2;         // gpm2, gpm4, gpm8, gpm16
+  //  myFSS.g = dps250;       // dps250, dps500, dps1000, dps2000
+  //  imu.setFullScale((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myFSS);
+  //  // Set up Digital Low-Pass Filter configuration
+  //  ICM_20948_dlpcfg_t myDLPcfg;      // Similar to FSS, this uses a configuration structure for the desired sensors
+  //  myDLPcfg.a = acc_d473bw_n499bw;   // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
+  //                                    // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
+  //                                    // acc_d111bw4_n136bw
+  //                                    // acc_d50bw4_n68bw8
+  //                                    // acc_d23bw9_n34bw4
+  //                                    // acc_d11bw5_n17bw
+  //                                    // acc_d5bw7_n8bw3        - means 3 db bandwidth is 5.7 hz and nyquist bandwidth is 8.3 hz
+  //                                    // acc_d473bw_n499bw
+  //  myDLPcfg.g = gyr_d361bw4_n376bw5;    // gyr_d196bw6_n229bw8, gyr_d151bw8_n187bw6, gyr_d119bw5_n154bw3, gyr_d51bw2_n73bw3, gyr_d23bw9_n35bw9, gyr_d11bw6_n17bw8, gyr_d5bw7_n8bw9, gyr_d361bw4_n376bw5
+  //  imu.setDLPFcfg((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg);
+  //  // Choose whether or not to use DLPF
+  //  ICM_20948_Status_e accDLPEnableStat = imu.enableDLPF((ICM_20948_Internal_Gyr | ICM_20948_Internal_Acc), true);
+  //  if (255 != IMU_IRQ_PIN) {
+  //    pinMode(IMU_IRQ_PIN, INPUT);
+  //    imu.cfgIntActiveLow(true);
+  //    imu.cfgIntOpenDrain(false);
+  //    imu.cfgIntLatch(true);          // IRQ is a 50us pulse.
+  //    imu.intEnableRawDataReady(true);
+  //    attachInterrupt(digitalPinToInterrupt(IMU_IRQ_PIN), imu_isr_fxn, FALLING);
+  //  }
   if (false) {
   }
   else {
@@ -2265,38 +2357,6 @@ void setup() {
     display.setCursor(0, cursor_height);
     display.print(init_step_str);
     cursor_height += 8;
-  }
-
-  imu.begin(IMU_CS_PIN, SPI, 7000000);
-  imu.swReset();
-  imu.sleep(false);
-  imu.lowPower(false);
-  imu.setSampleMode((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr | ICM_20948_Internal_Mag), ICM_20948_Sample_Mode_Continuous);
-  ICM_20948_fss_t myFSS;  // This uses a "Full Scale Settings" structure that can contain values for all configurable sensors
-  myFSS.a = gpm2;         // gpm2, gpm4, gpm8, gpm16
-  myFSS.g = dps250;       // dps250, dps500, dps1000, dps2000
-  //imu.setFullScale((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myFSS);
-  // Set up Digital Low-Pass Filter configuration
-  ICM_20948_dlpcfg_t myDLPcfg;            // Similar to FSS, this uses a configuration structure for the desired sensors
-  myDLPcfg.a = acc_d473bw_n499bw;         // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
-                                          // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
-                                          // acc_d111bw4_n136bw
-                                          // acc_d50bw4_n68bw8
-                                          // acc_d23bw9_n34bw4
-                                          // acc_d11bw5_n17bw
-                                          // acc_d5bw7_n8bw3        - means 3 db bandwidth is 5.7 hz and nyquist bandwidth is 8.3 hz
-                                          // acc_d473bw_n499bw
-  myDLPcfg.g = gyr_d361bw4_n376bw5;       // gyr_d196bw6_n229bw8, gyr_d151bw8_n187bw6, gyr_d119bw5_n154bw3, gyr_d51bw2_n73bw3, gyr_d23bw9_n35bw9, gyr_d11bw6_n17bw8, gyr_d5bw7_n8bw9, gyr_d361bw4_n376bw5
-  //imu.setDLPFcfg((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg);
-  // Choose whether or not to use DLPF
-  //ICM_20948_Status_e accDLPEnableStat = imu.enableDLPF((ICM_20948_Internal_Gyr | ICM_20948_Internal_Acc), true);
-  if (255 != IMU_IRQ_PIN) {
-    pinMode(IMU_IRQ_PIN, INPUT);
-    //imu.cfgIntActiveLow(true);
-    //imu.cfgIntOpenDrain(false);
-    //imu.cfgIntLatch(true);          // IRQ is a 50us pulse.
-    //imu.intEnableRawDataReady(true);
-    //attachInterrupt(digitalPinToInterrupt(IMU_IRQ_PIN), imu_isr_fxn, FALLING);
   }
 
   init_step_str = (const char*) "Console         ";
@@ -2330,8 +2390,8 @@ void setup() {
   console.defineCommand("sfs",         arg_list_3_uint, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
   console.defineCommand("mfs",         arg_list_3_uint, "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
   console.defineCommand("app",         'a', arg_list_1_uint, "Select active application.", "", 0, callback_active_app);
-  console.defineCommand("sprof",       arg_list_0, "Dump sensor profiler.", "", 0, callback_print_sensor_profiler);
-  console.defineCommand("aprof",       arg_list_0, "Dump application profiler.", "", 0, callback_print_app_profiler);
+  console.defineCommand("sprof",       arg_list_1_uint, "Dump sensor profiler.", "", 0, callback_print_sensor_profiler);
+  console.defineCommand("aprof",       arg_list_1_uint, "Dump application profiler.", "", 0, callback_print_app_profiler);
   console.defineCommand("vol",         arg_list_1_float, "Audio volume.", "", 0, callback_audio_volume);
   console.setTXTerminator(LineTerm::CRLF);
   console.setRXTerminator(LineTerm::CR);
@@ -2372,11 +2432,18 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  while (!Serial) {}
-  while (Serial.available()) {
-    Serial.read();
+  uint16_t serial_timeout = 0;
+  while (!Serial && (100 > serial_timeout)) {
+    draw_progress_bar(0, 54, 95, 12, RED, true, false, (serial_timeout++ * 0.01));
+    delay(70);
   }
-  //display.println("Serial");
+  if (Serial) {
+    draw_progress_bar(0, 54, 95, 12, GREEN, true, false, 1.0);
+    while (Serial.available()) {
+      Serial.read();
+    }
+    //display.println("Serial");
+  }
 
   while (disp_update_next > millis()) {}
   if (touch->deviceFound()) {
@@ -2427,6 +2494,7 @@ void loop() {
     }
     console.fetchLog(&output);
   }
+
   stopwatch_touch_poll.markStart();
   int8_t t_res = touch->poll();
   if (0 < t_res) {
@@ -2436,8 +2504,8 @@ void loop() {
   stopwatch_touch_poll.markStop();
   if (imu_irq_fired) {
     imu_irq_fired = false;
-    stopwatch_sensor_imu.markStart();
-    read_imu();
+    //stopwatch_sensor_imu.markStart();
+    //read_imu();
     //imu.clearInterrupts();
     stopwatch_sensor_imu.markStop();
   }
@@ -2450,12 +2518,7 @@ void loop() {
 
   /* Poll each sensor class. */
   stopwatch_sensor_mag.markStart();
-  if (2 == magneto.poll()) {
-    Vector3f64* mag_vect = magneto.getFieldVector();
-    // TODO: Move into Compass class.
-    // TODO: Should be confidence
-    graph_array_mag_confidence.feedFilter(mag_vect->length());
-  }
+  if (2 == magneto.poll()) {       read_magnetometer_sensor();          }
   stopwatch_sensor_mag.markStop();
   stopwatch_sensor_baro.markStart();
   if (0 < baro.poll()) {           read_baro_sensor();                  }

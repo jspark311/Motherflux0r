@@ -6,7 +6,7 @@
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
 
-#define TEST_PROG_VERSION          "v1.3"
+#define TEST_PROG_VERSION          "v1.4"
 #define TOUCH_DWELL_LONG_PRESS       1000  // Milliseconds for "long-press".
 #define E_VAL                      1.0184
 
@@ -15,14 +15,14 @@
 *******************************************************************************/
 #define GPS_TX_PIN           0   // Teensy RX
 #define GPS_RX_PIN           1   // Teensy TX
-#define IMU_CS_PIN           2
-#define IMU_IRQ_PIN          3
-#define DRV425_ADC_IRQ_PIN   4
+#define DRV425_GPIO_IRQ_PIN  2
+#define DRV425_ADC_IRQ_PIN   3
+#define DRV425_CS_PIN        4
 #define VIBRATOR_PIN         5
 #define TOUCH_IRQ_PIN        6
 #define DAC_DIN_PIN          7
-#define TSL2561_IRQ_PIN    255 // 8
-#define PSU_SX_IRQ_PIN       9   // Presently unused.
+#define PSU_SX_IRQ_PIN     255   // Presently unused.
+#define TSL2561_IRQ_PIN    255 // 9
 #define DISPLAY_CS_PIN      10
 #define SPIMOSI_PIN         11
 #define SPIMISO_PIN         12
@@ -42,11 +42,13 @@
 #define DISPLAY_DC_PIN      26
 #define MIC_ANA_PIN         27   // A16
 #define TOUCH_RESET_PIN     28
-#define DRV425_GPIO_IRQ_PIN 29
-#define DRV425_CS_PIN       30
-#define AMG8866_IRQ_PIN     255  //31
+#define IMU_IRQ_PIN         29
+#define AMG8866_IRQ_PIN     255 // 30
+#define IMU_CS_PIN          31
 #define DISPLAY_RST_PIN     32
 #define LED_B_PIN           33
+
+
 
 /* Common 16-bit colors */
 #define	BLACK           0x0000
