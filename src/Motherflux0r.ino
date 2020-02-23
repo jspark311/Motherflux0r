@@ -56,41 +56,52 @@ const float THERM_TEMP_MIN = 0.0;
 Adafruit_SSD1331 display = Adafruit_SSD1331(&SPI, DISPLAY_CS_PIN, DISPLAY_DC_PIN, DISPLAY_RST_PIN);
 
 /* Audio library... */
-AudioSynthWaveformSine   sineL;          //xy=86.00000762939453,296.0000877380371
-AudioSynthWaveformSine   sineR;          //xy=86.00000762939453,329.00012397766113
-AudioSynthNoisePink      pinkNoise;          //xy=86.0000114440918,364.0000858306885
-//AudioInputAnalog         light_adc(ANA_LIGHT_PIN);  //xy=88.00000381469727,389.0000171661377
-//AudioInputAnalog         mic_adc(MIC_ANA_PIN);      //xy=89.00000762939453,422.4285945892334
-AudioPlayQueue           queueL;         //xy=97.0000228881836,200.71429824829102
-AudioPlayQueue           queueR;         //xy=97.0000228881836,236.00013542175293
-AudioMixer4              mixerL;         //xy=329.00008392333984,224.71430587768555
-AudioMixer4              mixerR;         //xy=330.00008392333984,290.7142753601074
-AudioMixer4              mixerFFT;         //xy=338.0000457763672,357.0000801086426
-AudioAnalyzeFFT256       fft256_1;       //xy=491.00001525878906,357.00015449523926
-AudioAmplifier           ampR;           //xy=468.0000534057617,285.0000114440918
-AudioAmplifier           ampL;           //xy=469.0000190734863,233.0000057220459
-AudioOutputI2S           i2s_dac;           //xy=495.00001525878906,269.0000629425049
+//AudioInputAnalog         light_adc(ANA_LIGHT_PIN); //xy=224,801.4000358581543
+//AudioInputAnalog         mic_adc(MIC_ANA_PIN); //xy=238,757.4000377655029
+AudioSynthNoisePink      pinkNoise;      //xy=286.00000381469727,712.4000339508057
+AudioSynthWaveformSine   sineL;          //xy=292,640.4000244140625
+AudioSynthWaveformSine   sineR;          //xy=292,672.4000339508057
+AudioPlayQueue           queueL;         //xy=303,544.4000244140625
+AudioPlayQueue           queueR;         //xy=303,580.4000244140625
+AudioMixer4              mixerL;         //xy=535,568.4000244140625
+AudioMixer4              mixerR;         //xy=536,634.4000244140625
+AudioMixer4              mixerFFT;       //xy=544,701.4000244140625
+AudioAmplifier           ampR;           //xy=674,629.4000244140625
+AudioAmplifier           ampL;           //xy=675,577.4000244140625
+AudioAnalyzeFFT256       fft256_1;       //xy=697,701.4000244140625
+AudioOutputI2S           i2s_dac;        //xy=821.0000076293945,603.4000329971313
+//AudioConnection          patchCord1(light_adc(ANA_LIGHT_PIN), 0, mixerFFT, 3);
+//AudioConnection          patchCord2(mic_adc(MIC_ANA_PIN), 0, mixerR, 3);
+AudioConnection          patchCord3(pinkNoise, 0, mixerL, 1);
+AudioConnection          patchCord4(pinkNoise, 0, mixerR, 1);
+AudioConnection          patchCord5(pinkNoise, 0, mixerFFT, 2);
+AudioConnection          patchCord6(sineL, 0, mixerL, 2);
+AudioConnection          patchCord7(sineR, 0, mixerR, 2);
+AudioConnection          patchCord8(queueL, 0, mixerL, 0);
+AudioConnection          patchCord9(queueL, 0, mixerFFT, 0);
+AudioConnection          patchCord10(queueR, 0, mixerR, 0);
+AudioConnection          patchCord11(queueR, 0, mixerFFT, 1);
+AudioConnection          patchCord12(mixerL, ampL);
+AudioConnection          patchCord13(mixerR, ampR);
+AudioConnection          patchCord14(mixerFFT, fft256_1);
+AudioConnection          patchCord15(ampR, 0, i2s_dac, 1);
+AudioConnection          patchCord16(ampL, 0, i2s_dac, 0);
 
-// AudioConnection          patchCord1(mic_adc, 0, mixerFFT, 3);
-// AudioConnection          patchCord2(mic_adc, 0, mixerR, 3);
-// AudioConnection          patchCord3(mic_adc, 0, mixerL, 3);
-AudioConnection          patchCord4(sineL, 0, mixerFFT, 0);
-AudioConnection          patchCord5(sineL, 0, mixerL, 1);
-AudioConnection          patchCord6(sineR, 0, mixerR, 1);
-AudioConnection          patchCord7(pinkNoise, 0, mixerFFT, 1);
-// AudioConnection          patchCord8(light_adc, 0, mixerFFT, 2);
-// AudioConnection          patchCord9(light_adc, 0, mixerR, 2);
-// AudioConnection          patchCord10(light_adc, 0, mixerL, 2);
-// AudioConnection          patchCord11(queueL, 0, mixerL, 0);
-// AudioConnection          patchCord12(queueR, 0, mixerR, 0);
-AudioConnection          patchCord13(mixerL, ampL);
-AudioConnection          patchCord14(mixerR, ampR);
-AudioConnection          patchCord15(mixerFFT, fft256_1);
-AudioConnection          patchCord16(ampR, 0, i2s_dac, 1);
-AudioConnection          patchCord17(ampL, 0, i2s_dac, 0);
 
 
 uint8_t fft_bars_shown[96];
+
+static float volume_left_output  = 0.1;
+static float volume_right_output = 0.1;
+static float volume_pink_noise   = 1.0;
+
+static float mix_synth_to_fft    = 0.0;
+static float mix_queueL_to_fft   = 0.0;
+static float mix_queueR_to_fft   = 0.0;
+static float mix_noise_to_fft    = 1.0;
+static float mix_synth_to_line   = 0.0;
+static float mix_queue_to_line   = 0.0;
+static float mix_noise_to_line   = 1.0;
 
 
 BME280Settings baro_settings(
@@ -919,44 +930,170 @@ void redraw_app_select_window() {
 
 
 /*
-* Draws the FFT app.
-*/
-void redraw_fft_window() {
-  const float SCALER_PIX = 64;
-  const int SHOWN_DECAY  = 1;
+* Draws the synth and sound app.
+  sineL.amplitude(1.0);
+  sineL.frequency(440);
+  sineL.phase(0);
+  sineR.amplitude(0.8);
+  sineR.frequency(660);
+  sineR.phase(0);
 
+*/
+void redraw_audio_window() {
   if (drawn_app != active_app) {
-    redraw_app_window("FFT", 0, 0);
-    //display.fillScreen(BLACK);
+    redraw_app_window("SynthBox: ", 0, 0);
   }
 
   if (dirty_slider) {
-    sineL.frequency(10+300*touch->sliderValue());
-    sineR.frequency(610+300*touch->sliderValue());
+    //sineL.frequency(10+300*touch->sliderValue());
+    //sineR.frequency(610+300*touch->sliderValue());
+    display.fillRect(0, 11, display.width()-1, display.height()-12, BLACK);
+    display.setCursor(64, 0);
+    display.setTextColor(YELLOW, BLACK);
+    if (touch->sliderValue() <= 7) {
+      display.print("Vol  ");
+      draw_progress_bar_vertical(0,  11, 27, 52, GREEN, true, true, volume_left_output);
+      draw_progress_bar_vertical(29, 11, 27, 52, GREEN, true, true, volume_right_output);
+      draw_progress_bar_vertical(58, 11, 27, 52, GREEN, true, true, volume_pink_noise);
+    }
+    else if (touch->sliderValue() <= 15) {
+      display.print("Mix F");
+      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, true, true, mix_queueL_to_fft);
+      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, true, true, mix_queueR_to_fft);
+      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, true, true, mix_noise_to_fft);
+      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, true, true, 0.0);
+    }
+    else if (touch->sliderValue() <= 22) {
+      display.print("Mix O");
+      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, true, true, mix_synth_to_line);
+      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, true, true, mix_queue_to_line);
+      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, true, true, mix_noise_to_line);
+      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, true, true, 0.0);
+    }
+    else if (touch->sliderValue() <= 30) {
+      display.print("DTMF ");
+    }
+    else if (touch->sliderValue() <= 37) {
+      display.print("Slot0 ");
+    }
+    else if (touch->sliderValue() <= 45) {
+      display.print("Slot1 ");
+    }
+    else if (touch->sliderValue() <= 52) {
+      display.print("Slot2 ");
+    }
+    else {
+      display.print("FFT  ");
+    }
     dirty_slider = false;
   }
 
-  float fft_bins[96];
-  for (uint8_t i = 0; i < 96; i++) {
-    fft_bins[i] = fft256_1.read(BIN_INDICIES[i << 1], BIN_INDICIES[(i << 1) + 1]);
-  }
-  for (uint8_t i = 0; i < 96; i++) {
-    uint8_t scaled_val = fft_bins[i] * SCALER_PIX;
-    uint y_real  = (display.height()-1) - scaled_val;
-    uint h_real  = (display.height()-1) - scaled_val;
-    display.drawFastVLine(i, 0, display.height()-1, BLACK);
-    if (scaled_val >= fft_bars_shown[i]) {
-      fft_bars_shown[i] = scaled_val;
-      display.drawFastVLine(i, y_real, h_real, WHITE);
+  if (touch->sliderValue() <= 7) {
+    bool up_pressed   = touch->buttonPressed(1);
+    bool down_pressed = touch->buttonPressed(4);
+    if (down_pressed && !up_pressed) {
+      float temp_float = volume_left_output - 0.05;
+      if (temp_float < 0.0) temp_float = 0.0;
+      volume_left_output  = temp_float;
+      volume_right_output = temp_float;
     }
-    else {
-      if (fft_bars_shown[i] > 0) fft_bars_shown[i] = fft_bars_shown[i] - SHOWN_DECAY;
-      uint y_decay = (display.height()-1) - fft_bars_shown[i];
-      uint h_decay = y_decay - h_real;
-      display.drawFastVLine(i, y_decay, h_decay, WHITE);
-      display.drawFastVLine(i, y_real, h_real, GREEN);
+    else if (!down_pressed && up_pressed) {
+      float temp_float = volume_left_output + 0.05;
+      if (temp_float > 1.0) temp_float = 1.0;
+      volume_left_output  = temp_float;
+      volume_right_output = temp_float;
+    }
+    if (down_pressed | up_pressed) {
+      ampL.gain(volume_left_output);
+      ampR.gain(volume_right_output);
+      pinkNoise.amplitude(volume_pink_noise);
+      draw_progress_bar_vertical(0,  11, 27, 52, GREEN, false, true, volume_left_output);
+      draw_progress_bar_vertical(29, 11, 27, 52, GREEN, false, true, volume_right_output);
+      draw_progress_bar_vertical(58, 11, 27, 52, GREEN, false, true, volume_pink_noise);
     }
   }
+  else if (touch->sliderValue() <= 15) {
+    bool up_pressed   = touch->buttonPressed(1);
+    bool down_pressed = touch->buttonPressed(4);
+    if (down_pressed && !up_pressed) {
+      mix_noise_to_fft  -= 0.05;
+      if (mix_noise_to_fft < 0.0) mix_noise_to_fft = 0.0;
+    }
+    else if (!down_pressed && up_pressed) {
+      mix_noise_to_fft += 0.05;
+      if (mix_noise_to_fft > 1.0) mix_noise_to_fft = 1.0;
+    }
+    if (down_pressed | up_pressed) {
+      mixerFFT.gain(0, mix_queueL_to_fft);
+      mixerFFT.gain(1, mix_queueR_to_fft);
+      mixerFFT.gain(2, mix_noise_to_fft);
+      mixerFFT.gain(3, 0.0);
+      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, false, true, mix_queueL_to_fft);
+      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, false, true, mix_queueR_to_fft);
+      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, false, true, mix_noise_to_fft);
+      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, false, true, 0.0);
+    }
+  }
+  else if (touch->sliderValue() <= 22) {
+    bool up_pressed   = touch->buttonPressed(1);
+    bool down_pressed = touch->buttonPressed(4);
+    if (down_pressed && !up_pressed) {
+      mix_synth_to_line  -= 0.05;
+      if (mix_synth_to_line < 0.0) mix_synth_to_line = 0.0;
+    }
+    else if (!down_pressed && up_pressed) {
+      mix_synth_to_line += 0.05;
+      if (mix_synth_to_line > 1.0) mix_synth_to_line = 1.0;
+    }
+    if (down_pressed | up_pressed) {
+      mixerL.gain(0, mix_queue_to_line);
+      mixerL.gain(1, mix_noise_to_line);
+      mixerL.gain(2, mix_synth_to_line);
+      mixerL.gain(3, 0.0);
+      mixerR.gain(0, mix_queue_to_line);
+      mixerR.gain(1, mix_noise_to_line);
+      mixerR.gain(2, mix_synth_to_line);
+      mixerR.gain(3, 0.0);
+      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, false, true, mix_synth_to_line);
+      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, false, true, mix_queue_to_line);
+      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, false, true, mix_noise_to_line);
+      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, false, true, 0.0);
+    }
+  }
+  else if (touch->sliderValue() <= 30) {
+  }
+  else if (touch->sliderValue() <= 37) {
+  }
+  else if (touch->sliderValue() <= 45) {
+  }
+  else if (touch->sliderValue() <= 52) {
+  }
+  else {
+    const float SCALER_PIX   = 52;
+    const int   SHOWN_DECAY  = 1;
+    float fft_bins[96];
+    for (uint8_t i = 0; i < 96; i++) {
+      fft_bins[i] = fft256_1.read(BIN_INDICIES[i << 1], BIN_INDICIES[(i << 1) + 1]);
+    }
+    for (uint8_t i = 0; i < 96; i++) {
+      uint8_t scaled_val = fft_bins[i] * SCALER_PIX;
+      uint y_real  = (display.height()-12) - scaled_val;
+      uint h_real  = (display.height()-12) - scaled_val;
+      display.drawFastVLine(i, 11, display.height()-12, BLACK);
+      if (scaled_val >= fft_bars_shown[i]) {
+        fft_bars_shown[i] = scaled_val;
+        display.drawFastVLine(i, y_real, h_real, GREEN);
+      }
+      else {
+        if (fft_bars_shown[i] > 0) fft_bars_shown[i] = fft_bars_shown[i] - SHOWN_DECAY;
+        uint y_decay = (display.height()-12) - fft_bars_shown[i];
+        uint h_decay = y_decay - h_real;
+        display.drawFastVLine(i, y_decay, h_decay, GREEN);
+        display.drawFastVLine(i, y_real, h_real, WHITE);
+      }
+    }
+  }
+
   if (dirty_button) {
     if (touch->buttonPressed(0)) {
       // Interpret a cancel press as a return to APP_SELECT.
@@ -965,63 +1102,6 @@ void redraw_fft_window() {
     dirty_button = false;
   }
 }
-
-
-void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
-  const uint8_t ICON_SIZE = 7;
-  int x0 = 0;
-  int y0 = 0;
-  int x1 = 0;
-  int y1 = 0;
-  int x2 = 0;
-  int y2 = 0;
-  switch (sym) {
-    case 0:
-      x0 = x + (ICON_SIZE >> 1);
-      y0 = y;
-      x1 = x;
-      y1 = y + ICON_SIZE;
-      x2 = x + ICON_SIZE;
-      y2 = y + ICON_SIZE;
-      display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
-      break;
-    case 1:
-      x0 = x;
-      y0 = y;
-      x1 = x + ICON_SIZE;
-      y1 = y;
-      x2 = x + (ICON_SIZE >> 1);
-      y2 = y + ICON_SIZE;
-      display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
-      break;
-    case 2:
-      x0 = x + ICON_SIZE;
-      y0 = y;
-      x1 = x;
-      y1 = y + (ICON_SIZE >> 1);
-      x2 = x + ICON_SIZE;
-      y2 = y + ICON_SIZE;
-      display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
-      break;
-    case 3:
-      x0 = x;
-      y0 = y;
-      x1 = x + ICON_SIZE;
-      y1 = y + (ICON_SIZE >> 1);
-      x2 = x;
-      y2 = y + ICON_SIZE;
-      display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
-      break;
-    case 4:
-      display.drawBitmap(x, y, bitmapPointer(ICON_ACCEPT), 9, 9, color);
-      break;
-    case 5:
-      //display.drawLine(0, 10, display.width()-1, 10, WHITE);
-      display.drawBitmap(x, y, bitmapPointer(ICON_CANCEL), 9, 9, color);
-      break;
-  }
-}
-
 
 
 /*
@@ -1051,7 +1131,7 @@ void updateDisplay() {
       break;
     case AppID::SYNTH_BOX:
       stopwatch_app_synthbox.markStart();
-      redraw_fft_window();
+      redraw_audio_window();
       stopwatch_app_synthbox.markStop();
       break;
     case AppID::COMMS_TEST:
@@ -1350,7 +1430,7 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
     case 1:    redraw_app_window("Test App Title", 0, 0);   break;
     case 2:    redraw_touch_test_window();                  break;
     case 3:    redraw_tricorder_window();                   break;
-    case 4:    redraw_fft_window();                         break;
+    case 4:    redraw_audio_window();                       break;
     case 5:
       display.setAddrWindow(0, 0, 96, 64);
       for (uint8_t h = 0; h < 64; h++) {
@@ -1410,15 +1490,15 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       break;
     case 8:
       display.fillScreen(BLACK);
-      draw_progress_bar_vertical(0, 0, 12, 64, CYAN, true, false, 0.0);
+      draw_progress_bar_vertical(0, 0, 12, 63, CYAN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_vertical(0, 0, 12, 64, CYAN, false, false, (i * 0.01));
+        draw_progress_bar_vertical(0, 0, 12, 63, CYAN, false, false, (i * 0.01));
         delay(40);
       }
 
-      draw_progress_bar_vertical(14, 0, 7, 64, BLUE, true, false, 0.0);
+      draw_progress_bar_vertical(14, 0, 7, 63, BLUE, true, false, 1.0);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_vertical(14, 0, 7, 64, BLUE, false, false, (i * 0.01));
+        draw_progress_bar_vertical(14, 0, 7, 63, BLUE, false, false, 1.0 - (i * 0.01));
         delay(40);
       }
 
@@ -1434,23 +1514,24 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
         delay(40);
       }
 
-      draw_progress_bar_vertical(32, 0, 24, 64, GREEN, true, false, 0.0);
+      draw_progress_bar_vertical(32, 0, 30, 63, GREEN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_vertical(32, 0, 24, 64, GREEN, false, true, (i * 0.01));
+        draw_progress_bar_vertical(32, 0, 30, 63, GREEN, false, true, (i * 0.01));
         delay(40);
       }
       break;
 
     case 9:    // Progress bar test
       display.fillScreen(BLACK);
+      draw_progress_bar_horizontal(0, 14, 95, 7, CYAN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_horizontal(0, 0, 95, 12, BLUE, true, false, (i * 0.01));
+        draw_progress_bar_horizontal(0, 14, 95, 7, CYAN, false, false, (i * 0.01));
         delay(40);
       }
 
-      draw_progress_bar_horizontal(0, 14, 95, 7, BLUE, true, false, 0.0);
+      draw_progress_bar_horizontal(0, 0, 95, 12, BLUE, true, false, 1.0);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_horizontal(0, 14, 95, 7, BLUE, false, false, (i * 0.01));
+        draw_progress_bar_horizontal(0, 0, 95, 12, BLUE, false, false, 1.0-(i * 0.01));
         delay(40);
       }
 
@@ -1920,8 +2001,10 @@ int callback_sensor_enable(StringBuilder* text_return, StringBuilder* args) {
 int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
   if (1 == args->count()) {
     float arg0 = args->position_as_double(0);
-    ampL.gain(arg0);
-    ampR.gain(arg0);
+    volume_left_output  = arg0;
+    volume_right_output = arg0;
+    ampL.gain(volume_left_output);
+    ampR.gain(volume_right_output);
     text_return->concatf("Audio volume: %.2f\n", arg0);
   }
   return 0;
@@ -1990,25 +2073,25 @@ void setup() {
   sineR.frequency(660);
   sineR.phase(0);
 
-  mixerFFT.gain(0, 0.0);  // sineL
-  mixerFFT.gain(1, 1.0);  // sineR
-  mixerFFT.gain(2, 0.0);  // light_adc
-  mixerFFT.gain(3, 0.0);  // mic_adc
+  mixerFFT.gain(0, mix_queueL_to_fft);
+  mixerFFT.gain(1, mix_queueR_to_fft);
+  mixerFFT.gain(2, mix_noise_to_fft);
+  mixerFFT.gain(3, 0.0);
 
-  mixerL.gain(0, 0.0);  // queueL
-  mixerL.gain(1, 1.0);  // sineL
-  mixerL.gain(2, 0.0);  // light_adc
-  mixerL.gain(3, 0.0);  // mic_adc
+  mixerL.gain(0, mix_queue_to_line);
+  mixerL.gain(1, mix_noise_to_line);
+  mixerL.gain(2, mix_synth_to_line);
+  mixerL.gain(3, 0.0);
 
-  mixerR.gain(0, 0.0);  // queueR
-  mixerR.gain(1, 1.0);  // sineR
-  mixerR.gain(2, 0.0);  // light_adc
-  mixerR.gain(3, 0.0);  // mic_adc
+  mixerR.gain(0, mix_queue_to_line);
+  mixerR.gain(1, mix_noise_to_line);
+  mixerR.gain(2, mix_synth_to_line);
+  mixerR.gain(3, 0.0);
 
-  pinkNoise.amplitude(1.0);
+  pinkNoise.amplitude(volume_pink_noise);
 
-  ampL.gain(0.4);
-  ampR.gain(0.4);
+  ampL.gain(volume_left_output);
+  ampR.gain(volume_right_output);
 
   analogWriteResolution(12);
 
@@ -2264,11 +2347,11 @@ void setup() {
   display.print(init_step_str);
   uint16_t serial_timeout = 0;
   while (!Serial && (100 > serial_timeout)) {
-    draw_progress_bar_horizontal(0, 54, 95, 12, RED, true, false, (serial_timeout++ * 0.01));
+    draw_progress_bar_horizontal(0, 54, 95, 9, RED, (0 == serial_timeout), false, (serial_timeout++ * 0.01));
     delay(70);
   }
   if (Serial) {
-    draw_progress_bar_horizontal(0, 54, 95, 12, GREEN, true, false, 1.0);
+    draw_progress_bar_horizontal(0, 54, 95, 9, GREEN, false, false, 1.0);
     while (Serial.available()) {
       Serial.read();
     }

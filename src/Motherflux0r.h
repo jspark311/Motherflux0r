@@ -140,6 +140,8 @@ void  printFFTBins(StringBuilder*);
 uint8_t* bitmapPointer(unsigned int idx);
 
 /* Display helper routines */
+void render_button_icon(uint8_t sym, int x, int y, uint16_t color);
+
 void draw_graph_obj(
   int x, int y, int w, int h, uint16_t color,
   bool draw_base, bool draw_v_ticks, bool draw_h_ticks,

@@ -134,6 +134,63 @@ void printFFTBins(StringBuilder* output) {
 /*******************************************************************************
 * Display helper routines
 *******************************************************************************/
+/*
+* Render a basic icon to the display.
+*/
+void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
+  const uint8_t ICON_SIZE = 7;
+  int x0 = 0;
+  int y0 = 0;
+  int x1 = 0;
+  int y1 = 0;
+  int x2 = 0;
+  int y2 = 0;
+  switch (sym) {
+    case 0:
+      x0 = x + (ICON_SIZE >> 1);
+      y0 = y;
+      x1 = x;
+      y1 = y + ICON_SIZE;
+      x2 = x + ICON_SIZE;
+      y2 = y + ICON_SIZE;
+      display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
+      break;
+    case 1:
+      x0 = x;
+      y0 = y;
+      x1 = x + ICON_SIZE;
+      y1 = y;
+      x2 = x + (ICON_SIZE >> 1);
+      y2 = y + ICON_SIZE;
+      display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
+      break;
+    case 2:
+      x0 = x + ICON_SIZE;
+      y0 = y;
+      x1 = x;
+      y1 = y + (ICON_SIZE >> 1);
+      x2 = x + ICON_SIZE;
+      y2 = y + ICON_SIZE;
+      display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
+      break;
+    case 3:
+      x0 = x;
+      y0 = y;
+      x1 = x + ICON_SIZE;
+      y1 = y + (ICON_SIZE >> 1);
+      x2 = x;
+      y2 = y + ICON_SIZE;
+      display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
+      break;
+    case 4:
+      display.drawBitmap(x, y, bitmapPointer(ICON_ACCEPT), 9, 9, color);
+      break;
+    case 5:
+      //display.drawLine(0, 10, display.width()-1, 10, WHITE);
+      display.drawBitmap(x, y, bitmapPointer(ICON_CANCEL), 9, 9, color);
+      break;
+  }
+}
 
 
 /*
@@ -235,23 +292,28 @@ void draw_progress_bar_horizontal(
   int x, int y, int w, int h, uint16_t color,
   bool draw_base, bool draw_val, float percent
 ) {
-  if (draw_base) {   // Draw the basic frame and axes?
+  if (draw_base) {   // Clear the way.
     display.fillRect(x, y, w, h, BLACK);
-    display.drawRoundRect(x, y, w, h, 3, WHITE);
   }
   uint8_t pix_width = percent * (w-2);
+  int blackout_x = x+1+pix_width;
+  int blackout_w = (w+2)-pix_width;
+
+  display.fillRoundRect(blackout_x, y+1, blackout_w, h-2, 3, BLACK);
   display.fillRoundRect(x+1, y+1, pix_width, h-2, 3, color);
+  display.drawRoundRect(x, y, w, h, 3, WHITE);
 
   if (draw_val && ((h-4) >= 7)) {
     // If we have space to do so, and the application requested it, draw the
     //   progress value in the middle of the bar.
     int txt_x = x+3;
     int txt_y = y+3;
+    StringBuilder temp_str;
+    temp_str.concatf("%d%%", (int) (percent*100));
     display.setTextSize(0);
     display.setCursor(txt_x, txt_y);
     display.setTextColor(WHITE);
-    display.print(percent * 100.0);
-    display.print("%");
+    display.print((char*) temp_str.string());
   }
 }
 
@@ -264,23 +326,26 @@ void draw_progress_bar_vertical(
   int x, int y, int w, int h, uint16_t color,
   bool draw_base, bool draw_val, float percent
 ) {
-  if (draw_base) {   // Draw the basic frame and axes?
+  if (draw_base) {   // Clear the way.
     display.fillRect(x, y, w, h, BLACK);
-    display.drawRoundRect(x, y, w, h, 3, WHITE);
   }
   uint8_t pix_height = percent * (h-2);
-  display.fillRoundRect(x+1, y+(pix_height - h), w-2, pix_height, 3, color);
+  int blackout_h = y+(h-1)-pix_height;
+  display.fillRoundRect(x+1, y+1, w-2, blackout_h, 3, BLACK);
+  display.fillRoundRect(x+1, (y+h-1)-pix_height, w-2, pix_height, 3, color);
+  display.drawRoundRect(x, y, w, h, 3, WHITE);
 
   if (draw_val && ((w-4) >= 15)) {
     // If we have space to do so, and the application requested it, draw the
     //   progress value in the middle of the bar.
     int txt_x = x+2;
-    int txt_y = y + (pix_height - h) + 3;
+    int txt_y = (y+3+h)-pix_height;
+    StringBuilder temp_str;
+    temp_str.concatf("%d%%", (int) (percent*100));
     display.setTextSize(0);
     display.setCursor(txt_x, txt_y);
     display.setTextColor(WHITE);
-    display.print(percent * 100.0);
-    display.print("%");
+    display.print((char*) temp_str.string());
   }
 }
 
