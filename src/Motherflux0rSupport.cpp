@@ -228,10 +228,10 @@ void draw_graph_obj(
 
 
 /*
-* Given a filter object, and parameters for the graph, draw the data to the
-*   display.
+* Displays a progress bar that runs left to right.
+* @param percent is in the range [0.0, 1.0]
 */
-void draw_progress_bar(
+void draw_progress_bar_horizontal(
   int x, int y, int w, int h, uint16_t color,
   bool draw_base, bool draw_val, float percent
 ) {
@@ -247,6 +247,35 @@ void draw_progress_bar(
     //   progress value in the middle of the bar.
     int txt_x = x+3;
     int txt_y = y+3;
+    display.setTextSize(0);
+    display.setCursor(txt_x, txt_y);
+    display.setTextColor(WHITE);
+    display.print(percent * 100.0);
+    display.print("%");
+  }
+}
+
+
+/*
+* Displays a progress bar that runs bottom to top.
+* @param percent is in the range [0.0, 1.0]
+*/
+void draw_progress_bar_vertical(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_base, bool draw_val, float percent
+) {
+  if (draw_base) {   // Draw the basic frame and axes?
+    display.fillRect(x, y, w, h, BLACK);
+    display.drawRoundRect(x, y, w, h, 3, WHITE);
+  }
+  uint8_t pix_height = percent * (h-2);
+  display.fillRoundRect(x+1, y+(pix_height - h), w-2, pix_height, 3, color);
+
+  if (draw_val && ((w-4) >= 15)) {
+    // If we have space to do so, and the application requested it, draw the
+    //   progress value in the middle of the bar.
+    int txt_x = x+2;
+    int txt_y = y + (pix_height - h) + 3;
     display.setTextSize(0);
     display.setCursor(txt_x, txt_y);
     display.setTextColor(WHITE);

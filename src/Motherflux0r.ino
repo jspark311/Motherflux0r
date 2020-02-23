@@ -589,7 +589,6 @@ void redraw_touch_test_window() {
 * Draws the tricorder app.
 */
 void redraw_tricorder_window() {
-  uint16_t data_max_width = 96;
   if (drawn_app != active_app) {
     redraw_app_window("Tricorder", 0, 0);
     dirty_slider = true;
@@ -606,61 +605,8 @@ void redraw_tricorder_window() {
     dirty_slider = false;
   }
 
-  if (disp_selector_off > millis()) {
-    data_max_width = 79;
-    // We are drawing the selector.
-    if (dirty_button) {
-      bool up   = touch->buttonPressed(1);
-      bool down = touch->buttonPressed(4);
-      uint8_t cvis = (uint8_t) current_data_vis;
-      if ((up && !down) && (cvis < 5)) {
-        cvis++;
-        draw_data_view_selector(80, 10, 16, 54,
-          DataVis::GRAPH, DataVis::VECTOR, DataVis::COMPASS, DataVis::FIELD, DataVis::TEXT, DataVis::NONE,
-          (DataVis) cvis
-        );
-      }
-      else if ((!up && down) && (cvis > 1)) {
-        cvis--;
-        draw_data_view_selector(80, 10, 16, 54,
-          DataVis::GRAPH, DataVis::VECTOR, DataVis::COMPASS, DataVis::FIELD, DataVis::TEXT, DataVis::NONE,
-          (DataVis) cvis
-        );
-      }
-      else {
-      }
-      current_data_vis = (DataVis) cvis;
-      disp_selector_off = millis() + 1500;   // Punch the timeout.
-    }
-  }
-  else if (dirty_button) {
-    if (touch->buttonPressed(4)) {
-      disp_selector_off = millis() + 1500;   // Punch the timeout.
-      data_max_width = 79;
-      draw_data_view_selector(80, 10, 16, 54,
-        DataVis::GRAPH, DataVis::VECTOR, DataVis::COMPASS, DataVis::FIELD, DataVis::TEXT, DataVis::NONE,
-        current_data_vis
-      );
-    }
-  }
-
-
   if (touch->sliderValue() <= 7) {
     // Baro
-    switch (current_data_vis) {
-      case DataVis::GRAPH:
-        break;
-      case DataVis::VECTOR:
-        break;
-      case DataVis::COMPASS:
-        break;
-      case DataVis::FIELD:
-        break;
-      case DataVis::TEXT:
-        break;
-      default:
-        break;
-    }
     if (graph_array_humidity.dirty()) {
       draw_graph_obj(
         0, 10, 96, 37, 0x03E0,
@@ -712,23 +658,9 @@ void redraw_tricorder_window() {
   }
   else if (touch->sliderValue() <= 22) {
     // TSL2561
-    switch (current_data_vis) {
-      case DataVis::GRAPH:
-        break;
-      case DataVis::VECTOR:
-        break;
-      case DataVis::COMPASS:
-        break;
-      case DataVis::FIELD:
-        break;
-      case DataVis::TEXT:
-        break;
-      default:
-        break;
-    }
     if (graph_array_visible.dirty()) {
       draw_graph_obj(
-        0, 10, data_max_width, 54, 0xF100,
+        0, 10, 96, 45, 0xF100,
         true, touch->buttonPressed(1), touch->buttonPressed(4),
         &graph_array_visible
       );
@@ -756,61 +688,47 @@ void redraw_tricorder_window() {
     display.print(graph_array_ana_light.value());
   }
   else if (touch->sliderValue() <= 37) {
-    // UVI
-    switch (current_data_vis) {
-      case DataVis::GRAPH:
-        if (touch->buttonPressed(5)) {
-          if (graph_array_uvi.dirty()) {
-            draw_graph_obj(
-              0, 10, data_max_width, 54, 0xF81F,
-              true, touch->buttonPressed(4), touch->buttonPressed(5),
-              &graph_array_uvi
-            );
-            display.setTextSize(0);
-            display.setCursor(0, 56);
-            display.setTextColor(WHITE);
-            display.print("UVI:  ");
-            display.setTextColor(0xF81F, BLACK);
-            display.print(graph_array_uvi.value());
-          }
-        }
-        else {
-          if (graph_array_uva.dirty()) {
-            draw_graph_obj(
-              0, 10, data_max_width << 1, 54, 0x781F,
-              true, touch->buttonPressed(4), touch->buttonPressed(5),
-              &graph_array_uva
-            );
-          }
-          if (graph_array_uvb.dirty()) {
-            draw_graph_obj(
-              data_max_width << 1, 10, data_max_width << 1, 54, 0xF80F,
-              true, touch->buttonPressed(4), touch->buttonPressed(5),
-              &graph_array_uvb
-            );
-          }
-        }
-        break;
-      case DataVis::TEXT:
-        if (graph_array_uvi.dirty()) {
-          display.setTextSize(0);
-          display.setCursor(0, 12);
-          display.setTextColor(WHITE, BLACK);
-          display.print("UVI:  ");
-          display.setTextColor(0xF81F, BLACK);
-          display.println(graph_array_uvi.value());
-          display.setTextColor(WHITE, BLACK);
-          display.print("UVA:  ");
-          display.setTextColor(0x781F, BLACK);
-          display.println(graph_array_uva.value());
-          display.setTextColor(WHITE, BLACK);
-          display.print("UVB:  ");
-          display.setTextColor(0xF80F, BLACK);
-          display.print(graph_array_uvb.value());
-        }
-        break;
-      default:
-        break;
+    if (touch->buttonPressed(5)) {
+      // UVI
+      if (graph_array_uvi.dirty()) {
+        draw_graph_obj(
+          0, 10, 96, 45, 0xF81F,
+          true, touch->buttonPressed(1), touch->buttonPressed(4),
+          &graph_array_uvi
+        );
+        display.setTextSize(0);
+        display.setCursor(0, 56);
+        display.setTextColor(WHITE);
+        display.print("UVI:  ");
+        display.setTextColor(0xF81F, BLACK);
+        display.print(graph_array_uvi.value());
+      }
+    }
+    else {
+      if (graph_array_uva.dirty()) {
+        draw_graph_obj(
+          0, 10, 48, 45, 0x781F,
+          true, touch->buttonPressed(1), touch->buttonPressed(4),
+          &graph_array_uva
+        );
+      }
+      if (graph_array_uvb.dirty()) {
+        draw_graph_obj(
+          48, 10, 48, 45, 0xF80F,
+          true, touch->buttonPressed(1), touch->buttonPressed(4),
+          &graph_array_uvb
+        );
+      }
+      display.setTextSize(0);
+      display.setCursor(0, 56);
+      display.setTextColor(WHITE);
+      display.print("UVA/B: ");
+      display.setTextColor(0x781F, BLACK);
+      display.print(graph_array_uva.value());
+      display.setTextColor(WHITE, BLACK);
+      display.print(" / ");
+      display.setTextColor(0xF80F, BLACK);
+      display.print(graph_array_uvb.value());
     }
   }
   else if (touch->sliderValue() <= 45) {
@@ -834,40 +752,30 @@ void redraw_tricorder_window() {
     display.setCursor(0, 0);
     display.setTextColor(0xFC00, BLACK);
     display.print("Magnetometer");
-    Vector3f64* mag_vect = magneto.getFieldVector();
-    float bearing_north = 0.0;
-    float bearing_mag = 0.0;
-    switch (current_data_vis) {
-      case DataVis::GRAPH:
-        draw_graph_obj(
-          0, 10, data_max_width, 54, 0xF81F,
-          true, touch->buttonPressed(4), touch->buttonPressed(5),
-          &graph_array_mag_confidence
-        );
-        break;
-      case DataVis::VECTOR:
-        break;
-      case DataVis::COMPASS:
-        display.setTextColor(WHITE, BLACK);
-        magneto.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
-        magneto.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
-        draw_compass(0, 11, 54, 54, false, touch->buttonPressed(4), bearing_mag, bearing_north);
-        break;
-      case DataVis::FIELD:
-        break;
-      case DataVis::TEXT:
-        display.setTextSize(0);
-        display.setCursor(0, 12);
-        display.setTextColor(0xFC00, BLACK);
-        display.print(mag_vect->length());
-        display.setTextColor(WHITE, BLACK);
-        display.println(" uT");
-        display.print("STDEV: ");
-        display.setTextColor(0xFC00, BLACK);
-        display.print(graph_array_mag_confidence.value());
-        break;
-      default:
-        break;
+    if (!touch->buttonPressed(5)) {
+      display.setTextColor(WHITE, BLACK);
+      Vector3f64* mag_vect = magneto.getFieldVector();
+      float bearing_north = 0.0;
+      float bearing_mag = 0.0;
+      magneto.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
+      magneto.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
+      draw_compass(0, 11, 44, 44, false, touch->buttonPressed(4), bearing_mag, bearing_north);
+      display.setCursor(0, 57);
+      display.print(mag_vect->length());
+      display.print(" uT");
+    }
+    else {
+      draw_graph_obj(
+        0, 10, 96, 45, 0xF81F,
+        true, touch->buttonPressed(1), touch->buttonPressed(4),
+        &graph_array_mag_confidence
+      );
+      display.setTextSize(0);
+      display.setCursor(0, 56);
+      display.setTextColor(WHITE);
+      display.print("Confidence: ");
+      display.setTextColor(0xFC00, BLACK);
+      display.print(graph_array_mag_confidence.value());
     }
   }
   else {    // Thermopile
@@ -1447,23 +1355,14 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       display.setAddrWindow(0, 0, 96, 64);
       for (uint8_t h = 0; h < 64; h++) {
         for (uint8_t w = 0; w < 96; w++) {
-          if (w > 83) {
-            display.writePixel(w, h, WHITE);
-          } else if (w > 71) {
-            display.writePixel(w, h, BLUE);
-          } else if (w > 59) {
-            display.writePixel(w, h, GREEN);
-          } else if (w > 47) {
-            display.writePixel(w, h, CYAN);
-          } else if (w > 35) {
-            display.writePixel(w, h, RED);
-          } else if (w > 23) {
-            display.writePixel(w, h, MAGENTA);
-          } else if (w > 11) {
-            display.writePixel(w, h, YELLOW);
-          } else {
-            display.writePixel(w, h, BLACK);
-          }
+          if (w > 83) {       display.writePixel(w, h, WHITE);     }
+          else if (w > 71) {  display.writePixel(w, h, BLUE);      }
+          else if (w > 59) {  display.writePixel(w, h, GREEN);     }
+          else if (w > 47) {  display.writePixel(w, h, CYAN);      }
+          else if (w > 35) {  display.writePixel(w, h, RED);       }
+          else if (w > 23) {  display.writePixel(w, h, MAGENTA);   }
+          else if (w > 11) {  display.writePixel(w, h, YELLOW);    }
+          else {              display.writePixel(w, h, BLACK);     }
         }
       }
       display.endWrite();
@@ -1501,6 +1400,7 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       delay(5000);
       break;
     case 7:
+      display.fillScreen(BLACK);
       render_button_icon(0, 0, 0, WHITE);
       render_button_icon(1, 10, 0, WHITE);
       render_button_icon(2, 20, 0, WHITE);
@@ -1509,36 +1409,66 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       render_button_icon(5, 0, 20, WHITE);
       break;
     case 8:
-      display.fillCircle(32, 32, 7, 0xFF00);
-      display.drawCircle(32, 32, 14, 0x00FF);
+      display.fillScreen(BLACK);
+      draw_progress_bar_vertical(0, 0, 12, 64, CYAN, true, false, 0.0);
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar_vertical(0, 0, 12, 64, CYAN, false, false, (i * 0.01));
+        delay(40);
+      }
+
+      draw_progress_bar_vertical(14, 0, 7, 64, BLUE, true, false, 0.0);
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar_vertical(14, 0, 7, 64, BLUE, false, false, (i * 0.01));
+        delay(40);
+      }
+
+      draw_progress_bar_vertical(23, 0, 7, 31, YELLOW, true, false, 0.0);
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar_vertical(23, 0, 7, 31, YELLOW, false, false, (i * 0.01));
+        delay(40);
+      }
+
+      draw_progress_bar_vertical(23, 33, 7, 31, RED, true, false, 0.0);
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar_vertical(23, 33, 7, 31, RED, false, false, (i * 0.01));
+        delay(40);
+      }
+
+      draw_progress_bar_vertical(32, 0, 24, 64, GREEN, true, false, 0.0);
+      for (uint8_t i = 0; i <= 100; i++) {
+        draw_progress_bar_vertical(32, 0, 24, 64, GREEN, false, true, (i * 0.01));
+        delay(40);
+      }
       break;
+
     case 9:    // Progress bar test
+      display.fillScreen(BLACK);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar(0, 0, 95, 12, BLUE, true, false, (i * 0.01));
+        draw_progress_bar_horizontal(0, 0, 95, 12, BLUE, true, false, (i * 0.01));
         delay(40);
       }
 
-      draw_progress_bar(0, 14, 95, 7, BLUE, true, false, 0.0);  delay(250);
+      draw_progress_bar_horizontal(0, 14, 95, 7, BLUE, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar(0, 14, 95, 7, BLUE, false, false, (i * 0.01));
+        draw_progress_bar_horizontal(0, 14, 95, 7, BLUE, false, false, (i * 0.01));
         delay(40);
       }
 
-      draw_progress_bar(0, 23, 32, 7, BLUE, true, false, 0.0);
+      draw_progress_bar_horizontal(0, 23, 46, 7, YELLOW, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar(0, 23, 32, 7, BLUE, false, false, (i * 0.01));
+        draw_progress_bar_horizontal(0, 23, 46, 7, YELLOW, false, false, (i * 0.01));
         delay(40);
       }
 
-      draw_progress_bar(34, 23, 51, 7, RED, true, false, 0.0);
+      draw_progress_bar_horizontal(48, 23, 46, 7, RED, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar(34, 23, 51, 7, RED, false, false, (i * 0.01));
+        draw_progress_bar_horizontal(48, 23, 46, 7, RED, false, false, (i * 0.01));
         delay(40);
       }
 
-      draw_progress_bar(0, 34, 95, 14, GREEN, true, false, 0.0);
+      draw_progress_bar_horizontal(0, 34, 95, 14, GREEN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar(0, 34, 95, 14, GREEN, false, true, (i * 0.01));
+        draw_progress_bar_horizontal(0, 34, 95, 14, GREEN, false, true, (i * 0.01));
         delay(40);
       }
       break;
@@ -1757,8 +1687,7 @@ int callback_sensor_filter_set_strat(StringBuilder* text_return, StringBuilder* 
   uint8_t arg2 = (2 < args->count()) ? args->position_as_int(2) : 255;
 
   switch ((SensorID) arg0) {
-    case SensorID::MAGNETOMETER:
-      break;
+    case SensorID::MAGNETOMETER:  ret = magneto.setFilter((FilteringStrategy) arg1);   break;
     case SensorID::BARO:
       switch (arg2) {
         case 0:    ret = graph_array_humidity.setStrategy((FilteringStrategy) arg1);   break;
@@ -1853,12 +1782,16 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
       case 0:
         switch (args->position_as_int(1)) {
           default:
-          case 0:   magneto.printChannelValues(text_return);   break;
-          case 1:   magneto.printRegs(text_return);            break;
-          case 2:   magneto.printPins(text_return);            break;
-          case 3:   magneto.printData(text_return);            break;
-          case 4:   magneto.printTimings(text_return);         break;
-          case 5:
+          case 0:   magneto.printDebug(text_return);           break;
+          case 1:   magneto.printField(text_return);           break;
+          case 2:   magneto.printfilter(text_return);          break;
+          case 3:   magneto.printBearing(HeadingType::MAGNETIC_NORTH, text_return);  break;
+          case 4:   magneto.printChannelValues(text_return);   break;
+          case 5:   magneto.printRegs(text_return);            break;
+          case 6:   magneto.printPins(text_return);            break;
+          case 7:   magneto.printData(text_return);            break;
+          case 8:   magneto.printTimings(text_return);         break;
+          case 9:
             text_return->concatf("ADC Temperature: %u.\n", (uint8_t) magneto.getTemperature());
             break;
         }
@@ -1885,72 +1818,34 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
         break;
 
       case 4:
-        switch (args->position_as_int(1)) {
-          default:
-          case 0:   magneto.printDebug(text_return);               break;
-          case 1:   magneto.printField(text_return);               break;
-          case 2:   magneto.printfilter(text_return);              break;
-          case 3:   magneto.printBearing(HeadingType::MAGNETIC_NORTH, text_return);  break;
-        }
-        break;
-
-      case 5:
         if (1 < args->count()) {
           magneto.setMagGnomon((GnomonType) args->position_as_int(1));
         }
         magneto.printSpatialTransforms(text_return);
         break;
 
-      case 6:
-        text_return->concatf("Filter depth: %u.\n", (uint8_t) magneto.getTemperature());
-        break;
-      case 7:
-        text_return->concatf("Filter type: %u.\n", (uint8_t) magneto.getTemperature());
-        break;
-
-
-      case 8:
+      case 5:
         if (1 < args->count()) {
           bool en = (0 != args->position_as_int(1));
           magneto.setBandwidth(en ? DRV425Bandwidth::BW0 : DRV425Bandwidth::BW1);
           text_return->concatf("Magnetometer bandwidth is %s\n", en ? "BW0" : "BW1");
         }
         break;
-      case 9:
-        if (1 < args->count()) {
-          bool en = (0 != args->position_as_int(1));
-          magneto.power(en);
-        }
-        text_return->concatf("Magnetometer power is %s\n", magneto.power() ? "on" : "off");
-        break;
-      case 10:
-        ret = magneto.init(&Wire1, &SPI);
-        break;
-      case 11:
-        ret = magneto.reset();
-        break;
-      case 12:
-        ret = magneto.refresh();
-        break;
-      default:
-        break;
+      case 6:   ret = magneto.reset();               break;
+      case 7:   ret = magneto.refresh();             break;
+      default:  ret = -3;                            break;
     }
   }
   if (-3 == ret) {
-    text_return->concat("-< Magnetometer functions >----------------------------\n");
-    text_return->concat("0:  (ADC) Info\n");
-    text_return->concat("1:  (ADC) Poll\n");
-    text_return->concat("2:  (ADC) Gain\n");
-    text_return->concat("3:  (ADC) Oversampling ratio\n");
-    text_return->concat("4:  (CPS) Info\n");
-    text_return->concat("5:  (CPS) Gnomons\n");
-    text_return->concat("6:  (CPS) Filter depth\n");
-    text_return->concat("7:  (CPS) Filter type\n");
-    text_return->concat("8:  (MAG) Bandwidth\n");
-    text_return->concat("9:  (MAG) Power\n");
-    text_return->concat("10: (MAG) Init\n");
-    text_return->concat("11: (MAG) Reset\n");
-    text_return->concat("12: (MAG) Refresh\n");
+    text_return->concat("---< Magnetometer functions >--------------------------\n");
+    text_return->concat("0:  Info\n");
+    text_return->concat("1:  Poll\n");
+    text_return->concat("2:  Gain\n");
+    text_return->concat("3:  Oversampling ratio\n");
+    text_return->concat("4:  Gnomons\n");
+    text_return->concat("5:  Bandwidth\n");
+    text_return->concat("6:  Reset\n");
+    text_return->concat("7:  Refresh\n");
   }
   else if (0 != ret) {
     text_return->concatf("Function returned %d\n", ret);
@@ -1968,12 +1863,12 @@ int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
     int arg0 = args->position_as_int(0);
     //int arg1 = args->position_as_int(1);
     switch ((SensorID) arg0) {
-      //case SensorID::MAGNETOMETER:   break;
-      case SensorID::BARO:           ret = baro.init(&Wire1);       break;
-      case SensorID::LUX:            ret = tsl2561.init(&Wire1);    break;
-      case SensorID::UV:             ret = uv.init(&Wire1);         break;
-      case SensorID::THERMOPILE:     ret = grideye.init(&Wire1);    break;
-      case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);     break;
+      case SensorID::MAGNETOMETER:   ret = magneto.init(&Wire1, &SPI);   break;
+      case SensorID::BARO:           ret = baro.init(&Wire1);            break;
+      case SensorID::LUX:            ret = tsl2561.init(&Wire1);         break;
+      case SensorID::UV:             ret = uv.init(&Wire1);              break;
+      case SensorID::THERMOPILE:     ret = grideye.init(&Wire1);         break;
+      case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);          break;
       //case SensorID::BATT_VOLTAGE:       break;
       //case SensorID::IMU:                break;
       //case SensorID::MIC:                break;
@@ -2031,6 +1926,18 @@ int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
   }
   return 0;
 }
+
+
+int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
+  int ret = -1;
+  if (1 == args->count()) {
+    int arg0 = args->position_as_int(0);
+  }
+  text_return->concat("CBOR test results: %d\n", ret);
+  return ret;
+}
+
+
 
 
 /*******************************************************************************
@@ -2127,11 +2034,11 @@ void setup() {
   display.setTextSize(1);
   display.println("Motherflux0r");
   display.setTextSize(0);
-  draw_progress_bar(0, 11, 95, 12, GREEN, true, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, true, false, percent_setup);
 
   init_step_str = (const char*) "Audio           ";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2139,7 +2046,7 @@ void setup() {
 
   init_step_str = (const char*) "GridEye         ";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2154,7 +2061,7 @@ void setup() {
 
   init_step_str = (const char*) "Magnetometer    ";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2173,7 +2080,7 @@ void setup() {
 
   init_step_str = (const char*) "Baro            ";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2188,7 +2095,7 @@ void setup() {
 
   init_step_str = (const char*) "UVI";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2203,7 +2110,7 @@ void setup() {
 
   init_step_str = (const char*) "Lux ";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2222,7 +2129,7 @@ void setup() {
 
   init_step_str = (const char*) "PSU Temperature";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2237,7 +2144,7 @@ void setup() {
 
   init_step_str = (const char*) "Inertial        ";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2283,7 +2190,7 @@ void setup() {
 
   init_step_str = (const char*) "Console         ";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2314,6 +2221,7 @@ void setup() {
   console.defineCommand("app",         'a', arg_list_1_uint, "Select active application.", "", 0, callback_active_app);
   console.defineCommand("sprof",       arg_list_1_uint, "Dump sensor profiler.", "", 0, callback_print_sensor_profiler);
   console.defineCommand("aprof",       arg_list_1_uint, "Dump application profiler.", "", 0, callback_print_app_profiler);
+  console.defineCommand("cbor",        arg_list_1_uint, "CBOR test battery.", "", 0, callback_cbor_tests);
   console.defineCommand("vol",         arg_list_1_float, "Audio volume.", "", 0, callback_audio_volume);
   console.setTXTerminator(LineTerm::CRLF);
   console.setRXTerminator(LineTerm::CR);
@@ -2327,7 +2235,7 @@ void setup() {
   init_step_str = (const char*) "Touchpad        ";
   touch = new SX8634(&_touch_opts);
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
@@ -2350,17 +2258,17 @@ void setup() {
 
   init_step_str = (const char*) "USB        ";
   percent_setup += 0.08;
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
   uint16_t serial_timeout = 0;
   while (!Serial && (100 > serial_timeout)) {
-    draw_progress_bar(0, 54, 95, 12, RED, true, false, (serial_timeout++ * 0.01));
+    draw_progress_bar_horizontal(0, 54, 95, 12, RED, true, false, (serial_timeout++ * 0.01));
     delay(70);
   }
   if (Serial) {
-    draw_progress_bar(0, 54, 95, 12, GREEN, true, false, 1.0);
+    draw_progress_bar_horizontal(0, 54, 95, 12, GREEN, true, false, 1.0);
     while (Serial.available()) {
       Serial.read();
     }
@@ -2376,7 +2284,7 @@ void setup() {
     touch->setSliderFxn(cb_slider);
     touch->setLongpressFxn(cb_longpress);
   }
-  draw_progress_bar(0, 11, 95, 12, GREEN, false, false, 1.0);
+  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, 1.0);
   delay(50);
 }
 

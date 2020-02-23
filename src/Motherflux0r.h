@@ -158,7 +158,12 @@ void draw_graph_obj(
   SensorFilter<uint32_t>* filt
 );
 
-void draw_progress_bar(
+void draw_progress_bar_horizontal(
+  int x, int y, int w, int h, uint16_t color,
+  bool draw_base, bool draw_val, float percent
+);
+
+void draw_progress_bar_vertical(
   int x, int y, int w, int h, uint16_t color,
   bool draw_base, bool draw_val, float percent
 );
