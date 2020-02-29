@@ -1,7 +1,7 @@
 #include <CppPotpourri.h>
 #include <Adafruit_SSD1331.h>
 #include "uApp.h"
-
+#include "Motherflux0r.h"
 
 extern Adafruit_SSD1331 display;
 
@@ -11,6 +11,7 @@ static AppID drawn_app    = AppID::META;
 static AppID app_previous = AppID::APP_SELECT;
 
 
+
 void  uApp::setAppActive(AppID new_app) {
   active_app = new_app;
 }
@@ -18,6 +19,18 @@ void  uApp::setAppActive(AppID new_app) {
 AppID uApp::appActive() {      return active_app;     }
 AppID uApp::drawnApp() {       return drawn_app;      }
 AppID uApp::previousApp() {    return app_previous;   }
+
+
+
+int8_t uApp::redraw() {
+  return 0;
+}
+
+
+uApp* uApp::getActiveAppPtr() {
+  return nullptr;
+}
+
 
 
 /*
@@ -45,34 +58,25 @@ void uApp::redraw_app_window(const char* title, uint8_t pages, uint8_t active_pa
 
 
 
-
-uAppTricorder::uAppTricorder() : uApp("Tricorder") {
-}
-
-
-uAppTricorder::~uAppTricorder(){
-}
-
-
-
-int8_t uAppTricorder::refresh() {
-  int8_t ret = 0;
-  _stopwatch.markStart();
-
-  ret = _process_user_input();
-  _stopwatch.markStop();
-  return ret;
-}
-
-
-
-int8_t uAppTricorder::_process_user_input() {
-  int8_t ret = 0;
-  if (_slider_current != _slider_pending) {
-    ret++;
+const char* const uApp::getAppIDString(AppID e) {
+  switch (e) {
+    case AppID::APP_SELECT:       return "APP_SELECT";
+    case AppID::TOUCH_TEST:       return "TOUCH_TEST";
+    case AppID::CONFIGURATOR:     return "CONFIGURATOR";
+    case AppID::DATA_MGMT:        return "DATA_MGMT";
+    case AppID::SYNTH_BOX:        return "SYNTH_BOX";
+    case AppID::COMMS_TEST:       return "COMMS_TEST";
+    case AppID::META:             return "META";
+    case AppID::I2C_SCANNER:      return "I2C_SCANNER";
+    case AppID::TRICORDER:        return "TRICORDER";
+    case AppID::HOT_STANDBY:      return "HOT_STANDBY";
+    case AppID::SUSPEND:          return "SUSPEND";
   }
-  if (_buttons_current != _buttons_pending) {
-    ret++;
+  return "UNKNOWN";
+}
+
+void uApp::listAllApplications(StringBuilder* output) {
+  for (uint8_t i = 0; i < 11; i++) {
+    output->concatf("%2u: %s\n", i, getAppIDString((AppID) i));
   }
-  return ret;
 }

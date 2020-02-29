@@ -46,10 +46,6 @@ static const uint16_t BIN_INDICIES[] = {
   214, 218, 219, 223, 224, 228, 229, 233, 234, 238, 239, 243, 244, 249, 250, 255
 };
 
-// Thermopile constants
-const float THERM_TEMP_MAX = 150.0;
-const float THERM_TEMP_MIN = 0.0;
-
 
 /*******************************************************************************
 * Globals
@@ -139,24 +135,20 @@ static Vector3f64 acc_vect;   // Acceleration vector from the IMU.
 static Vector3f64 gyr_vect;   // Gyroscopic vector from the IMU.
 static Vector3f64 mag_vect0;  // Magnetism vector from the IMU.
 static Vector3f64 mag_vect1;  // Magnetism vector from the DRV425 complex.
-static float    altitude            = 0.0;    // BME280
-static float    dew_point           = 0.0;    // BME280
-static float    sea_level           = 0.0;    // BME280
-static float    therm_midpoint_lock = 0.0;    // GidEye
 
 /* Data buffers for sensors. */
-static SensorFilter<float> graph_array_pressure(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_humidity(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_air_temp(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_psu_temp(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_uva(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_uvb(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_uvi(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_ana_light(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
-static SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0);
-static SensorFilter<float> graph_array_mag_confidence(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_pressure(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_humidity(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_air_temp(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_psu_temp(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_uva(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_uvb(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_uvi(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_ana_light(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0);
+SensorFilter<float> graph_array_mag_confidence(FilteringStrategy::RAW, 96, 0);
 
 /* Profiling data */
 static StopWatch stopwatch_main_loop_time;
@@ -177,7 +169,6 @@ static StopWatch stopwatch_app_synthbox;
 static StopWatch stopwatch_app_comms;
 static StopWatch stopwatch_app_meta;
 static StopWatch stopwatch_app_i2c_scanner;
-static StopWatch stopwatch_app_tricorder;
 static StopWatch stopwatch_app_standby;
 static StopWatch stopwatch_app_suspend;
 static SensorFilter<float> graph_array_cpu_time(FilteringStrategy::MOVING_MED, 96, 0);
@@ -191,9 +182,6 @@ static uint32_t last_interaction  = 0;      // millis() when the user last inter
 static uint32_t disp_update_last  = 0;      // millis() when the display last updated.
 static uint32_t disp_update_next  = 0;      // millis() when the display next updates.
 static uint32_t disp_update_rate  = 1;      // Update in Hz for the display
-static uint32_t disp_selector_off = 0;      // millis() when the display dialog should timeout.
-
-DataVis current_data_vis = DataVis::TEXT;
 
 
 /* Console junk... */
@@ -209,11 +197,11 @@ static const TCode arg_list_4_float[] = {TCode::FLOAT, TCode::FLOAT, TCode::FLOA
 
 /* Application tracking and interrupts... */
 static AppID    app_page            = AppID::TRICORDER;
-
 static bool     dirty_button        = false;
 static bool     dirty_slider        = false;
 static bool     imu_irq_fired       = false;
 
+uAppTricorder app_tricorder;
 
 
 /*******************************************************************************
@@ -538,272 +526,6 @@ void redraw_touch_test_window() {
 
 
 /*
-* Draws the tricorder app.
-*/
-void redraw_tricorder_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    uApp::redraw_app_window("Tricorder", 0, 0);
-    dirty_slider = true;
-  }
-
-  if (dirty_slider) {
-    if (touch->sliderValue() <= 45) {
-      uApp::redraw_app_window("Tricorder", 0, 0);
-    }
-    else {
-      //display.fillRect(0, 11, display.width()-1, display.height()-12, BLACK);
-      display.fillScreen(BLACK);
-    }
-    dirty_slider = false;
-  }
-
-  if (touch->sliderValue() <= 7) {
-    // Baro
-    if (graph_array_humidity.dirty()) {
-      draw_graph_obj(
-        0, 10, 96, 37, 0x03E0,
-        true, touch->buttonPressed(1), touch->buttonPressed(4),
-        &graph_array_humidity
-      );
-      display.setTextSize(0);
-      display.setCursor(0, 48);
-      display.setTextColor(WHITE);
-      display.print("Alt: ");
-      display.setTextColor(GREEN, BLACK);
-      display.print(altitude);
-      display.println("m");
-      display.setTextColor(WHITE);
-      display.print("Humidity: ");
-      display.setTextColor(0x03E0, BLACK);
-      display.print(graph_array_humidity.value());
-      display.println("%");
-    }
-  }
-  else if (touch->sliderValue() <= 15) {
-    // Baro
-    if (graph_array_air_temp.dirty()) {
-      draw_graph_obj(
-        0, 10, 48, 37, 0x83D0,
-        true, touch->buttonPressed(1), touch->buttonPressed(4),
-        &graph_array_air_temp
-      );
-    }
-    if (graph_array_pressure.dirty()) {
-      draw_graph_obj(
-        48, 10, 48, 37, 0xFE00,
-        true, touch->buttonPressed(1), touch->buttonPressed(4),
-        &graph_array_pressure
-      );
-    }
-    display.setTextSize(0);
-    display.setCursor(0, 48);
-    display.setTextColor(WHITE);
-    display.print("Pres: ");
-    display.setTextColor(0xFE00, BLACK);
-    display.print(graph_array_pressure.value());
-    display.println("Pa");
-    display.setTextColor(WHITE);
-    display.print("Air Temp: ");
-    display.setTextColor(0x83D0, BLACK);
-    display.print(graph_array_air_temp.value());
-    display.println("C");
-  }
-  else if (touch->sliderValue() <= 22) {
-    // TSL2561
-    if (graph_array_visible.dirty()) {
-      draw_graph_obj(
-        0, 10, 96, 45, 0xF100,
-        true, touch->buttonPressed(1), touch->buttonPressed(4),
-        &graph_array_visible
-      );
-      display.setTextSize(0);
-      display.setCursor(0, 56);
-      display.setTextColor(WHITE);
-      display.print("Lux:  ");
-      display.setTextColor(0xF100, BLACK);
-      display.print(graph_array_visible.value());
-    }
-  }
-  else if (touch->sliderValue() <= 30) {
-    // Analog light sensor
-    graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
-    draw_graph_obj(
-      0, 10, 96, 45, 0xFE00,
-      true, touch->buttonPressed(1), touch->buttonPressed(4),
-      &graph_array_ana_light
-    );
-    display.setTextSize(0);
-    display.setCursor(0, 56);
-    display.setTextColor(WHITE);
-    display.print("Light:  ");
-    display.setTextColor(GREEN, BLACK);
-    display.print(graph_array_ana_light.value());
-  }
-  else if (touch->sliderValue() <= 37) {
-    if (touch->buttonPressed(5)) {
-      // UVI
-      if (graph_array_uvi.dirty()) {
-        draw_graph_obj(
-          0, 10, 96, 45, 0xF81F,
-          true, touch->buttonPressed(1), touch->buttonPressed(4),
-          &graph_array_uvi
-        );
-        display.setTextSize(0);
-        display.setCursor(0, 56);
-        display.setTextColor(WHITE);
-        display.print("UVI:  ");
-        display.setTextColor(0xF81F, BLACK);
-        display.print(graph_array_uvi.value());
-      }
-    }
-    else {
-      if (graph_array_uva.dirty()) {
-        draw_graph_obj(
-          0, 10, 48, 45, 0x781F,
-          true, touch->buttonPressed(1), touch->buttonPressed(4),
-          &graph_array_uva
-        );
-      }
-      if (graph_array_uvb.dirty()) {
-        draw_graph_obj(
-          48, 10, 48, 45, 0xF80F,
-          true, touch->buttonPressed(1), touch->buttonPressed(4),
-          &graph_array_uvb
-        );
-      }
-      display.setTextSize(0);
-      display.setCursor(0, 56);
-      display.setTextColor(WHITE);
-      display.print("UVA/B: ");
-      display.setTextColor(0x781F, BLACK);
-      display.print(graph_array_uva.value());
-      display.setTextColor(WHITE, BLACK);
-      display.print(" / ");
-      display.setTextColor(0xF80F, BLACK);
-      display.print(graph_array_uvb.value());
-    }
-  }
-  else if (touch->sliderValue() <= 45) {
-    // IMU
-    display.setCursor(0, 11);
-    display.setTextColor(YELLOW, BLACK);
-    display.print("IMU");
-    StringBuilder temp0;
-    temp0.concatf("uT<%.2f, %.2f, %.2f>", imu.accX(), imu.accY(), imu.accZ());
-    display.setTextColor(WHITE, BLACK);
-    display.println((char*) temp0.string());
-    //imu.gyrX();
-    //imu.gyrY();
-    //imu.gyrZ();
-    //imu.magX();
-    //imu.magY();
-    //imu.magZ();
-    //imu.temp();
-  }
-  else if (touch->sliderValue() <= 52) {
-    display.setCursor(0, 0);
-    display.setTextColor(0xFC00, BLACK);
-    display.print("Magnetometer");
-    if (!touch->buttonPressed(5)) {
-      display.setTextColor(WHITE, BLACK);
-      Vector3f64* mag_vect = magneto.getFieldVector();
-      float bearing_north = 0.0;
-      float bearing_mag = 0.0;
-      magneto.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
-      magneto.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
-      draw_compass(0, 11, 44, 44, false, touch->buttonPressed(4), bearing_mag, bearing_north);
-      display.setCursor(0, 57);
-      display.print(mag_vect->length());
-      display.print(" uT");
-    }
-    else {
-      draw_graph_obj(
-        0, 10, 96, 45, 0xF81F,
-        true, touch->buttonPressed(1), touch->buttonPressed(4),
-        &graph_array_mag_confidence
-      );
-      display.setTextSize(0);
-      display.setCursor(0, 56);
-      display.setTextColor(WHITE);
-      display.print("Confidence: ");
-      display.setTextColor(0xFC00, BLACK);
-      display.print(graph_array_mag_confidence.value());
-    }
-  }
-  else {    // Thermopile
-    if (graph_array_therm_mean.dirty()) {
-      const uint8_t PIXEL_SIZE  = 4;
-      const uint8_t TEXT_OFFSET = (PIXEL_SIZE*8)+5;
-      const float TEMP_RANGE = THERM_TEMP_MAX - THERM_TEMP_MIN;
-      const float BINSIZE_T  = TEMP_RANGE / (PIXEL_SIZE * 8);  // Space of display gives scale size.
-      float* therm_pixels = graph_array_therm_frame.memPtr();
-      float  therm_field_min = graph_array_therm_frame.minValue();
-      float  therm_field_max = graph_array_therm_frame.maxValue();
-      bool lock_range_to_current = touch->buttonPressed(1);
-      bool lock_range_to_absolute = touch->buttonPressed(5);
-      if (!(lock_range_to_absolute | lock_range_to_current)) {
-        therm_midpoint_lock = therm_field_max - ((therm_field_max - therm_field_min) / 2);
-      }
-      else if (lock_range_to_absolute) {
-        therm_field_max = THERM_TEMP_MAX;
-        therm_field_min = THERM_TEMP_MIN;
-      }
-      else {  // Lock to current range. Use the filtered mean so that it drifts.
-        therm_field_max = graph_array_therm_mean.value() + therm_midpoint_lock;
-        therm_field_min = graph_array_therm_mean.value() - therm_midpoint_lock;
-      }
-      const float MIDPOINT_T = lock_range_to_absolute ? (TEMP_RANGE / 2.0) : therm_midpoint_lock;
-
-      for (uint8_t i = 0; i < 64; i++) {
-        uint x = (i & 0x07) * PIXEL_SIZE;
-        uint y = (i >> 3) * PIXEL_SIZE;
-        float pix_deviation = abs(MIDPOINT_T - therm_pixels[i]);
-        uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (therm_field_max - MIDPOINT_T));
-        uint16_t color = (therm_pixels[i] <= MIDPOINT_T) ? pix_intensity : (pix_intensity << 11);
-        display.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
-      }
-      display.setTextSize(0);
-      display.setCursor(TEXT_OFFSET, 0);
-      display.setTextColor(RED, BLACK);
-      display.print(therm_field_max);
-
-      display.setCursor(TEXT_OFFSET, 12);
-      display.setTextColor(WHITE, BLACK);
-      display.print("ABS (C)");
-
-      display.setCursor(TEXT_OFFSET, (PIXEL_SIZE*8)-7);
-      display.setTextColor(BLUE, BLACK);
-      display.print(therm_field_min);
-
-      display.setCursor(0, TEXT_OFFSET);
-      display.setTextColor(WHITE);
-      display.print("Mean:  ");
-      display.setTextColor(RED, BLACK);
-      display.println(graph_array_therm_mean.value());
-
-      display.setTextColor(WHITE);
-      display.print("Range: ");
-      display.setTextColor(RED, BLACK);
-      display.println(therm_field_max - therm_field_min);
-
-      display.setTextColor(WHITE);
-      display.print("STDEV: ");
-      display.setTextColor(RED, BLACK);
-      display.println(graph_array_therm_frame.stdevValue());
-    }
-  }
-
-  if (dirty_button) {
-    if (touch->buttonPressed(0)) {
-      // Interpret a cancel press as a return to APP_SELECT.
-      uApp::setAppActive(AppID::APP_SELECT);
-    }
-    dirty_button = false;
-  }
-}
-
-
-/*
 * Draws the app selection window.
 */
 void redraw_app_select_window() {
@@ -1091,9 +813,7 @@ void updateDisplay() {
       stopwatch_app_i2c_scanner.markStop();
       break;
     case AppID::TRICORDER:
-      stopwatch_app_tricorder.markStart();
-      redraw_tricorder_window();
-      stopwatch_app_tricorder.markStop();
+      app_tricorder.refresh();
       break;
     case AppID::HOT_STANDBY:
       stopwatch_app_standby.markStart();
@@ -1131,9 +851,6 @@ int8_t read_uv_sensor() {
 */
 int8_t read_baro_sensor() {
   int8_t ret = 0;
-  altitude  = baro.Altitude(baro.pres());
-  dew_point = baro.DewPoint(baro.temp(), baro.hum());
-  sea_level = baro.EquivalentSeaLevelPressure(altitude, baro.temp(), baro.pres());
   graph_array_humidity.feedFilter(baro.hum());
   graph_array_air_temp.feedFilter(baro.temp());
   graph_array_pressure.feedFilter(baro.pres());
@@ -1205,18 +922,24 @@ static void cb_button(int button, bool pressed) {
   last_interaction = millis();
   if (pressed) {
     vibrateOn(19);
+    app_tricorder.deliverButtonValue(touch->buttonStates());
   }
   else {
+    dirty_button = true;
   }
   ledOn(LED_B_PIN, 2, 3500);
-  dirty_button = true;
 }
 
 
 static void cb_slider(int slider, int value) {
   last_interaction = millis();
   ledOn(LED_R_PIN, 60, 3500);
-  dirty_slider = true;
+  if (uApp::appActive() == AppID::TRICORDER) {
+    app_tricorder.deliverSliderValue(value);
+  }
+  else {
+    dirty_slider = true;
+  }
 }
 
 
@@ -1286,7 +1009,7 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
     stopwatch_app_comms.reset();
     stopwatch_app_meta.reset();
     stopwatch_app_i2c_scanner.reset();
-    stopwatch_app_tricorder.reset();
+    app_tricorder.resetStopwatch();
     stopwatch_app_standby.reset();
     stopwatch_app_suspend.reset();
   }
@@ -1301,7 +1024,7 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
   stopwatch_app_comms.printDebug("COMMS", text_return);
   stopwatch_app_meta.printDebug("META", text_return);
   stopwatch_app_i2c_scanner.printDebug("I2C SCANNER", text_return);
-  stopwatch_app_tricorder.printDebug("TRICORDER", text_return);
+  app_tricorder.printStopwatch(text_return);
   stopwatch_app_standby.printDebug("STANDBY", text_return);
   stopwatch_app_suspend.printDebug("SUSPEND", text_return);
   return 0;
@@ -1370,7 +1093,7 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
     case 0:    display.fillScreen(BLACK);                   break;
     case 1:    uApp::redraw_app_window("Test App Title", 0, 0);   break;
     case 2:    redraw_touch_test_window();                  break;
-    case 3:    redraw_tricorder_window();                   break;
+    case 3:    app_tricorder.refresh();                     break;
     case 4:    redraw_audio_window();                       break;
     case 5:
       display.setAddrWindow(0, 0, 96, 64);
@@ -1600,7 +1323,7 @@ int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
     }
   }
   else {   // No arguments means print the app index list.
-    listAllApplications(text_return);
+    uApp::listAllApplications(text_return);
   }
   return 0;
 }
@@ -1959,7 +1682,7 @@ int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
   if (1 == args->count()) {
     int arg0 = args->position_as_int(0);
   }
-  text_return->concat("CBOR test results: %d\n", ret);
+  text_return->concatf("CBOR test results: %d\n", ret);
   return ret;
 }
 

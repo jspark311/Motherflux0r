@@ -3,15 +3,58 @@
 */
 #include <Arduino.h>
 #include <StopWatch.h>
-#include "Motherflux0r.h"
 
 #ifndef __U_APP_H_
 #define __U_APP_H_
 
 
+/*******************************************************************************
+* Types
+*******************************************************************************/
+enum class AppID : uint8_t {
+  APP_SELECT   =  0,  // For choosing the app.
+  TOUCH_TEST   =  1,  // For diagnostics of the touch pad.
+  CONFIGURATOR =  2,  // For tuning all the things.
+  DATA_MGMT    =  3,  // For managing recorded datasets.
+  SYNTH_BOX    =  4,  // Sound synthesis from data.
+  COMMS_TEST   =  5,  // Connecting to the outside world.
+  META         =  6,  // Shutdown/reboot/reflash, profiles.
+  I2C_SCANNER  =  7,  // Tool for non-intrusively scanning foreign i2c buses.
+  TRICORDER    =  8,  // This is the primary purpose of the device.
+  HOT_STANDBY  =  9,  // Full operation with powered-down UI elements.
+  SUSPEND      = 10   // Minimal power without an obligatory reboot.
+};
+
+
+/* Struct for tracking application state. */
+// TODO: This should evolve into a class if we irradiate millions of copies of it.
+typedef struct {
+  const char* const title;           // Name of tha application.
+  const AppID       id;              // ID of the application.
+  uint8_t           page_count;      // Total page count.
+  uint8_t           page_top;        // The currently visible page.
+  uint8_t           slider_val;      // Cached slider value.
+  uint8_t           frame_rate;      // App's frame rate.
+  bool              screen_refresh;  // Set to indicate a refresh is needed.
+  bool              app_active;      // This app is active.
+  bool              locked;          // This app is locked into its current state.
+} AppHandle;
+
+/* Struct for defining global hotkeys. */
+typedef struct {
+  uint8_t id;        // Uniquely IDs this hotkey combo.
+  uint8_t buttons;   // To trigger, the button state must equal this...
+  uint32_t duration; // ...for at least this many milliseconds.
+} KeyCombo;
+
+
+
+
 /* Class flags */
 #define UAPP_FLAG_ENABLED          0x00000001  // This application is active.
-
+#define UAPP_FLAG_CLUTTER_DISPLAY  0x00000002  // User wants more information on the display.
+#define UAPP_FLAG_TEXT_OF_VALUE    0x00000004  // User wants more information on the display.
+#define UAPP_FLAG_LOCK_RANGE       0x00000008  // Lock the output range.
 
 
 /*******************************************************************************
@@ -26,11 +69,17 @@ class uApp {
     inline void deliverButtonValue(uint16_t val) {  _buttons_pending  = val;  };
 
     inline void printStopwatch(StringBuilder* out) {  _stopwatch.printDebug(_UA_NAME, out);   };
+    inline void resetStopwatch() {                    _stopwatch.reset();                     };
 
     static void  setAppActive(AppID);
     static AppID appActive();
     static AppID drawnApp();
     static AppID previousApp();
+
+    static int8_t redraw();
+    static uApp*  getActiveAppPtr();
+    static const char* const getAppIDString(AppID);
+    static void listAllApplications(StringBuilder*);
 
     // TODO: Should be protected.
     static void redraw_app_window(const char* title, uint8_t pages, uint8_t active_page);
@@ -47,6 +96,15 @@ class uApp {
     uApp(const char* _n) : _UA_NAME(_n) {};
     virtual ~uApp() {};
 
+    inline bool _cluttered_display() {        return _uapp_flag(UAPP_FLAG_CLUTTER_DISPLAY);   };
+    inline void _cluttered_display(bool x) {  _uapp_set_flag(UAPP_FLAG_CLUTTER_DISPLAY, x);   };
+    inline bool _render_text_value() {        return _uapp_flag(UAPP_FLAG_TEXT_OF_VALUE);     };
+    inline void _render_text_value(bool x) {  _uapp_set_flag(UAPP_FLAG_TEXT_OF_VALUE, x);     };
+    inline bool _render_lock_range() {        return _uapp_flag(UAPP_FLAG_LOCK_RANGE);        };
+    inline void _render_lock_range(bool x) {  _uapp_set_flag(UAPP_FLAG_LOCK_RANGE, x);        };
+
+
+
     /* Flag manipulation inlines */
     inline uint32_t _uapp_flags() {                return _flags;           };
     inline bool _uapp_flag(uint32_t _flag) {       return (_flags & _flag); };
@@ -61,8 +119,6 @@ class uApp {
   private:
     uint32_t      _flags     = 0;
     uint32_t      _last_draw = 0;
-
-
 };
 
 
@@ -76,8 +132,8 @@ class uAppTricorder : public uApp {
 
 
   private:
-
     int8_t _process_user_input();
+    void   _redraw_tricorder_window();
 
 };
 

@@ -78,23 +78,6 @@ const char* const getSensorIDString(SensorID e) {
 }
 
 
-const char* const getAppIDString(AppID e) {
-  switch (e) {
-    case AppID::APP_SELECT:       return "APP_SELECT";
-    case AppID::TOUCH_TEST:       return "TOUCH_TEST";
-    case AppID::CONFIGURATOR:     return "CONFIGURATOR";
-    case AppID::DATA_MGMT:        return "DATA_MGMT";
-    case AppID::SYNTH_BOX:        return "SYNTH_BOX";
-    case AppID::COMMS_TEST:       return "COMMS_TEST";
-    case AppID::META:             return "META";
-    case AppID::I2C_SCANNER:      return "I2C_SCANNER";
-    case AppID::TRICORDER:        return "TRICORDER";
-    case AppID::HOT_STANDBY:      return "HOT_STANDBY";
-    case AppID::SUSPEND:          return "SUSPEND";
-  }
-  return "UNKNOWN";
-}
-
 const char* const getDataVisString(DataVis e) {
   switch (e) {
     case DataVis::NONE:       return "NONE";
@@ -111,12 +94,6 @@ const char* const getDataVisString(DataVis e) {
 void listAllSensors(StringBuilder* output) {
   for (uint8_t i = 0; i < 11; i++) {
     output->concatf("%2u: %s\n", i, getSensorIDString((SensorID) i));
-  }
-}
-
-void listAllApplications(StringBuilder* output) {
-  for (uint8_t i = 0; i < 11; i++) {
-    output->concatf("%2u: %s\n", i, getAppIDString((AppID) i));
   }
 }
 

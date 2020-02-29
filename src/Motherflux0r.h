@@ -4,6 +4,7 @@
 #include <StringBuilder.h>
 #include <SensorFilter.h>
 
+
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
 
@@ -65,20 +66,6 @@
 /*******************************************************************************
 * Types
 *******************************************************************************/
-enum class AppID : uint8_t {
-  APP_SELECT   =  0,  // For choosing the app.
-  TOUCH_TEST   =  1,  // For diagnostics of the touch pad.
-  CONFIGURATOR =  2,  // For tuning all the things.
-  DATA_MGMT    =  3,  // For managing recorded datasets.
-  SYNTH_BOX    =  4,  // Sound synthesis from data.
-  COMMS_TEST   =  5,  // Connecting to the outside world.
-  META         =  6,  // Shutdown/reboot/reflash, profiles.
-  I2C_SCANNER  =  7,  // Tool for non-intrusively scanning foreign i2c buses.
-  TRICORDER    =  8,  // This is the primary purpose of the device.
-  HOT_STANDBY  =  9,  // Full operation with powered-down UI elements.
-  SUSPEND      = 10   // Minimal power without an obligatory reboot.
-};
-
 enum class SensorID : uint8_t {
   BARO          = 0,  //
   MAGNETOMETER  = 1,  //
@@ -104,27 +91,6 @@ enum class DataVis : uint8_t {
 };
 
 
-/* Struct for tracking application state. */
-// TODO: This should evolve into a class if we irradiate millions of copies of it.
-typedef struct {
-  const char* const title;           // Name of tha application.
-  const AppID       id;              // ID of the application.
-  uint8_t           page_count;      // Total page count.
-  uint8_t           page_top;        // The currently visible page.
-  uint8_t           slider_val;      // Cached slider value.
-  uint8_t           frame_rate;      // App's frame rate.
-  bool              screen_refresh;  // Set to indicate a refresh is needed.
-  bool              app_active;      // This app is active.
-  bool              locked;          // This app is locked into its current state.
-} AppHandle;
-
-/* Struct for defining global hotkeys. */
-typedef struct {
-  uint8_t id;        // Uniquely IDs this hotkey combo.
-  uint8_t buttons;   // To trigger, the button state must equal this...
-  uint32_t duration; // ...for at least this many milliseconds.
-} KeyCombo;
-
 
 /*******************************************************************************
 * Function prototypes
@@ -133,11 +99,10 @@ void ledOn(uint8_t idx, uint32_t duration, uint16_t intensity = 3500);
 void vibrateOn(uint32_t duration, uint16_t intensity = 4095);
 void timeoutCheckVibLED();
 
-const char* const getAppIDString(AppID);
 const char* const getSensorIDString(SensorID);
 const char* const getDataVisString(DataVis);
 void listAllSensors(StringBuilder*);
-void listAllApplications(StringBuilder*);
+
 
 float FindE(int bands, int bins);
 void  printFFTBins(StringBuilder*);
