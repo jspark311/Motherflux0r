@@ -129,6 +129,10 @@ typedef struct {
 /*******************************************************************************
 * Function prototypes
 *******************************************************************************/
+void ledOn(uint8_t idx, uint32_t duration, uint16_t intensity = 3500);
+void vibrateOn(uint32_t duration, uint16_t intensity = 4095);
+void timeoutCheckVibLED();
+
 const char* const getAppIDString(AppID);
 const char* const getSensorIDString(SensorID);
 const char* const getDataVisString(DataVis);

@@ -8,6 +8,54 @@
 
 extern Adafruit_SSD1331 display;
 
+static uint32_t off_time_vib      = 0;      // millis() when vibrator should be disabled.
+static uint32_t off_time_led_r    = 0;      // millis() when LED_R should be disabled.
+static uint32_t off_time_led_g    = 0;      // millis() when LED_G should be disabled.
+static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be disabled.
+
+
+/*******************************************************************************
+* LED and vibrator control
+* Only have enable functions since disable is done by timer in the main loop.
+*******************************************************************************/
+void ledOn(uint8_t idx, uint32_t duration, uint16_t intensity = 3500) {
+  uint32_t* millis_ptr = nullptr;
+  switch (idx) {
+    case LED_R_PIN:
+      analogWrite(LED_R_PIN, intensity);
+      millis_ptr = &off_time_led_r;
+      break;
+    case LED_G_PIN:
+      analogWrite(LED_G_PIN, intensity);
+      millis_ptr = &off_time_led_g;
+      break;
+    case LED_B_PIN:
+      analogWrite(LED_B_PIN, intensity);
+      millis_ptr = &off_time_led_b;
+      break;
+    default:
+      return;
+  }
+  *millis_ptr = millis() + duration;
+}
+
+
+void vibrateOn(uint32_t duration, uint16_t intensity = 4095) {
+  analogWrite(VIBRATOR_PIN, intensity);
+  off_time_vib = millis() + duration;
+}
+
+
+void timeoutCheckVibLED() {
+  uint32_t millis_now = millis();
+  if (millis_now >= off_time_led_r) {   pinMode(LED_R_PIN, INPUT);     }
+  if (millis_now >= off_time_led_g) {   pinMode(LED_G_PIN, INPUT);     }
+  if (millis_now >= off_time_led_b) {   pinMode(LED_B_PIN, INPUT);     }
+  if (millis_now >= off_time_vib) {     pinMode(VIBRATOR_PIN, INPUT);  }
+}
+
+
+
 /*******************************************************************************
 * Enum support functions
 *******************************************************************************/

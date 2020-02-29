@@ -1,4 +1,5 @@
 #include "Motherflux0r.h"
+#include "uApp.h"
 
 #include <math.h>
 #include <Arduino.h>
@@ -186,10 +187,6 @@ static SensorFilter<float> graph_array_frame_rate(FilteringStrategy::RAW, 96, 0)
 /* Cheeseball async support stuff. */
 static uint32_t boot_time         = 0;      // millis() at boot.
 static uint32_t config_time       = 0;      // millis() at end of setup().
-static uint32_t off_time_vib      = 0;      // millis() when vibrator should be disabled.
-static uint32_t off_time_led_r    = 0;      // millis() when LED_R should be disabled.
-static uint32_t off_time_led_g    = 0;      // millis() when LED_G should be disabled.
-static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be disabled.
 static uint32_t last_interaction  = 0;      // millis() when the user last interacted.
 static uint32_t disp_update_last  = 0;      // millis() when the display last updated.
 static uint32_t disp_update_next  = 0;      // millis() when the display next updates.
@@ -211,13 +208,12 @@ static const TCode arg_list_4_uuff[]  = {TCode::UINT,  TCode::UINT,  TCode::FLOA
 static const TCode arg_list_4_float[] = {TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::NONE};
 
 /* Application tracking and interrupts... */
-static AppID    active_app          = AppID::APP_SELECT;
-static AppID    drawn_app           = AppID::META;
 static AppID    app_page            = AppID::TRICORDER;
-static AppID    app_previous        = AppID::APP_SELECT;
+
 static bool     dirty_button        = false;
 static bool     dirty_slider        = false;
 static bool     imu_irq_fired       = false;
+
 
 
 /*******************************************************************************
@@ -228,74 +224,19 @@ void imu_isr_fxn() {         imu_irq_fired = true;        }
 
 
 /*******************************************************************************
-* LED and vibrator control
-* Only have enable functions since disable is done by timer in the main loop.
-*******************************************************************************/
-void ledOn(uint8_t idx, uint32_t duration, uint16_t intensity = 3500) {
-  uint32_t* millis_ptr = nullptr;
-  switch (idx) {
-    case LED_R_PIN:
-      analogWrite(LED_R_PIN, intensity);
-      millis_ptr = &off_time_led_r;
-      break;
-    case LED_G_PIN:
-      analogWrite(LED_G_PIN, intensity);
-      millis_ptr = &off_time_led_g;
-      break;
-    case LED_B_PIN:
-      analogWrite(LED_B_PIN, intensity);
-      millis_ptr = &off_time_led_b;
-      break;
-    default:
-      return;
-  }
-  *millis_ptr = millis() + duration;
-}
-
-
-void vibrateOn(uint32_t duration, uint16_t intensity = 4095) {
-  analogWrite(VIBRATOR_PIN, intensity);
-  off_time_vib = millis() + duration;
-}
-
-
-/*******************************************************************************
 * Display functions
 *******************************************************************************/
-/*
-* Draws the basics of the UI.
-* 96x64
-*/
-void redraw_app_window(const char* title, uint8_t pages, uint8_t active_page) {
-  display.fillScreen(BLACK);
-  display.setTextSize(0);
-  display.setCursor(0, 0);
-  display.setTextColor(WHITE);
-  //display.setTextColor(MAGENTA, BLACK);
-  display.print(title);
-  //display.drawLine(0, 10, display.width()-1, 10, WHITE);
-  //display.drawLine(0, display.height()-1, display.width()-1, display.height()-1, WHITE);
-  //display.drawLine(0, 10, 0, display.height()-1, WHITE);
-  //display.drawLine(display.width()-1, 10, display.width()-1, display.height()-1, WHITE);
-  //display.drawRect(0, 14, display.width()-1, display.height()-15, WHITE);
-  display.drawFastHLine(0, 9, display.width(), WHITE);
-  //render_button_icon(2, 46, 0, WHITE);
-  //render_button_icon(3, 55, 0, WHITE);
-  app_previous = drawn_app;
-  drawn_app = active_app;
-}
-
 
 /*
 * Draws the meta app.
 */
 void redraw_meta_window() {
-  if (drawn_app != active_app) {
+  if (uApp::drawnApp() != uApp::appActive()) {
     dirty_slider = true;
   }
 
   if (dirty_slider) {   // Initial frame changes go here.
-    redraw_app_window("Meta", 0, 0);
+    uApp::redraw_app_window("Meta", 0, 0);
     if (touch->sliderValue() <= 7) {
       // Basic firmware stuff
       display.setCursor(0, 11);
@@ -388,7 +329,7 @@ void redraw_meta_window() {
   if (dirty_button) {
     if (touch->buttonPressed(0)) {
       // Interpret a cancel press as a return to APP_SELECT.
-      active_app = AppID::APP_SELECT;
+      uApp::setAppActive(AppID::APP_SELECT);
     }
     dirty_button = false;
   }
@@ -399,15 +340,15 @@ void redraw_meta_window() {
 * Draws the configurator app.
 */
 void redraw_configurator_window() {
-  if (drawn_app != active_app) {
-    redraw_app_window("Configurator", 0, 0);
+  if (uApp::drawnApp() != uApp::appActive()) {
+    uApp::redraw_app_window("Configurator", 0, 0);
     display.setCursor(0, 11);
   }
 
   if (dirty_button) {
     if (touch->buttonPressed(0)) {
       // Interpret a cancel press as a return to APP_SELECT.
-      active_app = AppID::APP_SELECT;
+      uApp::setAppActive(AppID::APP_SELECT);
     }
     dirty_button = false;
   }
@@ -418,7 +359,7 @@ void redraw_configurator_window() {
 * Unit will drive while daydreaming.
 */
 void redraw_hot_standby_window() {
-  if (drawn_app != active_app) {
+  if (uApp::drawnApp() != uApp::appActive()) {
     display.fillScreen(BLACK);
   }
 
@@ -426,7 +367,7 @@ void redraw_hot_standby_window() {
     if (touch->buttonStates() == 0x0028) {
       // Buttons 0 and 2 (and ONLY those buttons) must be
       //   pressed to turn the UI elements back on.
-      active_app = AppID::APP_SELECT;
+      uApp::setAppActive(AppID::APP_SELECT);
     }
     dirty_button = false;
   }
@@ -436,7 +377,7 @@ void redraw_hot_standby_window() {
 * Unit will go to sleep at the wheel.
 */
 void redraw_suspended_window() {
-  if (drawn_app != active_app) {
+  if (uApp::drawnApp() != uApp::appActive()) {
     display.fillScreen(BLACK);
     // TODO: Put things into reset states.
     // TODO: Power off non-essential rails.
@@ -447,7 +388,7 @@ void redraw_suspended_window() {
   if (dirty_button) {
     if (touch->buttonStates() == 0x0050) {
       // Interpret a cancel press as a return to APP_SELECT.
-      active_app = AppID::APP_SELECT;
+      uApp::setAppActive(AppID::APP_SELECT);
     }
     dirty_button = false;
   }
@@ -458,14 +399,14 @@ void redraw_suspended_window() {
 * Draws the data manager app.
 */
 void redraw_data_mgmt_window() {
-  if (drawn_app != active_app) {
-    redraw_app_window("Data Manager", 0, 0);
+  if (uApp::drawnApp() != uApp::appActive()) {
+    uApp::redraw_app_window("Data Manager", 0, 0);
   }
 
   if (dirty_button) {
     if (touch->buttonPressed(0)) {
       // Interpret a cancel press as a return to APP_SELECT.
-      active_app = AppID::APP_SELECT;
+      uApp::setAppActive(AppID::APP_SELECT);
     }
     dirty_button = false;
   }
@@ -476,14 +417,14 @@ void redraw_data_mgmt_window() {
 * Draws the comms app.
 */
 void redraw_comms_root_window() {
-  if (drawn_app != active_app) {
-    redraw_app_window("Comms", 0, 0);
+  if (uApp::drawnApp() != uApp::appActive()) {
+    uApp::redraw_app_window("Comms", 0, 0);
   }
 
   if (dirty_button) {
     if (touch->buttonPressed(0)) {
       // Interpret a cancel press as a return to APP_SELECT.
-      active_app = AppID::APP_SELECT;
+      uApp::setAppActive(AppID::APP_SELECT);
     }
     dirty_button = false;
   }
@@ -496,14 +437,14 @@ static uint32_t last_i2c_scan = 0;
 * Draws the I2C app.
 */
 void redraw_i2c_probe_window() {
-  if (drawn_app != active_app) {
-    redraw_app_window("I2C Scanner", 0, 0);
+  if (uApp::drawnApp() != uApp::appActive()) {
+    uApp::redraw_app_window("I2C Scanner", 0, 0);
   }
   StringBuilder disp_str;
 
   if ((last_i2c_scan + 330) <= millis()) {
     if (touch->buttonPressed(4)) {
-      redraw_app_window("I2C Probe Wire", 0, 0);
+      uApp::redraw_app_window("I2C Probe Wire", 0, 0);
       for (uint8_t addr = 0; addr < 0x80; addr++) {
         Wire.beginTransmission(addr);
         if (0 == Wire.endTransmission()) {
@@ -518,7 +459,7 @@ void redraw_i2c_probe_window() {
       last_i2c_scan = millis();
     }
     else if (touch->buttonPressed(1)) {
-      redraw_app_window("I2C Probe Wire1", 0, 0);
+      uApp::redraw_app_window("I2C Probe Wire1", 0, 0);
       for (uint8_t addr = 0; addr < 0x80; addr++) {
         Wire1.beginTransmission(addr);
         if (0 == Wire1.endTransmission()) {
@@ -537,7 +478,7 @@ void redraw_i2c_probe_window() {
   if (dirty_button) {
     if (touch->buttonPressed(0)) {
       // Interpret a cancel press as a return to APP_SELECT.
-      active_app = AppID::APP_SELECT;
+      uApp::setAppActive(AppID::APP_SELECT);
     }
     dirty_button = false;
   }
@@ -548,8 +489,8 @@ void redraw_i2c_probe_window() {
 * Draws the touch test app.
 */
 void redraw_touch_test_window() {
-  if (drawn_app != active_app) {
-    redraw_app_window("SX8634 diag", 0, 0);
+  if (uApp::drawnApp() != uApp::appActive()) {
+    uApp::redraw_app_window("SX8634 diag", 0, 0);
     display.setCursor(0, 37);
     display.setTextColor(WHITE);
     display.print("Slider:");
@@ -565,7 +506,7 @@ void redraw_touch_test_window() {
         display.fillRoundRect(x_coords[i], y_coords[i], 18, 18, 4, RED);
         if ((0 == i) && (touch->sliderValue() == 0)) {
           // Interpret a cancel press as a return to APP_SELECT.
-          active_app = AppID::APP_SELECT;
+          uApp::setAppActive(AppID::APP_SELECT);
         }
       }
       else {
@@ -600,14 +541,14 @@ void redraw_touch_test_window() {
 * Draws the tricorder app.
 */
 void redraw_tricorder_window() {
-  if (drawn_app != active_app) {
-    redraw_app_window("Tricorder", 0, 0);
+  if (uApp::drawnApp() != uApp::appActive()) {
+    uApp::redraw_app_window("Tricorder", 0, 0);
     dirty_slider = true;
   }
 
   if (dirty_slider) {
     if (touch->sliderValue() <= 45) {
-      redraw_app_window("Tricorder", 0, 0);
+      uApp::redraw_app_window("Tricorder", 0, 0);
     }
     else {
       //display.fillRect(0, 11, display.width()-1, display.height()-12, BLACK);
@@ -855,7 +796,7 @@ void redraw_tricorder_window() {
   if (dirty_button) {
     if (touch->buttonPressed(0)) {
       // Interpret a cancel press as a return to APP_SELECT.
-      active_app = AppID::APP_SELECT;
+      uApp::setAppActive(AppID::APP_SELECT);
     }
     dirty_button = false;
   }
@@ -869,8 +810,8 @@ void redraw_app_select_window() {
   const uint8_t ICON_SIZE    = 32;
   const uint8_t TEXT_OFFSET = ICON_SIZE+11;
 
-  if (drawn_app != active_app) {
-    redraw_app_window("Select Function", 0, 0);
+  if (uApp::drawnApp() != uApp::appActive()) {
+    uApp::redraw_app_window("Select Function", 0, 0);
     dirty_slider = true;
   }
 
@@ -917,12 +858,12 @@ void redraw_app_select_window() {
 
   if (dirty_button) {
     if (touch->buttonPressed(2)) {
-      active_app = app_page;  // This will cause the app to switch.
+      uApp::setAppActive(app_page);  // This will cause the app to switch.
     }
     else if (touch->buttonPressed(0)) {
       // Interpret a cancel press as a request to doze.
       display.fillScreen(BLACK);
-      active_app = AppID::HOT_STANDBY;
+      uApp::setAppActive(AppID::HOT_STANDBY);
     }
     dirty_button = false;
   }
@@ -940,8 +881,8 @@ void redraw_app_select_window() {
 
 */
 void redraw_audio_window() {
-  if (drawn_app != active_app) {
-    redraw_app_window("SynthBox: ", 0, 0);
+  if (uApp::drawnApp() != uApp::appActive()) {
+    uApp::redraw_app_window("SynthBox: ", 0, 0);
   }
 
   if (dirty_slider) {
@@ -1097,7 +1038,7 @@ void redraw_audio_window() {
   if (dirty_button) {
     if (touch->buttonPressed(0)) {
       // Interpret a cancel press as a return to APP_SELECT.
-      active_app = AppID::APP_SELECT;
+      uApp::setAppActive(AppID::APP_SELECT);
     }
     dirty_button = false;
   }
@@ -1108,7 +1049,7 @@ void redraw_audio_window() {
 * Called at the frame-rate interval for the display.
 */
 void updateDisplay() {
-  switch (active_app) {
+  switch (uApp::appActive()) {
     case AppID::APP_SELECT:
       stopwatch_app_app_select.markStart();
       redraw_app_select_window();
@@ -1427,7 +1368,7 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
   uint32_t millis_1 = millis_0;
   switch (arg0) {
     case 0:    display.fillScreen(BLACK);                   break;
-    case 1:    redraw_app_window("Test App Title", 0, 0);   break;
+    case 1:    uApp::redraw_app_window("Test App Title", 0, 0);   break;
     case 2:    redraw_touch_test_window();                  break;
     case 3:    redraw_tricorder_window();                   break;
     case 4:    redraw_audio_window();                       break;
@@ -1642,17 +1583,17 @@ int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
   if (0 < args->count()) {
     int arg0 = args->position_as_int(0);
     switch (arg0) {
-      case 0:   active_app = AppID::APP_SELECT;    break;
-      case 1:   active_app = AppID::TOUCH_TEST;    break;
-      case 2:   active_app = AppID::CONFIGURATOR;  break;
-      case 3:   active_app = AppID::DATA_MGMT;     break;
-      case 4:   active_app = AppID::SYNTH_BOX;     break;
-      case 5:   active_app = AppID::COMMS_TEST;    break;
-      case 6:   active_app = AppID::META;          break;
-      case 7:   active_app = AppID::I2C_SCANNER;   break;
-      case 8:   active_app = AppID::TRICORDER;     break;
-      case 9:   active_app = AppID::HOT_STANDBY;   break;
-      case 10:  active_app = AppID::SUSPEND;       break;
+      case 0:   uApp::setAppActive(AppID::APP_SELECT);    break;
+      case 1:   uApp::setAppActive(AppID::TOUCH_TEST);    break;
+      case 2:   uApp::setAppActive(AppID::CONFIGURATOR);  break;
+      case 3:   uApp::setAppActive(AppID::DATA_MGMT);     break;
+      case 4:   uApp::setAppActive(AppID::SYNTH_BOX);     break;
+      case 5:   uApp::setAppActive(AppID::COMMS_TEST);    break;
+      case 6:   uApp::setAppActive(AppID::META);          break;
+      case 7:   uApp::setAppActive(AppID::I2C_SCANNER);   break;
+      case 8:   uApp::setAppActive(AppID::TRICORDER);     break;
+      case 9:   uApp::setAppActive(AppID::HOT_STANDBY);   break;
+      case 10:  uApp::setAppActive(AppID::SUSPEND);       break;
       default:
         text_return->concatf("Unsupported app: %d\n", arg0);
         return -1;
@@ -1690,6 +1631,7 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
   }
   return 0;
 }
+
 
 int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args) {
   int arg0 = args->position_as_int(0);
@@ -1738,6 +1680,7 @@ int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args)
   }
   return 0;
 }
+
 
 int callback_meta_filter_info(StringBuilder* text_return, StringBuilder* args) {
   int arg0 = args->position_as_int(0);
@@ -2231,38 +2174,38 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  //if (ICM_20948_Stat_Ok == imu.begin(IMU_CS_PIN, SPI, 6000000)) {
-  //  imu.swReset();
-  //  imu.sleep(false);
-  //  imu.lowPower(false);
-  //  imu.setSampleMode((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr | ICM_20948_Internal_Mag), ICM_20948_Sample_Mode_Continuous);
-  //  ICM_20948_fss_t myFSS;  // This uses a "Full Scale Settings" structure that can contain values for all configurable sensors
-  //  myFSS.a = gpm2;         // gpm2, gpm4, gpm8, gpm16
-  //  myFSS.g = dps250;       // dps250, dps500, dps1000, dps2000
-  //  imu.setFullScale((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myFSS);
-  //  // Set up Digital Low-Pass Filter configuration
-  //  ICM_20948_dlpcfg_t myDLPcfg;      // Similar to FSS, this uses a configuration structure for the desired sensors
-  //  myDLPcfg.a = acc_d473bw_n499bw;   // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
-  //                                    // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
-  //                                    // acc_d111bw4_n136bw
-  //                                    // acc_d50bw4_n68bw8
-  //                                    // acc_d23bw9_n34bw4
-  //                                    // acc_d11bw5_n17bw
-  //                                    // acc_d5bw7_n8bw3        - means 3 db bandwidth is 5.7 hz and nyquist bandwidth is 8.3 hz
-  //                                    // acc_d473bw_n499bw
-  //  myDLPcfg.g = gyr_d361bw4_n376bw5;    // gyr_d196bw6_n229bw8, gyr_d151bw8_n187bw6, gyr_d119bw5_n154bw3, gyr_d51bw2_n73bw3, gyr_d23bw9_n35bw9, gyr_d11bw6_n17bw8, gyr_d5bw7_n8bw9, gyr_d361bw4_n376bw5
-  //  imu.setDLPFcfg((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg);
-  //  // Choose whether or not to use DLPF
-  //  ICM_20948_Status_e accDLPEnableStat = imu.enableDLPF((ICM_20948_Internal_Gyr | ICM_20948_Internal_Acc), true);
-  //  if (255 != IMU_IRQ_PIN) {
-  //    pinMode(IMU_IRQ_PIN, INPUT);
-  //    imu.cfgIntActiveLow(true);
-  //    imu.cfgIntOpenDrain(false);
-  //    imu.cfgIntLatch(true);          // IRQ is a 50us pulse.
-  //    imu.intEnableRawDataReady(true);
-  //    attachInterrupt(digitalPinToInterrupt(IMU_IRQ_PIN), imu_isr_fxn, FALLING);
-  //  }
-  if (false) {
+  if (ICM_20948_Stat_Ok == imu.begin(IMU_CS_PIN, SPI, 6000000)) {
+    imu.swReset();
+    imu.sleep(false);
+    imu.lowPower(false);
+    imu.setSampleMode((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr | ICM_20948_Internal_Mag), ICM_20948_Sample_Mode_Continuous);
+    ICM_20948_fss_t myFSS;  // This uses a "Full Scale Settings" structure that can contain values for all configurable sensors
+    myFSS.a = gpm2;         // gpm2, gpm4, gpm8, gpm16
+    myFSS.g = dps250;       // dps250, dps500, dps1000, dps2000
+    imu.setFullScale((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myFSS);
+    // Set up Digital Low-Pass Filter configuration
+    ICM_20948_dlpcfg_t myDLPcfg;      // Similar to FSS, this uses a configuration structure for the desired sensors
+    myDLPcfg.a = acc_d473bw_n499bw;   // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
+                                      // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
+                                      // acc_d111bw4_n136bw
+                                      // acc_d50bw4_n68bw8
+                                      // acc_d23bw9_n34bw4
+                                      // acc_d11bw5_n17bw
+                                      // acc_d5bw7_n8bw3        - means 3 db bandwidth is 5.7 hz and nyquist bandwidth is 8.3 hz
+                                      // acc_d473bw_n499bw
+    myDLPcfg.g = gyr_d361bw4_n376bw5;    // gyr_d196bw6_n229bw8, gyr_d151bw8_n187bw6, gyr_d119bw5_n154bw3, gyr_d51bw2_n73bw3, gyr_d23bw9_n35bw9, gyr_d11bw6_n17bw8, gyr_d5bw7_n8bw9, gyr_d361bw4_n376bw5
+    imu.setDLPFcfg((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg);
+    // Choose whether or not to use DLPF
+    ICM_20948_Status_e accDLPEnableStat = imu.enableDLPF((ICM_20948_Internal_Gyr | ICM_20948_Internal_Acc), true);
+    if (255 != IMU_IRQ_PIN) {
+      pinMode(IMU_IRQ_PIN, INPUT);
+      imu.cfgIntActiveLow(true);
+      imu.cfgIntOpenDrain(false);
+      imu.cfgIntLatch(true);          // IRQ is a 50us pulse.
+      imu.intEnableRawDataReady(true);
+      attachInterrupt(digitalPinToInterrupt(IMU_IRQ_PIN), imu_isr_fxn, FALLING);
+    }
+  //if (false) {
   }
   else {
     display.setTextColor(RED);
@@ -2415,19 +2358,17 @@ void loop() {
     disp_update_rate  = 30;
   }
   stopwatch_touch_poll.markStop();
+
   if (imu_irq_fired) {
     imu_irq_fired = false;
-    //stopwatch_sensor_imu.markStart();
-    //read_imu();
-    //imu.clearInterrupts();
+    stopwatch_sensor_imu.markStart();
+    read_imu();
+    imu.clearInterrupts();
     stopwatch_sensor_imu.markStop();
   }
   /* Run our async cleanup stuff. */
   uint32_t millis_now = millis();
-  if (millis_now >= off_time_led_r) {   pinMode(LED_R_PIN, INPUT);     }
-  if (millis_now >= off_time_led_g) {   pinMode(LED_G_PIN, INPUT);     }
-  if (millis_now >= off_time_led_b) {   pinMode(LED_B_PIN, INPUT);     }
-  if (millis_now >= off_time_vib) {     pinMode(VIBRATOR_PIN, INPUT);  }
+  timeoutCheckVibLED();
 
   /* Poll each sensor class. */
   stopwatch_sensor_mag.markStart();
@@ -2451,8 +2392,8 @@ void loop() {
 
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
-    if (AppID::HOT_STANDBY != active_app) {
-      active_app = AppID::HOT_STANDBY;
+    if (AppID::HOT_STANDBY != uApp::appActive()) {
+      uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
 
