@@ -26,26 +26,6 @@
 #include "TMP102.h"
 
 
-/*******************************************************************************
-* Global constants
-*******************************************************************************/
-
-/* Audio related */
-static const uint16_t BIN_INDICIES[] = {
-  0,   0,   1,   1,   2,   2,   3,   3,   4,   4,   5,   5,   6,   6,   7,   7,
-  8,   8,   9,   9,   10,  10,  11,  11,  12,  12,  13,  13,  14,  14,  15,  15,
-  16,  16,  17,  17,  18,  18,  19,  19,  20,  20,  21,  21,  22,  22,  23,  24,
-  25,  26,  27,  28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,  39,  40,
-  41,  42,  43,  44,  45,  46,  47,  48,  49,  50,  51,  52,  53,  54,  55,  56,
-  57,  58,  59,  60,  61,  62,  63,  64,  65,  66,  67,  68,  69,  70,  71,  72,
-  73,  74,  75,  76,  77,  78,  79,  81,  82,  84,  85,  87,  88,  90,  91,  93,
-  94,  96,  97,  99,  100, 102, 103, 105, 106, 108, 109, 111, 112, 114, 115, 117,
-  118, 120, 121, 123, 124, 126, 127, 129, 130, 132, 133, 136, 137, 140, 141, 144,
-  145, 148, 149, 152, 153, 156, 157, 160, 161, 164, 165, 168, 169, 172, 173, 176,
-  177, 180, 181, 184, 185, 188, 189, 193, 194, 198, 199, 203, 204, 208, 209, 213,
-  214, 218, 219, 223, 224, 228, 229, 233, 234, 238, 239, 243, 244, 249, 250, 255
-};
-
 
 /*******************************************************************************
 * Globals
@@ -85,20 +65,16 @@ AudioConnection          patchCord15(ampR, 0, i2s_dac, 1);
 AudioConnection          patchCord16(ampL, 0, i2s_dac, 0);
 
 
-
-uint8_t fft_bars_shown[96];
-
-static float volume_left_output  = 0.1;
-static float volume_right_output = 0.1;
-static float volume_pink_noise   = 1.0;
-
-static float mix_synth_to_fft    = 0.0;
-static float mix_queueL_to_fft   = 0.0;
-static float mix_queueR_to_fft   = 0.0;
-static float mix_noise_to_fft    = 1.0;
-static float mix_synth_to_line   = 0.0;
-static float mix_queue_to_line   = 0.0;
-static float mix_noise_to_line   = 1.0;
+float volume_left_output  = 0.1;
+float volume_right_output = 0.1;
+float volume_pink_noise   = 1.0;
+float mix_synth_to_fft    = 0.0;
+float mix_queueL_to_fft   = 0.0;
+float mix_queueR_to_fft   = 0.0;
+float mix_noise_to_fft    = 1.0;
+float mix_synth_to_line   = 0.0;
+float mix_queue_to_line   = 0.0;
+float mix_noise_to_line   = 1.0;
 
 
 BME280Settings baro_settings(
@@ -117,7 +93,7 @@ static const SX8634Opts _touch_opts(
   TOUCH_RESET_PIN,          // Reset pin. Output. Active low.
   TOUCH_IRQ_PIN             // IRQ pin. Input. Active low. Needs pullup.
 );
-static SX8634* touch = nullptr;
+SX8634* touch = nullptr;
 
 
 /* Sensor representations... */
@@ -151,37 +127,30 @@ SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0
 SensorFilter<float> graph_array_mag_confidence(FilteringStrategy::RAW, 96, 0);
 
 /* Profiling data */
-static StopWatch stopwatch_main_loop_time;
-static StopWatch stopwatch_display;
-static StopWatch stopwatch_sensor_baro;
-static StopWatch stopwatch_sensor_uv;
-static StopWatch stopwatch_sensor_grideye;
-static StopWatch stopwatch_sensor_imu;
-static StopWatch stopwatch_sensor_lux;
-static StopWatch stopwatch_sensor_tmp102;
-static StopWatch stopwatch_sensor_mag;
-static StopWatch stopwatch_touch_poll;
-static StopWatch stopwatch_app_app_select;
-static StopWatch stopwatch_app_touch_test;
-static StopWatch stopwatch_app_configurator;
-static StopWatch stopwatch_app_data_mgmt;
-static StopWatch stopwatch_app_synthbox;
-static StopWatch stopwatch_app_comms;
-static StopWatch stopwatch_app_meta;
-static StopWatch stopwatch_app_i2c_scanner;
-static StopWatch stopwatch_app_standby;
-static StopWatch stopwatch_app_suspend;
-static SensorFilter<float> graph_array_cpu_time(FilteringStrategy::MOVING_MED, 96, 0);
-static SensorFilter<float> graph_array_frame_rate(FilteringStrategy::RAW, 96, 0);
+StopWatch stopwatch_main_loop_time;
+StopWatch stopwatch_display;
+StopWatch stopwatch_sensor_baro;
+StopWatch stopwatch_sensor_uv;
+StopWatch stopwatch_sensor_grideye;
+StopWatch stopwatch_sensor_imu;
+StopWatch stopwatch_sensor_lux;
+StopWatch stopwatch_sensor_tmp102;
+StopWatch stopwatch_sensor_mag;
+StopWatch stopwatch_touch_poll;
+StopWatch stopwatch_app_data_mgmt;
+StopWatch stopwatch_app_i2c_scanner;
+StopWatch stopwatch_app_suspend;
+SensorFilter<float> graph_array_cpu_time(FilteringStrategy::MOVING_MED, 96, 0);
+SensorFilter<float> graph_array_frame_rate(FilteringStrategy::RAW, 96, 0);
 
 
 /* Cheeseball async support stuff. */
-static uint32_t boot_time         = 0;      // millis() at boot.
-static uint32_t config_time       = 0;      // millis() at end of setup().
-static uint32_t last_interaction  = 0;      // millis() when the user last interacted.
-static uint32_t disp_update_last  = 0;      // millis() when the display last updated.
-static uint32_t disp_update_next  = 0;      // millis() when the display next updates.
-static uint32_t disp_update_rate  = 1;      // Update in Hz for the display
+uint32_t boot_time         = 0;      // millis() at boot.
+uint32_t config_time       = 0;      // millis() at end of setup().
+uint32_t last_interaction  = 0;      // millis() when the user last interacted.
+uint32_t disp_update_last  = 0;      // millis() when the display last updated.
+uint32_t disp_update_next  = 0;      // millis() when the display next updates.
+uint32_t disp_update_rate  = 1;      // Update in Hz for the display
 
 
 /* Console junk... */
@@ -196,12 +165,20 @@ static const TCode arg_list_4_uuff[]  = {TCode::UINT,  TCode::UINT,  TCode::FLOA
 static const TCode arg_list_4_float[] = {TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::NONE};
 
 /* Application tracking and interrupts... */
-static AppID    app_page            = AppID::TRICORDER;
+
 static bool     dirty_button        = false;
 static bool     dirty_slider        = false;
 static bool     imu_irq_fired       = false;
 
 uAppTricorder app_tricorder;
+uAppMeta app_meta;
+uAppTouchTest app_touch_test;
+uAppRoot app_root;
+uAppSynthBox app_synthbox;
+uAppStandby app_standby;
+uAppConfigurator app_config;
+uAppComms app_comms;
+
 
 
 /*******************************************************************************
@@ -215,151 +192,6 @@ void imu_isr_fxn() {         imu_irq_fired = true;        }
 * Display functions
 *******************************************************************************/
 
-/*
-* Draws the meta app.
-*/
-void redraw_meta_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    dirty_slider = true;
-  }
-
-  if (dirty_slider) {   // Initial frame changes go here.
-    uApp::redraw_app_window("Meta", 0, 0);
-    if (touch->sliderValue() <= 7) {
-      // Basic firmware stuff
-      display.setCursor(0, 11);
-      display.setTextSize(0);
-      display.setTextColor(WHITE);
-      display.print("Firmware ");
-      display.setTextColor(CYAN);
-      display.println(TEST_PROG_VERSION);
-      display.setTextColor(CYAN);
-      display.println(__DATE__);
-      display.println(__TIME__);
-      display.setTextColor(WHITE);
-      display.println("Touch:  ");
-      display.println("Uptime: ");
-      display.print("FPS:    ");
-    }
-    else if (touch->sliderValue() <= 22) {
-      display.setCursor(0, 11);
-      display.setTextSize(0);
-      display.setTextColor(WHITE);
-      display.println("ML Worst");
-      display.println("ML Best");
-      display.println("ML Mean");
-      display.println("ML Last");
-    }
-    dirty_slider = false;
-  }
-
-  if (touch->sliderValue() <= 7) {
-    display.setTextColor(CYAN, BLACK);
-    display.setCursor(47, 35);
-    SX8634OpMode tmode = touch->operationalMode();
-    display.print(touch->getModeStr(tmode));
-    display.setCursor(47, 43);
-    display.print(millis() - boot_time);
-    display.setCursor(47, 51);
-    display.print(disp_update_rate);
-  }
-  else if (touch->sliderValue() <= 15) {
-    if (graph_array_frame_rate.dirty()) {
-      draw_graph_obj(
-        0, 10, 96, 45, CYAN,
-        true, touch->buttonPressed(1), touch->buttonPressed(4),
-        &graph_array_frame_rate
-      );
-      display.setTextSize(0);
-      display.setCursor(0, 56);
-      display.setTextColor(WHITE);
-      display.print("Framerate:  ");
-      display.setTextColor(CYAN, BLACK);
-      display.print(graph_array_frame_rate.value());
-    }
-  }
-  else if (touch->sliderValue() <= 22) {
-    display.setTextColor(CYAN, BLACK);
-    display.setCursor(52, 11);
-    display.print(stopwatch_main_loop_time.worstTime());
-    display.setCursor(52, 19);
-    display.print(stopwatch_main_loop_time.bestTime());
-    display.setCursor(52, 27);
-    display.print(stopwatch_main_loop_time.meanTime());
-    display.setCursor(52, 35);
-    display.print(stopwatch_main_loop_time.lastTime());
-  }
-  else if (touch->sliderValue() <= 30) {
-  }
-  else if (touch->sliderValue() <= 37) {
-  }
-  else if (touch->sliderValue() <= 45) {
-  }
-  else if (touch->sliderValue() <= 52) {
-  }
-  else {
-    // CPU load metrics
-    if (graph_array_cpu_time.dirty()) {
-      draw_graph_obj(
-        0, 10, 96, 45, 0xFE00,
-        true, touch->buttonPressed(1), touch->buttonPressed(4),
-        &graph_array_cpu_time
-      );
-      display.setTextSize(0);
-      display.setCursor(0, 56);
-      display.setTextColor(WHITE);
-      display.print("Load:  ");
-      display.setTextColor(GREEN, BLACK);
-      display.print(graph_array_cpu_time.value());
-    }
-  }
-
-  if (dirty_button) {
-    if (touch->buttonPressed(0)) {
-      // Interpret a cancel press as a return to APP_SELECT.
-      uApp::setAppActive(AppID::APP_SELECT);
-    }
-    dirty_button = false;
-  }
-}
-
-
-/*
-* Draws the configurator app.
-*/
-void redraw_configurator_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    uApp::redraw_app_window("Configurator", 0, 0);
-    display.setCursor(0, 11);
-  }
-
-  if (dirty_button) {
-    if (touch->buttonPressed(0)) {
-      // Interpret a cancel press as a return to APP_SELECT.
-      uApp::setAppActive(AppID::APP_SELECT);
-    }
-    dirty_button = false;
-  }
-}
-
-
-/*
-* Unit will drive while daydreaming.
-*/
-void redraw_hot_standby_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    display.fillScreen(BLACK);
-  }
-
-  if (dirty_button) {
-    if (touch->buttonStates() == 0x0028) {
-      // Buttons 0 and 2 (and ONLY those buttons) must be
-      //   pressed to turn the UI elements back on.
-      uApp::setAppActive(AppID::APP_SELECT);
-    }
-    dirty_button = false;
-  }
-}
 
 /*
 * Unit will go to sleep at the wheel.
@@ -400,23 +232,6 @@ void redraw_data_mgmt_window() {
   }
 }
 
-
-/*
-* Draws the comms app.
-*/
-void redraw_comms_root_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    uApp::redraw_app_window("Comms", 0, 0);
-  }
-
-  if (dirty_button) {
-    if (touch->buttonPressed(0)) {
-      // Interpret a cancel press as a return to APP_SELECT.
-      uApp::setAppActive(AppID::APP_SELECT);
-    }
-    dirty_button = false;
-  }
-}
 
 
 static uint32_t last_i2c_scan = 0;
@@ -474,351 +289,29 @@ void redraw_i2c_probe_window() {
 
 
 /*
-* Draws the touch test app.
-*/
-void redraw_touch_test_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    uApp::redraw_app_window("SX8634 diag", 0, 0);
-    display.setCursor(0, 37);
-    display.setTextColor(WHITE);
-    display.print("Slider:");
-    dirty_button = true;
-    dirty_slider = true;
-  }
-
-  if (dirty_button) {
-    const uint8_t x_coords[] = {37, 57, 77, 77, 57, 37};
-    const uint8_t y_coords[] = {14, 14, 14, 34, 34, 34};
-    for (uint8_t i = 0; i < 6; i++) {
-      if (touch->buttonPressed(i)) {
-        display.fillRoundRect(x_coords[i], y_coords[i], 18, 18, 4, RED);
-        if ((0 == i) && (touch->sliderValue() == 0)) {
-          // Interpret a cancel press as a return to APP_SELECT.
-          uApp::setAppActive(AppID::APP_SELECT);
-        }
-      }
-      else {
-        display.fillRect(x_coords[i], y_coords[i], 18, 18, BLACK);
-        display.drawRoundRect(x_coords[i], y_coords[i], 18, 18, 4, GREEN);
-      }
-    }
-    display.setCursor(0, 29);
-    display.fillRect(0, 29, 28, 8, BLACK);
-    display.setTextColor(RED, BLACK);
-    display.print(touch->buttonStates(), HEX);
-    dirty_button = false;
-  }
-  if (dirty_slider) {
-    uint16_t sval = 60 - touch->sliderValue();
-    dirty_slider = false;
-    //display.fillRect(0, 45, 28, 8, BLACK);
-    display.setTextSize(0);
-    display.setCursor(0, 45);
-    display.setTextColor(WHITE, BLACK);
-    display.print(sval);
-
-    uint8_t slider_pix = 2 + (((1+sval) / 61.0f) * (display.width()-5));
-    display.fillRect(0, 55, display.width()-1, 7, BLACK);
-    display.drawRoundRect(0, 54, display.width(), 9, 3, GREEN);
-    display.fillRect(slider_pix-1, 55, 3, 7, RED);
-  }
-}
-
-
-/*
-* Draws the app selection window.
-*/
-void redraw_app_select_window() {
-  const uint8_t ICON_SIZE    = 32;
-  const uint8_t TEXT_OFFSET = ICON_SIZE+11;
-
-  if (uApp::drawnApp() != uApp::appActive()) {
-    uApp::redraw_app_window("Select Function", 0, 0);
-    dirty_slider = true;
-  }
-
-  if (dirty_slider) {
-    display.fillRect(0, 11, display.width()-1, display.height()-12, BLACK);
-    display.setCursor(0, TEXT_OFFSET);
-    display.setTextColor(WHITE);
-    display.print("Fxn: ");
-    display.setTextColor(MAGENTA, BLACK);
-    if (touch->sliderValue() <= 7) {
-      display.print("Touch Diag");
-      app_page = AppID::TOUCH_TEST;
-    }
-    else if (touch->sliderValue() <= 15) {
-      display.print("Settings");
-      app_page = AppID::CONFIGURATOR;
-    }
-    else if (touch->sliderValue() <= 22) {
-      display.print("Data MGMT");
-      app_page = AppID::DATA_MGMT;
-    }
-    else if (touch->sliderValue() <= 30) {
-      display.print("Synth Box");
-      app_page = AppID::SYNTH_BOX;
-    }
-    else if (touch->sliderValue() <= 37) {
-      display.print("Comms");
-      app_page = AppID::COMMS_TEST;
-    }
-    else if (touch->sliderValue() <= 45) {
-      display.print("Meta");
-      app_page = AppID::META;
-    }
-    else if (touch->sliderValue() <= 52) {
-      display.print("I2C Scanner");
-      app_page = AppID::I2C_SCANNER;
-    }
-    else {
-      display.print("Tricorder");
-      app_page = AppID::TRICORDER;
-    }
-    dirty_slider = false;
-  }
-
-  if (dirty_button) {
-    if (touch->buttonPressed(2)) {
-      uApp::setAppActive(app_page);  // This will cause the app to switch.
-    }
-    else if (touch->buttonPressed(0)) {
-      // Interpret a cancel press as a request to doze.
-      display.fillScreen(BLACK);
-      uApp::setAppActive(AppID::HOT_STANDBY);
-    }
-    dirty_button = false;
-  }
-}
-
-
-/*
-* Draws the synth and sound app.
-  sineL.amplitude(1.0);
-  sineL.frequency(440);
-  sineL.phase(0);
-  sineR.amplitude(0.8);
-  sineR.frequency(660);
-  sineR.phase(0);
-
-*/
-void redraw_audio_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    uApp::redraw_app_window("SynthBox: ", 0, 0);
-  }
-
-  if (dirty_slider) {
-    //sineL.frequency(10+300*touch->sliderValue());
-    //sineR.frequency(610+300*touch->sliderValue());
-    display.fillRect(0, 11, display.width()-1, display.height()-12, BLACK);
-    display.setCursor(64, 0);
-    display.setTextColor(YELLOW, BLACK);
-    if (touch->sliderValue() <= 7) {
-      display.print("Vol  ");
-      draw_progress_bar_vertical(0,  11, 27, 52, GREEN, true, true, volume_left_output);
-      draw_progress_bar_vertical(29, 11, 27, 52, GREEN, true, true, volume_right_output);
-      draw_progress_bar_vertical(58, 11, 27, 52, GREEN, true, true, volume_pink_noise);
-    }
-    else if (touch->sliderValue() <= 15) {
-      display.print("Mix F");
-      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, true, true, mix_queueL_to_fft);
-      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, true, true, mix_queueR_to_fft);
-      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, true, true, mix_noise_to_fft);
-      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, true, true, 0.0);
-    }
-    else if (touch->sliderValue() <= 22) {
-      display.print("Mix O");
-      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, true, true, mix_synth_to_line);
-      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, true, true, mix_queue_to_line);
-      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, true, true, mix_noise_to_line);
-      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, true, true, 0.0);
-    }
-    else if (touch->sliderValue() <= 30) {
-      display.print("DTMF ");
-    }
-    else if (touch->sliderValue() <= 37) {
-      display.print("Slot0 ");
-    }
-    else if (touch->sliderValue() <= 45) {
-      display.print("Slot1 ");
-    }
-    else if (touch->sliderValue() <= 52) {
-      display.print("Slot2 ");
-    }
-    else {
-      display.print("FFT  ");
-    }
-    dirty_slider = false;
-  }
-
-  if (touch->sliderValue() <= 7) {
-    bool up_pressed   = touch->buttonPressed(1);
-    bool down_pressed = touch->buttonPressed(4);
-    if (down_pressed && !up_pressed) {
-      float temp_float = volume_left_output - 0.05;
-      if (temp_float < 0.0) temp_float = 0.0;
-      volume_left_output  = temp_float;
-      volume_right_output = temp_float;
-    }
-    else if (!down_pressed && up_pressed) {
-      float temp_float = volume_left_output + 0.05;
-      if (temp_float > 1.0) temp_float = 1.0;
-      volume_left_output  = temp_float;
-      volume_right_output = temp_float;
-    }
-    if (down_pressed | up_pressed) {
-      ampL.gain(volume_left_output);
-      ampR.gain(volume_right_output);
-      pinkNoise.amplitude(volume_pink_noise);
-      draw_progress_bar_vertical(0,  11, 27, 52, GREEN, false, true, volume_left_output);
-      draw_progress_bar_vertical(29, 11, 27, 52, GREEN, false, true, volume_right_output);
-      draw_progress_bar_vertical(58, 11, 27, 52, GREEN, false, true, volume_pink_noise);
-    }
-  }
-  else if (touch->sliderValue() <= 15) {
-    bool up_pressed   = touch->buttonPressed(1);
-    bool down_pressed = touch->buttonPressed(4);
-    if (down_pressed && !up_pressed) {
-      mix_noise_to_fft  -= 0.05;
-      if (mix_noise_to_fft < 0.0) mix_noise_to_fft = 0.0;
-    }
-    else if (!down_pressed && up_pressed) {
-      mix_noise_to_fft += 0.05;
-      if (mix_noise_to_fft > 1.0) mix_noise_to_fft = 1.0;
-    }
-    if (down_pressed | up_pressed) {
-      mixerFFT.gain(0, mix_queueL_to_fft);
-      mixerFFT.gain(1, mix_queueR_to_fft);
-      mixerFFT.gain(2, mix_noise_to_fft);
-      mixerFFT.gain(3, 0.0);
-      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, false, true, mix_queueL_to_fft);
-      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, false, true, mix_queueR_to_fft);
-      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, false, true, mix_noise_to_fft);
-      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, false, true, 0.0);
-    }
-  }
-  else if (touch->sliderValue() <= 22) {
-    bool up_pressed   = touch->buttonPressed(1);
-    bool down_pressed = touch->buttonPressed(4);
-    if (down_pressed && !up_pressed) {
-      mix_synth_to_line  -= 0.05;
-      if (mix_synth_to_line < 0.0) mix_synth_to_line = 0.0;
-    }
-    else if (!down_pressed && up_pressed) {
-      mix_synth_to_line += 0.05;
-      if (mix_synth_to_line > 1.0) mix_synth_to_line = 1.0;
-    }
-    if (down_pressed | up_pressed) {
-      mixerL.gain(0, mix_queue_to_line);
-      mixerL.gain(1, mix_noise_to_line);
-      mixerL.gain(2, mix_synth_to_line);
-      mixerL.gain(3, 0.0);
-      mixerR.gain(0, mix_queue_to_line);
-      mixerR.gain(1, mix_noise_to_line);
-      mixerR.gain(2, mix_synth_to_line);
-      mixerR.gain(3, 0.0);
-      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, false, true, mix_synth_to_line);
-      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, false, true, mix_queue_to_line);
-      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, false, true, mix_noise_to_line);
-      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, false, true, 0.0);
-    }
-  }
-  else if (touch->sliderValue() <= 30) {
-  }
-  else if (touch->sliderValue() <= 37) {
-  }
-  else if (touch->sliderValue() <= 45) {
-  }
-  else if (touch->sliderValue() <= 52) {
-  }
-  else {
-    const float SCALER_PIX   = 52;
-    const int   SHOWN_DECAY  = 1;
-    float fft_bins[96];
-    for (uint8_t i = 0; i < 96; i++) {
-      fft_bins[i] = fft256_1.read(BIN_INDICIES[i << 1], BIN_INDICIES[(i << 1) + 1]);
-    }
-    for (uint8_t i = 0; i < 96; i++) {
-      uint8_t scaled_val = fft_bins[i] * SCALER_PIX;
-      uint y_real  = (display.height()-12) - scaled_val;
-      uint h_real  = (display.height()-12) - scaled_val;
-      display.drawFastVLine(i, 11, display.height()-12, BLACK);
-      if (scaled_val >= fft_bars_shown[i]) {
-        fft_bars_shown[i] = scaled_val;
-        display.drawFastVLine(i, y_real, h_real, GREEN);
-      }
-      else {
-        if (fft_bars_shown[i] > 0) fft_bars_shown[i] = fft_bars_shown[i] - SHOWN_DECAY;
-        uint y_decay = (display.height()-12) - fft_bars_shown[i];
-        uint h_decay = y_decay - h_real;
-        display.drawFastVLine(i, y_decay, h_decay, GREEN);
-        display.drawFastVLine(i, y_real, h_real, WHITE);
-      }
-    }
-  }
-
-  if (dirty_button) {
-    if (touch->buttonPressed(0)) {
-      // Interpret a cancel press as a return to APP_SELECT.
-      uApp::setAppActive(AppID::APP_SELECT);
-    }
-    dirty_button = false;
-  }
-}
-
-
-/*
 * Called at the frame-rate interval for the display.
 */
 void updateDisplay() {
   switch (uApp::appActive()) {
-    case AppID::APP_SELECT:
-      stopwatch_app_app_select.markStart();
-      redraw_app_select_window();
-      stopwatch_app_app_select.markStop();
-      break;
-    case AppID::TOUCH_TEST:
-      stopwatch_app_touch_test.markStart();
-      redraw_touch_test_window();
-      stopwatch_app_touch_test.markStop();
-      break;
-    case AppID::CONFIGURATOR:
-      stopwatch_app_configurator.markStart();
-      redraw_configurator_window();
-      stopwatch_app_configurator.markStop();
-      break;
+    case AppID::TOUCH_TEST:     app_touch_test.refresh();   break;
+    case AppID::META:           app_meta.refresh();         break;
+    case AppID::TRICORDER:      app_tricorder.refresh();    break;
+    case AppID::APP_SELECT:     app_root.refresh();         break;
+    case AppID::SYNTH_BOX:      app_synthbox.refresh();     break;
+    case AppID::HOT_STANDBY:    app_standby.refresh();      break;
+    case AppID::CONFIGURATOR:   app_config.refresh();       break;
+    case AppID::COMMS_TEST:     app_comms.refresh();        break;
+
+
     case AppID::DATA_MGMT:
       stopwatch_app_data_mgmt.markStart();
       redraw_data_mgmt_window();
       stopwatch_app_data_mgmt.markStop();
       break;
-    case AppID::SYNTH_BOX:
-      stopwatch_app_synthbox.markStart();
-      redraw_audio_window();
-      stopwatch_app_synthbox.markStop();
-      break;
-    case AppID::COMMS_TEST:
-      stopwatch_app_comms.markStart();
-      redraw_comms_root_window();
-      stopwatch_app_comms.markStop();
-      break;
-    case AppID::META:
-      stopwatch_app_meta.markStart();
-      redraw_meta_window();
-      stopwatch_app_meta.markStop();
-      break;
     case AppID::I2C_SCANNER:
       stopwatch_app_i2c_scanner.markStart();
       redraw_i2c_probe_window();
       stopwatch_app_i2c_scanner.markStop();
-      break;
-    case AppID::TRICORDER:
-      app_tricorder.refresh();
-      break;
-    case AppID::HOT_STANDBY:
-      stopwatch_app_standby.markStart();
-      redraw_hot_standby_window();
-      stopwatch_app_standby.markStop();
       break;
     case AppID::SUSPEND:
       stopwatch_app_suspend.markStart();
@@ -827,6 +320,7 @@ void updateDisplay() {
       break;
   }
 }
+
 
 
 
@@ -922,23 +416,47 @@ static void cb_button(int button, bool pressed) {
   last_interaction = millis();
   if (pressed) {
     vibrateOn(19);
-    app_tricorder.deliverButtonValue(touch->buttonStates());
-  }
-  else {
-    dirty_button = true;
   }
   ledOn(LED_B_PIN, 2, 3500);
+  uint16_t value = touch->buttonStates();
+  last_interaction = millis();
+  switch (uApp::appActive()) {
+    case AppID::TOUCH_TEST:     app_touch_test.deliverButtonValue(value);    break;
+    case AppID::META:           app_meta.deliverButtonValue(value);          break;
+    case AppID::TRICORDER:      app_tricorder.deliverButtonValue(value);     break;
+    case AppID::APP_SELECT:     app_root.deliverButtonValue(value);          break;
+    case AppID::SYNTH_BOX:      app_synthbox.deliverButtonValue(value);      break;
+    case AppID::HOT_STANDBY:    app_standby.deliverButtonValue(value);       break;
+    case AppID::CONFIGURATOR:   app_config.deliverButtonValue(value);        break;
+    case AppID::COMMS_TEST:     app_comms.deliverButtonValue(value);         break;
+    case AppID::DATA_MGMT:
+    case AppID::I2C_SCANNER:
+    case AppID::SUSPEND:
+    default:
+      dirty_button = true;
+      break;
+  }
 }
 
 
 static void cb_slider(int slider, int value) {
   last_interaction = millis();
   ledOn(LED_R_PIN, 60, 3500);
-  if (uApp::appActive() == AppID::TRICORDER) {
-    app_tricorder.deliverSliderValue(value);
-  }
-  else {
-    dirty_slider = true;
+  switch (uApp::appActive()) {
+    case AppID::TOUCH_TEST:     app_touch_test.deliverSliderValue(value);    break;
+    case AppID::META:           app_meta.deliverSliderValue(value);          break;
+    case AppID::TRICORDER:      app_tricorder.deliverSliderValue(value);     break;
+    case AppID::APP_SELECT:     app_root.deliverSliderValue(value);          break;
+    case AppID::SYNTH_BOX:      app_synthbox.deliverSliderValue(value);      break;
+    case AppID::HOT_STANDBY:    app_standby.deliverSliderValue(value);       break;
+    case AppID::CONFIGURATOR:   app_config.deliverSliderValue(value);        break;
+    case AppID::COMMS_TEST:     app_comms.deliverSliderValue(value);         break;
+    case AppID::DATA_MGMT:
+    case AppID::I2C_SCANNER:
+    case AppID::SUSPEND:
+    default:
+      dirty_slider = true;
+      break;
   }
 }
 
@@ -999,33 +517,33 @@ int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* ar
 
 int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args) {
   if (args->count() > 0) {
+    app_meta.resetStopwatch();
+    app_touch_test.resetStopwatch();
+    app_tricorder.resetStopwatch();
+    app_root.resetStopwatch();
+    app_synthbox.resetStopwatch();
+    app_standby.resetStopwatch();
+    app_config.resetStopwatch();
+    app_comms.resetStopwatch();
     stopwatch_main_loop_time.reset();
     stopwatch_display.reset();
-    stopwatch_app_app_select.reset();
-    stopwatch_app_touch_test.reset();
-    stopwatch_app_configurator.reset();
     stopwatch_app_data_mgmt.reset();
-    stopwatch_app_synthbox.reset();
-    stopwatch_app_comms.reset();
-    stopwatch_app_meta.reset();
     stopwatch_app_i2c_scanner.reset();
-    app_tricorder.resetStopwatch();
-    stopwatch_app_standby.reset();
     stopwatch_app_suspend.reset();
   }
   StopWatch::printDebugHeader(text_return);
+  app_meta.printStopwatch(text_return);
+  app_touch_test.printStopwatch(text_return);
+  app_tricorder.printStopwatch(text_return);
+  app_root.printStopwatch(text_return);
+  app_synthbox.printStopwatch(text_return);
+  app_standby.printStopwatch(text_return);
+  app_config.printStopwatch(text_return);
+  app_comms.printStopwatch(text_return);
   stopwatch_main_loop_time.printDebug("Main loop", text_return);
   stopwatch_display.printDebug("Display", text_return);
-  stopwatch_app_app_select.printDebug("APP_SELECT", text_return);
-  stopwatch_app_touch_test.printDebug("TOUCH TEST", text_return);
-  stopwatch_app_configurator.printDebug("CONFIGURATOR", text_return);
   stopwatch_app_data_mgmt.printDebug("DATA MGMT", text_return);
-  stopwatch_app_synthbox.printDebug("SYNTH BOX", text_return);
-  stopwatch_app_comms.printDebug("COMMS", text_return);
-  stopwatch_app_meta.printDebug("META", text_return);
   stopwatch_app_i2c_scanner.printDebug("I2C SCANNER", text_return);
-  app_tricorder.printStopwatch(text_return);
-  stopwatch_app_standby.printDebug("STANDBY", text_return);
   stopwatch_app_suspend.printDebug("SUSPEND", text_return);
   return 0;
 }
@@ -1092,9 +610,9 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
   switch (arg0) {
     case 0:    display.fillScreen(BLACK);                   break;
     case 1:    uApp::redraw_app_window("Test App Title", 0, 0);   break;
-    case 2:    redraw_touch_test_window();                  break;
+    case 2:    app_touch_test.refresh();                    break;
     case 3:    app_tricorder.refresh();                     break;
-    case 4:    redraw_audio_window();                       break;
+    case 4:    app_synthbox.refresh();                      break;
     case 5:
       display.setAddrWindow(0, 0, 96, 64);
       for (uint8_t h = 0; h < 64; h++) {

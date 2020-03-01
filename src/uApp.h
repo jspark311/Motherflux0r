@@ -56,6 +56,9 @@ typedef struct {
 #define UAPP_FLAG_TEXT_OF_VALUE    0x00000004  // User wants more information on the display.
 #define UAPP_FLAG_LOCK_RANGE       0x00000008  // Lock the output range.
 
+#define UAPP_FLAG_PRESS_UP         0x40000000  //
+#define UAPP_FLAG_PRESS_DOWN       0x80000000  //
+
 
 /*******************************************************************************
 *******************************************************************************/
@@ -96,6 +99,8 @@ class uApp {
     uApp(const char* _n) : _UA_NAME(_n) {};
     virtual ~uApp() {};
 
+    inline void redraw_app_window() {         redraw_app_window(_UA_NAME, 0, 0);  };
+
     inline bool _cluttered_display() {        return _uapp_flag(UAPP_FLAG_CLUTTER_DISPLAY);   };
     inline void _cluttered_display(bool x) {  _uapp_set_flag(UAPP_FLAG_CLUTTER_DISPLAY, x);   };
     inline bool _render_text_value() {        return _uapp_flag(UAPP_FLAG_TEXT_OF_VALUE);     };
@@ -103,7 +108,10 @@ class uApp {
     inline bool _render_lock_range() {        return _uapp_flag(UAPP_FLAG_LOCK_RANGE);        };
     inline void _render_lock_range(bool x) {  _uapp_set_flag(UAPP_FLAG_LOCK_RANGE, x);        };
 
-
+    inline bool _button_pressed_up() {        return _uapp_flag(UAPP_FLAG_PRESS_UP);        };
+    inline void _button_pressed_up(bool x) {  _uapp_set_flag(UAPP_FLAG_PRESS_UP, x);        };
+    inline bool _button_pressed_dn() {        return _uapp_flag(UAPP_FLAG_PRESS_DOWN);      };
+    inline void _button_pressed_dn(bool x) {  _uapp_set_flag(UAPP_FLAG_PRESS_DOWN, x);      };
 
     /* Flag manipulation inlines */
     inline uint32_t _uapp_flags() {                return _flags;           };
@@ -127,16 +135,102 @@ class uAppTricorder : public uApp {
   public:
     uAppTricorder();
     ~uAppTricorder();
-
     int8_t refresh();
-
 
   private:
     int8_t _process_user_input();
-    void   _redraw_tricorder_window();
-
+    void   _redraw_window();
 };
 
+
+
+class uAppTouchTest : public uApp {
+  public:
+    uAppTouchTest();
+    ~uAppTouchTest();
+    int8_t refresh();
+
+  private:
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
+
+
+
+class uAppMeta : public uApp {
+  public:
+    uAppMeta();
+    ~uAppMeta();
+    int8_t refresh();
+
+  private:
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
+
+
+class uAppRoot : public uApp {
+  public:
+    uAppRoot();
+    ~uAppRoot();
+    int8_t refresh();
+
+  private:
+    AppID app_page = AppID::TRICORDER;
+
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
+
+
+class uAppSynthBox : public uApp {
+  public:
+    uAppSynthBox();
+    ~uAppSynthBox();
+    int8_t refresh();
+
+  private:
+    uint8_t fft_bars_shown[96];
+
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
+
+
+class uAppStandby : public uApp {
+  public:
+    uAppStandby();
+    ~uAppStandby();
+    int8_t refresh();
+
+  private:
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
+
+
+class uAppConfigurator : public uApp {
+  public:
+    uAppConfigurator();
+    ~uAppConfigurator();
+    int8_t refresh();
+
+  private:
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
+
+
+class uAppComms : public uApp {
+  public:
+    uAppComms();
+    ~uAppComms();
+    int8_t refresh();
+
+  private:
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
 
 
 #endif   // __U_APP_H_

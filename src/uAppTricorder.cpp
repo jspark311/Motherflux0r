@@ -64,13 +64,13 @@ int8_t uAppTricorder::refresh() {
   int8_t ret = 0;
   _stopwatch.markStart();
   if (uApp::drawnApp() != uApp::appActive()) {
-    uApp::redraw_app_window("Tricorder", 0, 0);
+    redraw_app_window();
   }
   switch (_process_user_input()) {
     case 2:
     case 1:
     case 0:
-      _redraw_tricorder_window();
+      _redraw_window();
     default:
       break;
   }
@@ -85,7 +85,7 @@ int8_t uAppTricorder::_process_user_input() {
 
   if (_slider_current != _slider_pending) {
     if (_slider_pending <= 45) {
-      uApp::redraw_app_window("Tricorder", 0, 0);
+      redraw_app_window();
     }
     else {
       //display.fillRect(0, 11, display.width()-1, display.height()-12, BLACK);
@@ -125,7 +125,7 @@ int8_t uAppTricorder::_process_user_input() {
 /*
 * Draws the tricorder app.
 */
-void uAppTricorder::_redraw_tricorder_window() {
+void uAppTricorder::_redraw_window() {
   if (_slider_pending <= 7) {
     // Baro
     if (graph_array_humidity.dirty()) {
