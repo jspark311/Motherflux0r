@@ -8,7 +8,7 @@
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
 
-#define TEST_PROG_VERSION          "v1.4"
+#define TEST_PROG_VERSION          "v1.5"
 #define TOUCH_DWELL_LONG_PRESS       1000  // Milliseconds for "long-press".
 #define E_VAL                      1.0184
 
@@ -23,7 +23,7 @@
 #define VIBRATOR_PIN         5
 #define TOUCH_IRQ_PIN        6
 #define DAC_DIN_PIN          7
-#define PSU_SX_IRQ_PIN     255   // Presently unused.
+#define PSU_SX_IRQ_PIN     255   // 8 Presently unused.
 #define TSL2561_IRQ_PIN    255 // 9
 #define DISPLAY_CS_PIN      10
 #define SPIMOSI_PIN         11
@@ -106,7 +106,7 @@ void listAllSensors(StringBuilder*);
 
 float FindE(int bands, int bins);
 void  printFFTBins(StringBuilder*);
-uint8_t* bitmapPointer(unsigned int idx);
+uint16_t* bitmapPointer(unsigned int idx);
 
 /* Display helper routines */
 void render_button_icon(uint8_t sym, int x, int y, uint16_t color);
@@ -167,6 +167,9 @@ void draw_data_view_selector(
 #define ICON_MIC       9
 #define ICON_MAGNET   10
 #define ICON_BATTERY  11
-
+#define BUTTON_LEFT  252
+#define BUTTON_RIGHT 253
+#define BUTTON_UP    254
+#define BUTTON_DOWN  255
 
 #endif    // __MOTHERFLUX0R_H__

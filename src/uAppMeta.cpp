@@ -81,30 +81,23 @@ int8_t uAppMeta::_process_user_input() {
       display.println("ML Mean");
       display.println("ML Last");
     }
+    else if (_slider_current <= 30) {
+    }
     _slider_current = _slider_pending;
     ret++;
   }
   if (_buttons_current != _buttons_pending) {
     uint16_t diff = _buttons_current ^ _buttons_pending;
+
     if (diff & 0x0001) {   // Interpret a cancel press as a return to APP_SELECT.
       uApp::setAppActive(AppID::APP_SELECT);
     }
-    if (diff & 0x0002) {   // Cluttered display toggle.
-      if (_buttons_pending & 0x0002) {
-        _cluttered_display(!_cluttered_display());
-      }
-    }
-    if (diff & 0x0008) {   // Text of actual value.
-      if (_buttons_pending & 0x0008) {
-        _render_text_value(!_render_text_value());
-      }
-    }
-    if (diff & 0x0010) {   // Button 5
-      if (_buttons_pending & 0x0010) {
-        _render_lock_range(!_render_lock_range());
-      }
-    }
+
     _buttons_current = _buttons_pending;
+    bool up_pressed   = (_buttons_current & 0x0002);
+    bool down_pressed = (_buttons_current & 0x0010);
+    _button_pressed_up(!down_pressed && up_pressed);
+    _button_pressed_dn(down_pressed && !up_pressed);
     ret++;
   }
   return ret;
@@ -152,6 +145,39 @@ void uAppMeta::_redraw_window() {
     display.print(stopwatch_main_loop_time.lastTime());
   }
   else if (_slider_current <= 30) {
+    StringBuilder disp_str;
+    if ((_last_i2c_scan + 600) <= millis()) {
+      if (_button_pressed_up()) {
+        uApp::redraw_app_window("I2C Probe Wire", 0, 0);
+        for (uint8_t addr = 0; addr < 0x80; addr++) {
+          Wire.beginTransmission(addr);
+          if (0 == Wire.endTransmission()) {
+            disp_str.concatf("0x%02x ", addr);
+            display.drawPixel(addr & 0x1F, 11 + (addr >> 5), CYAN);
+          }
+        }
+        if (disp_str.length() > 0) {
+          display.setCursor(0, 20);
+          display.print((char*) disp_str.string());
+        }
+        _last_i2c_scan = millis();
+      }
+      else if (_button_pressed_dn()) {
+        uApp::redraw_app_window("I2C Probe Wire1", 0, 0);
+        for (uint8_t addr = 0; addr < 0x80; addr++) {
+          Wire1.beginTransmission(addr);
+          if (0 == Wire1.endTransmission()) {
+            disp_str.concatf("0x%02x ", addr);
+            display.drawPixel(addr & 0x1F, 11 + (addr >> 5), CYAN);
+          }
+        }
+        if (disp_str.length() > 0) {
+          display.setCursor(0, 20);
+          display.print((char*) disp_str.string());
+        }
+        _last_i2c_scan = millis();
+      }
+    }
   }
   else if (_slider_current <= 37) {
   }

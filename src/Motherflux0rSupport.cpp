@@ -171,7 +171,7 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
   int x2 = 0;
   int y2 = 0;
   switch (sym) {
-    case 0:
+    case BUTTON_UP:
       x0 = x + (ICON_SIZE >> 1);
       y0 = y;
       x1 = x;
@@ -180,7 +180,7 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
       y2 = y + ICON_SIZE;
       display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
       break;
-    case 1:
+    case BUTTON_DOWN:
       x0 = x;
       y0 = y;
       x1 = x + ICON_SIZE;
@@ -189,7 +189,7 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
       y2 = y + ICON_SIZE;
       display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
       break;
-    case 2:
+    case BUTTON_LEFT:
       x0 = x + ICON_SIZE;
       y0 = y;
       x1 = x;
@@ -198,7 +198,7 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
       y2 = y + ICON_SIZE;
       display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
       break;
-    case 3:
+    case BUTTON_RIGHT:
       x0 = x;
       y0 = y;
       x1 = x + ICON_SIZE;
@@ -207,12 +207,30 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
       y2 = y + ICON_SIZE;
       display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
       break;
-    case 4:
-      display.drawBitmap(x, y, bitmapPointer(ICON_ACCEPT), 9, 9, color);
-      break;
-    case 5:
-      //display.drawLine(0, 10, display.width()-1, 10, WHITE);
-      display.drawBitmap(x, y, bitmapPointer(ICON_CANCEL), 9, 9, color);
+		case ICON_CANCEL:
+		case ICON_ACCEPT:
+		case ICON_THERMO:
+		case ICON_IMU:
+		case ICON_GPS:
+		case ICON_LIGHT:
+		case ICON_UVI:
+		case ICON_SOUND:
+		case ICON_RH:
+		case ICON_MIC:
+		case ICON_MAGNET:
+		case ICON_BATTERY:
+      {
+        uint16_t* iptr = bitmapPointer(sym);
+        const uint16_t EXTENT_X = *iptr++;
+        const uint16_t EXTENT_Y = *iptr++;
+        display.setAddrWindow(x, y, EXTENT_X, EXTENT_Y);
+        for (uint8_t h = 0; h < EXTENT_Y; h++) {
+          for (uint8_t w = 0; w < EXTENT_X; w++) {
+            display.writePixel(x+w, y+h, *iptr++);
+          }
+        }
+        display.endWrite();
+      }
       break;
   }
 }

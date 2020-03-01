@@ -49,7 +49,7 @@ int8_t uAppStandby::_process_user_input() {
   }
   if (_buttons_current != _buttons_pending) {
     uint16_t diff = _buttons_current ^ _buttons_pending;
-    if (_buttons_current == 0x0050) {
+    if (_buttons_pending == 0x0028) {
       // Interpret a cancel press as a return to APP_SELECT.
       uApp::setAppActive(AppID::APP_SELECT);
     }

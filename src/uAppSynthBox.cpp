@@ -124,10 +124,6 @@ int8_t uAppSynthBox::_process_user_input() {
   }
   if (_buttons_current != _buttons_pending) {
     uint16_t diff = _buttons_current ^ _buttons_pending;
-    bool up_pressed   = (_buttons_pending & 0x0002);
-    bool down_pressed = (_buttons_pending & 0x0008);
-    _button_pressed_up(down_pressed && !up_pressed);
-    _button_pressed_dn(!down_pressed && up_pressed);
 
     if (diff & 0x0001) {   // Interpret a cancel press as a return to APP_SELECT.
       uApp::setAppActive(AppID::APP_SELECT);
@@ -148,6 +144,10 @@ int8_t uAppSynthBox::_process_user_input() {
       }
     }
     _buttons_current = _buttons_pending;
+    bool up_pressed   = (_buttons_current & 0x0002);
+    bool down_pressed = (_buttons_current & 0x0010);
+    _button_pressed_up(!down_pressed && up_pressed);
+    _button_pressed_dn(down_pressed && !up_pressed);
     ret++;
   }
   return ret;

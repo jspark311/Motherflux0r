@@ -138,7 +138,6 @@ StopWatch stopwatch_sensor_tmp102;
 StopWatch stopwatch_sensor_mag;
 StopWatch stopwatch_touch_poll;
 StopWatch stopwatch_app_data_mgmt;
-StopWatch stopwatch_app_i2c_scanner;
 StopWatch stopwatch_app_suspend;
 SensorFilter<float> graph_array_cpu_time(FilteringStrategy::MOVING_MED, 96, 0);
 SensorFilter<float> graph_array_frame_rate(FilteringStrategy::RAW, 96, 0);
@@ -193,27 +192,6 @@ void imu_isr_fxn() {         imu_irq_fired = true;        }
 *******************************************************************************/
 
 
-/*
-* Unit will go to sleep at the wheel.
-*/
-void redraw_suspended_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    display.fillScreen(BLACK);
-    // TODO: Put things into reset states.
-    // TODO: Power off non-essential rails.
-    // TODO: Scale back the CPU clock.
-    // TODO: Set wake sources.
-  }
-
-  if (dirty_button) {
-    if (touch->buttonStates() == 0x0050) {
-      // Interpret a cancel press as a return to APP_SELECT.
-      uApp::setAppActive(AppID::APP_SELECT);
-    }
-    dirty_button = false;
-  }
-}
-
 
 /*
 * Draws the data manager app.
@@ -234,60 +212,6 @@ void redraw_data_mgmt_window() {
 
 
 
-static uint32_t last_i2c_scan = 0;
-
-/*
-* Draws the I2C app.
-*/
-void redraw_i2c_probe_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    uApp::redraw_app_window("I2C Scanner", 0, 0);
-  }
-  StringBuilder disp_str;
-
-  if ((last_i2c_scan + 330) <= millis()) {
-    if (touch->buttonPressed(4)) {
-      uApp::redraw_app_window("I2C Probe Wire", 0, 0);
-      for (uint8_t addr = 0; addr < 0x80; addr++) {
-        Wire.beginTransmission(addr);
-        if (0 == Wire.endTransmission()) {
-          disp_str.concatf("0x%02x ", addr);
-          display.drawPixel(addr & 0x1F, 11 + (addr >> 5), RED);
-        }
-      }
-      if (disp_str.length() > 0) {
-        display.setCursor(0, 20);
-        display.print((char*) disp_str.string());
-      }
-      last_i2c_scan = millis();
-    }
-    else if (touch->buttonPressed(1)) {
-      uApp::redraw_app_window("I2C Probe Wire1", 0, 0);
-      for (uint8_t addr = 0; addr < 0x80; addr++) {
-        Wire1.beginTransmission(addr);
-        if (0 == Wire1.endTransmission()) {
-          disp_str.concatf("0x%02x ", addr);
-          display.drawPixel(addr & 0x1F, 11 + (addr >> 5), RED);
-        }
-      }
-      if (disp_str.length() > 0) {
-        display.setCursor(0, 20);
-        display.print((char*) disp_str.string());
-      }
-      last_i2c_scan = millis();
-    }
-  }
-
-  if (dirty_button) {
-    if (touch->buttonPressed(0)) {
-      // Interpret a cancel press as a return to APP_SELECT.
-      uApp::setAppActive(AppID::APP_SELECT);
-    }
-    dirty_button = false;
-  }
-}
-
-
 /*
 * Called at the frame-rate interval for the display.
 */
@@ -298,9 +222,10 @@ void updateDisplay() {
     case AppID::TRICORDER:      app_tricorder.refresh();    break;
     case AppID::APP_SELECT:     app_root.refresh();         break;
     case AppID::SYNTH_BOX:      app_synthbox.refresh();     break;
-    case AppID::HOT_STANDBY:    app_standby.refresh();      break;
     case AppID::CONFIGURATOR:   app_config.refresh();       break;
     case AppID::COMMS_TEST:     app_comms.refresh();        break;
+    case AppID::SUSPEND:
+    case AppID::HOT_STANDBY:    app_standby.refresh();      break;
 
 
     case AppID::DATA_MGMT:
@@ -308,15 +233,7 @@ void updateDisplay() {
       redraw_data_mgmt_window();
       stopwatch_app_data_mgmt.markStop();
       break;
-    case AppID::I2C_SCANNER:
-      stopwatch_app_i2c_scanner.markStart();
-      redraw_i2c_probe_window();
-      stopwatch_app_i2c_scanner.markStop();
-      break;
-    case AppID::SUSPEND:
-      stopwatch_app_suspend.markStart();
-      redraw_suspended_window();
-      stopwatch_app_suspend.markStop();
+    default:
       break;
   }
 }
@@ -426,12 +343,12 @@ static void cb_button(int button, bool pressed) {
     case AppID::TRICORDER:      app_tricorder.deliverButtonValue(value);     break;
     case AppID::APP_SELECT:     app_root.deliverButtonValue(value);          break;
     case AppID::SYNTH_BOX:      app_synthbox.deliverButtonValue(value);      break;
-    case AppID::HOT_STANDBY:    app_standby.deliverButtonValue(value);       break;
     case AppID::CONFIGURATOR:   app_config.deliverButtonValue(value);        break;
     case AppID::COMMS_TEST:     app_comms.deliverButtonValue(value);         break;
+    case AppID::SUSPEND:
+    case AppID::HOT_STANDBY:    app_standby.deliverButtonValue(value);       break;
     case AppID::DATA_MGMT:
     case AppID::I2C_SCANNER:
-    case AppID::SUSPEND:
     default:
       dirty_button = true;
       break;
@@ -448,12 +365,12 @@ static void cb_slider(int slider, int value) {
     case AppID::TRICORDER:      app_tricorder.deliverSliderValue(value);     break;
     case AppID::APP_SELECT:     app_root.deliverSliderValue(value);          break;
     case AppID::SYNTH_BOX:      app_synthbox.deliverSliderValue(value);      break;
-    case AppID::HOT_STANDBY:    app_standby.deliverSliderValue(value);       break;
     case AppID::CONFIGURATOR:   app_config.deliverSliderValue(value);        break;
     case AppID::COMMS_TEST:     app_comms.deliverSliderValue(value);         break;
+    case AppID::SUSPEND:
+    case AppID::HOT_STANDBY:    app_standby.deliverSliderValue(value);       break;
     case AppID::DATA_MGMT:
     case AppID::I2C_SCANNER:
-    case AppID::SUSPEND:
     default:
       dirty_slider = true;
       break;
@@ -528,7 +445,6 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
     stopwatch_main_loop_time.reset();
     stopwatch_display.reset();
     stopwatch_app_data_mgmt.reset();
-    stopwatch_app_i2c_scanner.reset();
     stopwatch_app_suspend.reset();
   }
   StopWatch::printDebugHeader(text_return);
@@ -543,7 +459,6 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
   stopwatch_main_loop_time.printDebug("Main loop", text_return);
   stopwatch_display.printDebug("Display", text_return);
   stopwatch_app_data_mgmt.printDebug("DATA MGMT", text_return);
-  stopwatch_app_i2c_scanner.printDebug("I2C SCANNER", text_return);
   stopwatch_app_suspend.printDebug("SUSPEND", text_return);
   return 0;
 }
@@ -631,39 +546,16 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       break;
     case 6:
       display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_THERMO), 14, 32, 0xFFFF);
-      delay(5000);
-      display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_IMU), 32, 32, 0xFFFF);
-      delay(5000);
-      display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_GPS), 32, 32, 0xFFFF);
-      delay(5000);
-      display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_LIGHT), 28, 32, 0xFFFF);
-      delay(5000);
-      display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_UVI), 32, 32, 0xFFFF);
-      delay(5000);
-      display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_SOUND), 40, 32, 0xFFFF);
-      delay(5000);
-      display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_RH), 22, 32, 0xFFFF);
-      delay(5000);
-      display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_MIC), 19, 32, 0xFFFF);
-      delay(5000);
-      display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_MAGNET), 22, 32, 0xFFFF);
-      delay(5000);
-      display.fillScreen(BLACK);
-      display.drawBitmap(0, 0, bitmapPointer(ICON_BATTERY), 52, 32, 0xFFFF);
-      delay(5000);
+      render_button_icon(4, 0, 0, 0xFFFF);
+      render_button_icon(5, 9, 0, 0xFFFF);
+      render_button_icon(6, 0, 9, 0xFFFF);
+      render_button_icon(7, 0, 23, 0xFFFF);
+      render_button_icon(8, 32, 23, 0xFFFF);
+      render_button_icon(9, 0, 55, 0xFFFF);
       break;
     case 7:
       display.fillScreen(BLACK);
-      render_button_icon(0, 0, 0, WHITE);
+      render_button_icon(0, 0,  0, WHITE);
       render_button_icon(1, 10, 0, WHITE);
       render_button_icon(2, 20, 0, WHITE);
       render_button_icon(3, 30, 0, WHITE);

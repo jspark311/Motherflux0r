@@ -164,6 +164,8 @@ class uAppMeta : public uApp {
     int8_t refresh();
 
   private:
+    uint32_t _last_i2c_scan = 0;
+
     int8_t _process_user_input();
     void   _redraw_window();
 };

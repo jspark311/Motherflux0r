@@ -231,6 +231,9 @@ class BME280 {
     float      _air_temp    = 0.0;
     float      _pressure    = 0.0;
     float      _humidity    = 0.0;
+    float      _altitude    = 0.0;
+    float      _dew_point   = 0.0;
+    float      _esl_pres    = 0.0;
     uint32_t   _last_read   = 0;
     uint16_t   _flags       = 0;
     LengthUnit _unit_length = LengthUnit::Meters;
