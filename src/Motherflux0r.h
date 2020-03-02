@@ -155,21 +155,30 @@ void draw_data_view_selector(
   DataVis selected
 );
 
-#define ICON_CANCEL    0
-#define ICON_ACCEPT    1
-#define ICON_THERMO    2
-#define ICON_IMU       3
-#define ICON_GPS       4
-#define ICON_LIGHT     5
-#define ICON_UVI       6
-#define ICON_SOUND     7
-#define ICON_RH        8
-#define ICON_MIC       9
-#define ICON_MAGNET   10
-#define ICON_BATTERY  11
-#define BUTTON_LEFT  252
-#define BUTTON_RIGHT 253
-#define BUTTON_UP    254
-#define BUTTON_DOWN  255
+void draw_3sphere(
+  int x, int y, int w, int h,
+  bool opaque,
+  int meridians, int parallels,
+  float euler_about_x, float euler_about_y   // TODO: A quat would be cleaner.
+);
+
+
+// TODO: Enum this?
+#define ICON_CANCEL    0  // Flash-resident bitmap
+#define ICON_ACCEPT    1  // Flash-resident bitmap
+#define ICON_THERMO    2  // Flash-resident bitmap
+#define ICON_IMU       3  // Flash-resident bitmap
+#define ICON_GPS       4  // Flash-resident bitmap
+#define ICON_LIGHT     5  // Flash-resident bitmap
+#define ICON_UVI       6  // Flash-resident bitmap
+#define ICON_SOUND     7  // Flash-resident bitmap
+#define ICON_RH        8  // Flash-resident bitmap
+#define ICON_MIC       9  // Flash-resident bitmap
+#define ICON_MAGNET   10  // Flash-resident bitmap
+#define ICON_BATTERY  11  // Flash-resident bitmap
+#define BUTTON_LEFT  252  // Drawn with code
+#define BUTTON_RIGHT 253  // Drawn with code
+#define BUTTON_UP    254  // Drawn with code
+#define BUTTON_DOWN  255  // Drawn with code
 
 #endif    // __MOTHERFLUX0R_H__

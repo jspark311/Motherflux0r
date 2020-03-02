@@ -10,7 +10,7 @@ extern Adafruit_SSD1331 display;
 
 
 
-uAppRoot::uAppRoot() : uApp("Select Fxn") {}
+uAppRoot::uAppRoot() : uApp("Root menu") {}
 
 
 uAppRoot::~uAppRoot() {}

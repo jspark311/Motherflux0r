@@ -236,6 +236,39 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
 }
 
 
+/*******************************************************************************
+* Functions for rendering cartesian graphs
+* TODO: This is getting to the point where it should be encapsulated.
+*******************************************************************************/
+
+#define GRAPH_FLAG_FULL_REDRAW              0x08000000   // Full redraw
+#define GRAPH_FLAG_DRAW_RULE_H              0x10000000   //
+#define GRAPH_FLAG_DRAW_RULE_V              0x20000000   //
+#define GRAPH_FLAG_DRAW_TICKS_H             0x40000000   //
+#define GRAPH_FLAG_DRAW_TICKS_V             0x80000000   //
+
+
+/*
+* Draws the frame of graph, and returns inlay size via parameters.
+*/
+void _draw_graph_obj_frame(
+  int* x, int* y, int* w, int* h, uint16_t color,
+  uint32_t flags
+) {
+  const int INSET_X = (flags & GRAPH_FLAG_DRAW_TICKS_V) ? 3 : 1;
+  const int INSET_Y = (flags & GRAPH_FLAG_DRAW_TICKS_H) ? 3 : 1;
+
+  display.fillRect(*x, *y, *w, *h, BLACK);
+  display.drawFastVLine(*x+(INSET_X - 1), (*y + *h) - (INSET_Y - 1), *h - (INSET_Y - 1), color);
+  display.drawFastHLine(*x+(INSET_X - 1), (*y + *h) - (INSET_Y - 1), *w - (INSET_X - 1), color);
+  *x = *x + INSET_X;
+  *y = *y + INSET_Y;
+  *w = *w - INSET_X;
+  *h = *h - INSET_Y;
+}
+
+
+
 /*
 * Given a data array, and parameters for the graph, draw the data to the
 *   display.
@@ -245,6 +278,8 @@ void draw_graph_obj(
   bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
   float* dataset, uint32_t data_len
 ) {
+  display.setAddrWindow(x, y, EXTENT_X, EXTENT_Y);
+
   if (draw_base) {   // Draw the basic frame and axes?
     display.drawFastVLine(x, y, h, WHITE);
     display.drawFastHLine(x, y+h, w, WHITE);
@@ -284,6 +319,7 @@ void draw_graph_obj(
     display.setTextColor(color);
     display.print(*(dataset + (data_len-1)));
   }
+  display.endWrite();
 }
 
 

@@ -137,8 +137,6 @@ StopWatch stopwatch_sensor_lux;
 StopWatch stopwatch_sensor_tmp102;
 StopWatch stopwatch_sensor_mag;
 StopWatch stopwatch_touch_poll;
-StopWatch stopwatch_app_data_mgmt;
-StopWatch stopwatch_app_suspend;
 SensorFilter<float> graph_array_cpu_time(FilteringStrategy::MOVING_MED, 96, 0);
 SensorFilter<float> graph_array_frame_rate(FilteringStrategy::RAW, 96, 0);
 
@@ -164,11 +162,6 @@ static const TCode arg_list_4_uuff[]  = {TCode::UINT,  TCode::UINT,  TCode::FLOA
 static const TCode arg_list_4_float[] = {TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::NONE};
 
 /* Application tracking and interrupts... */
-
-static bool     dirty_button        = false;
-static bool     dirty_slider        = false;
-static bool     imu_irq_fired       = false;
-
 uAppTricorder app_tricorder;
 uAppMeta app_meta;
 uAppTouchTest app_touch_test;
@@ -177,6 +170,9 @@ uAppSynthBox app_synthbox;
 uAppStandby app_standby;
 uAppConfigurator app_config;
 uAppComms app_comms;
+
+static bool     imu_irq_fired       = false;
+
 
 
 
@@ -190,28 +186,6 @@ void imu_isr_fxn() {         imu_irq_fired = true;        }
 /*******************************************************************************
 * Display functions
 *******************************************************************************/
-
-
-
-/*
-* Draws the data manager app.
-*/
-void redraw_data_mgmt_window() {
-  if (uApp::drawnApp() != uApp::appActive()) {
-    uApp::redraw_app_window("Data Manager", 0, 0);
-  }
-
-  if (dirty_button) {
-    if (touch->buttonPressed(0)) {
-      // Interpret a cancel press as a return to APP_SELECT.
-      uApp::setAppActive(AppID::APP_SELECT);
-    }
-    dirty_button = false;
-  }
-}
-
-
-
 /*
 * Called at the frame-rate interval for the display.
 */
@@ -226,13 +200,6 @@ void updateDisplay() {
     case AppID::COMMS_TEST:     app_comms.refresh();        break;
     case AppID::SUSPEND:
     case AppID::HOT_STANDBY:    app_standby.refresh();      break;
-
-
-    case AppID::DATA_MGMT:
-      stopwatch_app_data_mgmt.markStart();
-      redraw_data_mgmt_window();
-      stopwatch_app_data_mgmt.markStop();
-      break;
     default:
       break;
   }
@@ -350,7 +317,6 @@ static void cb_button(int button, bool pressed) {
     case AppID::DATA_MGMT:
     case AppID::I2C_SCANNER:
     default:
-      dirty_button = true;
       break;
   }
 }
@@ -372,7 +338,6 @@ static void cb_slider(int slider, int value) {
     case AppID::DATA_MGMT:
     case AppID::I2C_SCANNER:
     default:
-      dirty_slider = true;
       break;
   }
 }
@@ -444,8 +409,6 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
     app_comms.resetStopwatch();
     stopwatch_main_loop_time.reset();
     stopwatch_display.reset();
-    stopwatch_app_data_mgmt.reset();
-    stopwatch_app_suspend.reset();
   }
   StopWatch::printDebugHeader(text_return);
   app_meta.printStopwatch(text_return);
@@ -458,8 +421,6 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
   app_comms.printStopwatch(text_return);
   stopwatch_main_loop_time.printDebug("Main loop", text_return);
   stopwatch_display.printDebug("Display", text_return);
-  stopwatch_app_data_mgmt.printDebug("DATA MGMT", text_return);
-  stopwatch_app_suspend.printDebug("SUSPEND", text_return);
   return 0;
 }
 
