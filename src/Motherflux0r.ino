@@ -489,40 +489,9 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
     case 2:    app_touch_test.refresh();                    break;
     case 3:    app_tricorder.refresh();                     break;
     case 4:    app_synthbox.refresh();                      break;
-    case 5:
-      display.setAddrWindow(0, 0, 96, 64);
-      for (uint8_t h = 0; h < 64; h++) {
-        for (uint8_t w = 0; w < 96; w++) {
-          if (w > 83) {       display.writePixel(w, h, WHITE);     }
-          else if (w > 71) {  display.writePixel(w, h, BLUE);      }
-          else if (w > 59) {  display.writePixel(w, h, GREEN);     }
-          else if (w > 47) {  display.writePixel(w, h, CYAN);      }
-          else if (w > 35) {  display.writePixel(w, h, RED);       }
-          else if (w > 23) {  display.writePixel(w, h, MAGENTA);   }
-          else if (w > 11) {  display.writePixel(w, h, YELLOW);    }
-          else {              display.writePixel(w, h, BLACK);     }
-        }
-      }
-      display.endWrite();
-      break;
-    case 6:
-      display.fillScreen(BLACK);
-      render_button_icon(4, 0, 0, 0xFFFF);
-      render_button_icon(5, 9, 0, 0xFFFF);
-      render_button_icon(6, 0, 9, 0xFFFF);
-      render_button_icon(7, 0, 23, 0xFFFF);
-      render_button_icon(8, 32, 23, 0xFFFF);
-      render_button_icon(9, 0, 55, 0xFFFF);
-      break;
-    case 7:
-      display.fillScreen(BLACK);
-      render_button_icon(0, 0,  0, WHITE);
-      render_button_icon(1, 10, 0, WHITE);
-      render_button_icon(2, 20, 0, WHITE);
-      render_button_icon(3, 30, 0, WHITE);
-      render_button_icon(4, 0, 20, WHITE);
-      render_button_icon(5, 0, 20, WHITE);
-      break;
+    case 5:      break;
+    case 6:      break;
+    case 7:      break;
     case 8:
       display.fillScreen(BLACK);
       draw_progress_bar_vertical(0, 0, 12, 63, CYAN, true, false, 0.0);

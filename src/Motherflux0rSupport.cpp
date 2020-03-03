@@ -241,6 +241,9 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
 * TODO: This is getting to the point where it should be encapsulated.
 *******************************************************************************/
 
+#define GRAPH_FLAG_TEXT_RANGE_V             0x01000000   // Text overlay for axis values.
+#define GRAPH_FLAG_TEXT_VALUE               0x02000000   // Text overlay for current value.
+#define GRAPH_FLAG_PARTIAL_REDRAW           0x04000000   // Partial redraw
 #define GRAPH_FLAG_FULL_REDRAW              0x08000000   // Full redraw
 #define GRAPH_FLAG_DRAW_RULE_H              0x10000000   //
 #define GRAPH_FLAG_DRAW_RULE_V              0x20000000   //
@@ -252,21 +255,46 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
 * Draws the frame of graph, and returns inlay size via parameters.
 */
 void _draw_graph_obj_frame(
-  int* x, int* y, int* w, int* h, uint16_t color,
-  uint32_t flags
+  int* x, int* y, int* w, int* h, uint16_t color, uint32_t flags
 ) {
   const int INSET_X = (flags & GRAPH_FLAG_DRAW_TICKS_V) ? 3 : 1;
   const int INSET_Y = (flags & GRAPH_FLAG_DRAW_TICKS_H) ? 3 : 1;
-
-  display.fillRect(*x, *y, *w, *h, BLACK);
-  display.drawFastVLine(*x+(INSET_X - 1), (*y + *h) - (INSET_Y - 1), *h - (INSET_Y - 1), color);
-  display.drawFastHLine(*x+(INSET_X - 1), (*y + *h) - (INSET_Y - 1), *w - (INSET_X - 1), color);
+  if (flags & GRAPH_FLAG_FULL_REDRAW) {   // Draw the basic frame and axes?
+    display.fillRect(*x, *y, *w, *h, BLACK);
+    display.drawFastVLine(*x+(INSET_X - 1), *y, *h - (INSET_Y - 1), color);
+    display.drawFastHLine(*x+(INSET_X - 1), (*y + *h) - (INSET_Y - 1), *w - (INSET_X - 1), color);
+  }
+  else if (flags & GRAPH_FLAG_PARTIAL_REDRAW) {
+    display.fillRect(*x+(INSET_X - 1), *y, *w - (INSET_X - 1), *h - (INSET_Y - 1), BLACK);
+  }
   *x = *x + INSET_X;
-  *y = *y + INSET_Y;
   *w = *w - INSET_X;
   *h = *h - INSET_Y;
 }
 
+
+/*
+*
+*/
+void _draw_graph_obj_text_overlay(
+  int x, int y, int w, int h, uint16_t color, uint32_t flags,
+  float v_max, float v_min, float v_scale, float last_datum
+) {
+  if (flags & GRAPH_FLAG_TEXT_RANGE_V) {
+    display.setCursor(x+1, y);
+    display.setTextColor(WHITE);
+    display.print(v_max);
+    display.setCursor(x+1, (y+h) - 8);
+    display.print(v_min);
+  }
+  if (flags & GRAPH_FLAG_TEXT_VALUE) {
+    uint8_t tmp = last_datum / v_scale;
+    //display.fillCircle(x+w, tmp+y, 1, color);
+    display.setCursor(x, strict_min((uint16_t) ((y+h)-tmp), (uint16_t) (h-1)));
+    display.setTextColor(color);
+    display.print(last_datum);
+  }
+}
 
 
 /*
@@ -274,17 +302,12 @@ void _draw_graph_obj_frame(
 *   display.
 */
 void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
+  int x, int y, int w, int h, uint16_t color, uint32_t flags,
   float* dataset, uint32_t data_len
 ) {
-  display.setAddrWindow(x, y, EXTENT_X, EXTENT_Y);
+  display.setAddrWindow(x, y, w, h);
+  _draw_graph_obj_frame(&x, &y, &w, &h, WHITE, flags);
 
-  if (draw_base) {   // Draw the basic frame and axes?
-    display.drawFastVLine(x, y, h, WHITE);
-    display.drawFastHLine(x, y+h, w, WHITE);
-  }
-  display.fillRect(x+1, y, w, h-1, BLACK);
   if (w < (int32_t) data_len) {
     dataset += (data_len - w);
     data_len = w;
@@ -297,30 +320,106 @@ void draw_graph_obj(
     v_max = strict_max(v_max, tmp);
     v_min = strict_min(v_min, tmp);
   }
-  float h_scale = data_len / w;
+  //float h_scale = data_len / w;
   float v_scale = (v_max - v_min) / h;
+
+  if (flags & GRAPH_FLAG_DRAW_RULE_V) {
+  }
+  if (flags & GRAPH_FLAG_DRAW_RULE_H) {
+  }
+  if (flags & GRAPH_FLAG_DRAW_TICKS_V) {
+  }
+  if (flags & GRAPH_FLAG_DRAW_TICKS_H) {
+  }
+
   for (uint32_t i = 0; i < data_len; i++) {
     uint8_t tmp = *(dataset + i) / v_scale;
     display.writePixel(i + x, (y+h)-tmp, color);
   }
-  if (draw_v_ticks) {
-    display.drawFastHLine(x+1, y, 2, WHITE);
-    display.setCursor(x+2, y);
-    display.setTextColor(WHITE);
-    display.print(v_max);
-    display.setCursor(x+2, (y+h) - 9);
-    display.print(v_min);
-  }
-  if (draw_h_ticks) {
-    float last_datum = *(dataset + (data_len-1));
-    uint8_t tmp = last_datum / v_scale;
-    //display.fillCircle(x+w, tmp+y, 1, color);
-    display.setCursor(x, strict_min((uint16_t) ((y+h)-tmp), (uint16_t) (h-1)));
-    display.setTextColor(color);
-    display.print(*(dataset + (data_len-1)));
-  }
+
+  float last_datum = *(dataset + (data_len-1));
+  _draw_graph_obj_text_overlay(x, y, w, h, color, flags, v_max, v_min, v_scale, last_datum);
   display.endWrite();
 }
+
+
+
+/*
+* Given a filter object, and parameters for the graph, draw the data to the
+*   display.
+*/
+void draw_graph_obj(
+  int x, int y, int w, int h, uint16_t color0, uint16_t color1, uint16_t color2,
+  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
+  SensorFilter<float>* filt0, SensorFilter<float>* filt1, SensorFilter<float>* filt2
+) {
+  const uint16_t DATA_SIZE_0 = filt0->windowSize();
+  const uint16_t LAST_SIDX_0 = filt0->lastIndex();
+  const uint16_t DATA_SIZE_1 = filt1->windowSize();
+  const uint16_t LAST_SIDX_1 = filt1->lastIndex();
+  const uint16_t DATA_SIZE_2 = filt2->windowSize();
+  const uint16_t LAST_SIDX_2 = filt2->lastIndex();
+  const float*   F_MEM_0     = filt0->memPtr();
+  const float*   F_MEM_1     = filt1->memPtr();
+  const float*   F_MEM_2     = filt2->memPtr();
+  float tmp_data_0[DATA_SIZE_0];
+  float tmp_data_1[DATA_SIZE_1];
+  float tmp_data_2[DATA_SIZE_2];
+  for (uint16_t i = 0; i < DATA_SIZE_0; i++) {
+    tmp_data_0[i] = *(F_MEM_0 + ((i + LAST_SIDX_0) % DATA_SIZE_0));
+  }
+  for (uint16_t i = 0; i < DATA_SIZE_1; i++) {
+    tmp_data_1[i] = *(F_MEM_1 + ((i + LAST_SIDX_1) % DATA_SIZE_1));
+  }
+  for (uint16_t i = 0; i < DATA_SIZE_2; i++) {
+    tmp_data_2[i] = *(F_MEM_2 + ((i + LAST_SIDX_2) % DATA_SIZE_2));
+  }
+
+  uint32_t flags = GRAPH_FLAG_PARTIAL_REDRAW;
+  flags |= (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
+  flags |= (draw_v_ticks ? GRAPH_FLAG_TEXT_RANGE_V : 0);
+  flags |= (draw_h_ticks ? GRAPH_FLAG_TEXT_VALUE : 0);
+  draw_graph_obj(x, y, w, h, color0, flags, tmp_data_0, (uint32_t) DATA_SIZE_0);
+  flags &= ~(GRAPH_FLAG_PARTIAL_REDRAW | GRAPH_FLAG_FULL_REDRAW);
+  draw_graph_obj(x, y, w, h, color1, flags, tmp_data_1, (uint32_t) DATA_SIZE_1);
+  draw_graph_obj(x, y, w, h, color2, flags, tmp_data_2, (uint32_t) DATA_SIZE_2);
+}
+
+
+
+/*
+* Given a filter object, and parameters for the graph, draw the data to the
+*   display.
+*/
+void draw_graph_obj(
+  int x, int y, int w, int h, uint16_t color0, uint16_t color1,
+  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
+  SensorFilter<float>* filt0, SensorFilter<float>* filt1
+) {
+  const uint16_t DATA_SIZE_0 = filt0->windowSize();
+  const uint16_t LAST_SIDX_0 = filt0->lastIndex();
+  const uint16_t DATA_SIZE_1 = filt1->windowSize();
+  const uint16_t LAST_SIDX_1 = filt1->lastIndex();
+  const float*   F_MEM_0     = filt0->memPtr();
+  const float*   F_MEM_1     = filt1->memPtr();
+  float tmp_data_0[DATA_SIZE_0];
+  float tmp_data_1[DATA_SIZE_1];
+  for (uint16_t i = 0; i < DATA_SIZE_0; i++) {
+    tmp_data_0[i] = *(F_MEM_0 + ((i + LAST_SIDX_0) % DATA_SIZE_0));
+  }
+  for (uint16_t i = 0; i < DATA_SIZE_1; i++) {
+    tmp_data_1[i] = *(F_MEM_1 + ((i + LAST_SIDX_1) % DATA_SIZE_1));
+  }
+
+  uint32_t flags = GRAPH_FLAG_PARTIAL_REDRAW;
+  flags |= (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
+  flags |= (draw_v_ticks ? GRAPH_FLAG_TEXT_RANGE_V : 0);
+  flags |= (draw_h_ticks ? GRAPH_FLAG_TEXT_VALUE : 0);
+  draw_graph_obj(x, y, w, h, color0, flags, tmp_data_0, (uint32_t) DATA_SIZE_0);
+  flags &= ~(GRAPH_FLAG_PARTIAL_REDRAW | GRAPH_FLAG_FULL_REDRAW);
+  draw_graph_obj(x, y, w, h, color1, flags, tmp_data_1, (uint32_t) DATA_SIZE_1);
+}
+
 
 
 /*
@@ -339,7 +438,11 @@ void draw_graph_obj(
   for (uint16_t i = 0; i < DATA_SIZE; i++) {
     tmp_data[i] = *(F_MEM + ((i + LAST_SIDX) % DATA_SIZE));
   }
-  draw_graph_obj(x, y, w, h, color, draw_base, draw_v_ticks, draw_h_ticks, tmp_data, (uint32_t) DATA_SIZE);
+
+  uint32_t flags = (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
+  flags |= (draw_v_ticks ? GRAPH_FLAG_TEXT_RANGE_V : 0);
+  flags |= (draw_h_ticks ? GRAPH_FLAG_TEXT_VALUE : 0);
+  draw_graph_obj(x, y, w, h, color, flags, tmp_data, (uint32_t) DATA_SIZE);
 }
 
 
@@ -359,8 +462,12 @@ void draw_graph_obj(
   for (uint16_t i = 0; i < DATA_SIZE; i++) {
     tmp_data[i] = *(F_MEM + ((i + LAST_SIDX) % DATA_SIZE));
   }
-  draw_graph_obj(x, y, w, h, color, draw_base, draw_v_ticks, draw_h_ticks, tmp_data, (uint32_t) DATA_SIZE);
+  uint32_t flags = (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
+  flags |= (draw_v_ticks ? GRAPH_FLAG_TEXT_RANGE_V : 0);
+  flags |= (draw_h_ticks ? GRAPH_FLAG_TEXT_VALUE : 0);
+  draw_graph_obj(x, y, w, h, color, flags, tmp_data, (uint32_t) DATA_SIZE);
 }
+
 
 
 /*

@@ -112,9 +112,15 @@ uint16_t* bitmapPointer(unsigned int idx);
 void render_button_icon(uint8_t sym, int x, int y, uint16_t color);
 
 void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color,
+  int x, int y, int w, int h, uint16_t color0, uint16_t color1, uint16_t color2,
   bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
-  float* dataset, uint32_t data_len
+  SensorFilter<float>* filt0, SensorFilter<float>* filt1, SensorFilter<float>* filt2
+);
+
+void draw_graph_obj(
+  int x, int y, int w, int h, uint16_t color0, uint16_t color1,
+  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
+  SensorFilter<float>* filt0, SensorFilter<float>* filt1
 );
 
 void draw_graph_obj(
