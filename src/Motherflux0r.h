@@ -8,7 +8,7 @@
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
 
-#define TEST_PROG_VERSION          "v1.5"
+#define TEST_PROG_VERSION           "1.6"
 #define TOUCH_DWELL_LONG_PRESS       1000  // Milliseconds for "long-press".
 #define E_VAL                      1.0184
 
@@ -45,12 +45,12 @@
 #define MIC_ANA_PIN         27   // A16
 #define TOUCH_RESET_PIN     28
 #define IMU_IRQ_PIN         29
-#define AMG8866_IRQ_PIN     255 // 30
+#define AMG8866_IRQ_PIN    255 // 30
 #define IMU_CS_PIN          31
 #define DISPLAY_RST_PIN     32
 #define LED_B_PIN           33
 
-
+#define SerialGPS Serial1
 
 /* Common 16-bit colors */
 #define	BLACK           0x0000
@@ -61,6 +61,21 @@
 #define MAGENTA         0xF81F
 #define YELLOW          0xFFE0
 #define WHITE           0xFFFF
+
+
+/*******************************************************************************
+* Display related flags
+*******************************************************************************/
+#define GRAPH_FLAG_LOCK_RANGE_V             0x00800000   // Lock the V range.
+#define GRAPH_FLAG_TEXT_RANGE_V             0x01000000   // Text overlay for axis values.
+#define GRAPH_FLAG_TEXT_VALUE               0x02000000   // Text overlay for current value.
+#define GRAPH_FLAG_PARTIAL_REDRAW           0x04000000   // Partial redraw
+#define GRAPH_FLAG_FULL_REDRAW              0x08000000   // Full redraw
+#define GRAPH_FLAG_DRAW_RULE_H              0x10000000   //
+#define GRAPH_FLAG_DRAW_RULE_V              0x20000000   //
+#define GRAPH_FLAG_DRAW_TICKS_H             0x40000000   //
+#define GRAPH_FLAG_DRAW_TICKS_V             0x80000000   //
+
 
 
 /*******************************************************************************
@@ -153,6 +168,13 @@ void draw_compass(
 void draw_3vector(
   int x, int y, int w, int h, uint16_t color,
   bool draw_axes, bool draw_val, float vx, float vy, float vz
+);
+
+void draw_data_square_field(
+  int x, int y, int w, int h,
+  uint32_t flags,
+  float* range_min, float* range_max,
+  SensorFilter<float>* filt
 );
 
 void draw_data_view_selector(

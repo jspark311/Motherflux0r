@@ -7,6 +7,7 @@
 #include <SensorFilter.h>
 #include <ParsingConsole.h>
 #include <StopWatch.h>
+#include <cbor-cpp/cbor.h>
 
 #include <Audio.h>
 #include <Wire.h>
@@ -14,6 +15,8 @@
 #include <SD.h>
 #include <EEPROM.h>
 #include <SX8634.h>
+#include <TinyGPS.h>
+#include <TimeLib.h>
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1331.h>
@@ -25,6 +28,7 @@
 #include "TSL2561.h"
 #include "TMP102.h"
 
+#include <TeensyThreads.h>
 
 
 /*******************************************************************************
@@ -64,6 +68,7 @@ AudioConnection          patchCord14(mixerFFT, fft256_1);
 AudioConnection          patchCord15(ampR, 0, i2s_dac, 1);
 AudioConnection          patchCord16(ampL, 0, i2s_dac, 0);
 
+TinyGPS gps;
 
 float volume_left_output  = 0.1;
 float volume_right_output = 0.1;
@@ -136,6 +141,8 @@ StopWatch stopwatch_sensor_imu;
 StopWatch stopwatch_sensor_lux;
 StopWatch stopwatch_sensor_tmp102;
 StopWatch stopwatch_sensor_mag;
+StopWatch stopwatch_sensor_gps;
+
 StopWatch stopwatch_touch_poll;
 SensorFilter<float> graph_array_cpu_time(FilteringStrategy::MOVING_MED, 96, 0);
 SensorFilter<float> graph_array_frame_rate(FilteringStrategy::RAW, 96, 0);
@@ -242,6 +249,9 @@ int8_t read_baro_sensor() {
 int8_t read_imu() {
   int8_t ret = 0;
   imu.getAGMT();
+  if (false) {
+    imu.clearInterrupts();
+  }
   return ret;
 }
 
@@ -290,6 +300,69 @@ int8_t read_magnetometer_sensor() {
   return 0;
 }
 
+
+
+/*******************************************************************************
+* GPS
+*******************************************************************************/
+
+
+
+/*******************************************************************************
+* Settings and configuration
+*******************************************************************************/
+
+/*
+* Read a blob from the
+*/
+int8_t read_unit_settings() {
+  return 0;
+}
+
+
+/*******************************************************************************
+* Data aggregation and packaging
+*******************************************************************************/
+
+void package_sensor_data_cbor(StringBuilder* cbor_return) {
+  cbor::output_dynamic out;
+  cbor::encoder encoded(out);
+  encoded.write_map(4);
+    encoded.write_string("ds_version");
+    encoded.write_int(0);
+
+    encoded.write_string("origin");
+    encoded.write_map(4);
+      encoded.write_string("model");
+      encoded.write_string("Motherflux0r");
+      encoded.write_string("ser");
+      encoded.write_int(1);
+      encoded.write_string("fm_ver");
+      encoded.write_string(TEST_PROG_VERSION);
+      encoded.write_string("ts");
+      encoded.write_tag(1);
+      encoded.write_int((uint) now());
+
+    encoded.write_string("tilt_cal");
+    encoded.write_map(3);
+      encoded.write_string("offsetpitch");
+      encoded.write_float(4.066);
+      encoded.write_string("offsetyaw");
+      encoded.write_float(-1.5114);
+      encoded.write_string("offsetroll");
+      encoded.write_float(-9.701);
+
+    encoded.write_string("meta");
+    encoded.write_map(2);
+      encoded.write_string("build_data");
+      encoded.write_tag(1);
+      encoded.write_int(1584023014);
+      encoded.write_string("cal_date");
+      encoded.write_tag(1);
+      encoded.write_int(1584035000);
+
+  cbor_return->concat(out.data(), out.size());
+}
 
 
 /*******************************************************************************
@@ -382,6 +455,7 @@ int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* ar
     stopwatch_sensor_lux.reset();
     stopwatch_sensor_tmp102.reset();
     stopwatch_sensor_mag.reset();
+    stopwatch_sensor_gps.reset();
     stopwatch_touch_poll.reset();
   }
   StopWatch::printDebugHeader(text_return);
@@ -392,6 +466,7 @@ int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* ar
   stopwatch_sensor_lux.printDebug("TSL2561", text_return);
   stopwatch_sensor_tmp102.printDebug("PSU Temp", text_return);
   stopwatch_sensor_mag.printDebug("Magnetometer", text_return);
+  stopwatch_sensor_gps.printDebug("GPS", text_return);
   stopwatch_touch_poll.printDebug("Touch", text_return);
   return 0;
 }
@@ -957,7 +1032,7 @@ int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
       case SensorID::THERMOPILE:     ret = grideye.init(&Wire1);         break;
       case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);          break;
       //case SensorID::BATT_VOLTAGE:       break;
-      //case SensorID::IMU:                break;
+      case SensorID::IMU:            ret = read_imu();               break;
       //case SensorID::MIC:                break;
       //case SensorID::GPS:                break;
       //case SensorID::LIGHT:              break;
@@ -1022,7 +1097,13 @@ int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
   if (1 == args->count()) {
     int arg0 = args->position_as_int(0);
   }
+
+  int eeprom_len = EEPROM.length();
+  text_return->concatf("EEPROM len:  %d\n", eeprom_len);
+  StringBuilder cbor_return;
+  package_sensor_data_cbor(&cbor_return);
   text_return->concatf("CBOR test results: %d\n", ret);
+  StringBuilder::printBuffer(text_return, cbor_return.string(), cbor_return.length(), "\t");
   return ret;
 }
 
@@ -1032,6 +1113,9 @@ int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
 /*******************************************************************************
 * Setup function
 *******************************************************************************/
+void i2c_thread();
+
+
 void setup() {
   boot_time = millis();
   float percent_setup = 0.0;
@@ -1061,9 +1145,10 @@ void setup() {
   Wire.setClock(400000);
   Wire1.begin();
 
+  // GPS
   Serial1.setRX(GPS_TX_PIN);
   Serial1.setTX(GPS_RX_PIN);
-  Serial1.begin(9600);    // GPS
+  Serial1.begin(9600);
 
   Serial6.setRX(COMM_TX_PIN);
   Serial6.setTX(COMM_RX_PIN);
@@ -1262,10 +1347,10 @@ void setup() {
     ICM_20948_Status_e accDLPEnableStat = imu.enableDLPF((ICM_20948_Internal_Gyr | ICM_20948_Internal_Acc), true);
     if (255 != IMU_IRQ_PIN) {
       pinMode(IMU_IRQ_PIN, INPUT);
-      imu.cfgIntActiveLow(true);
-      imu.cfgIntOpenDrain(false);
-      imu.cfgIntLatch(true);          // IRQ is a 50us pulse.
-      imu.intEnableRawDataReady(true);
+      //imu.cfgIntActiveLow(true);
+      //imu.cfgIntOpenDrain(false);
+      //imu.cfgIntLatch(true);          // IRQ is a 50us pulse.
+      //imu.intEnableRawDataReady(true);
       attachInterrupt(digitalPinToInterrupt(IMU_IRQ_PIN), imu_isr_fxn, FALLING);
     }
   //if (false) {
@@ -1375,6 +1460,7 @@ void setup() {
   }
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, 1.0);
   delay(50);
+  //threads.addThread(i2c_thread);
 }
 
 
@@ -1382,6 +1468,11 @@ void setup() {
 /*******************************************************************************
 * Main loop
 *******************************************************************************/
+
+void i2c_thread() {
+}
+
+
 void loop() {
   stopwatch_main_loop_time.markStart();
   StringBuilder output;
@@ -1390,7 +1481,6 @@ void loop() {
     const uint8_t RX_BUF_LEN = 32;
     uint8_t ser_buffer[RX_BUF_LEN];
     uint8_t rx_len = 0;
-    bool cr_rxd = false;
     memset(ser_buffer, 0, RX_BUF_LEN);
     while ((RX_BUF_LEN > rx_len) && (0 < Serial.available())) {
       ser_buffer[rx_len++] = Serial.read();
@@ -1426,7 +1516,6 @@ void loop() {
     imu_irq_fired = false;
     stopwatch_sensor_imu.markStart();
     read_imu();
-    imu.clearInterrupts();
     stopwatch_sensor_imu.markStop();
   }
   /* Run our async cleanup stuff. */
@@ -1452,6 +1541,25 @@ void loop() {
   stopwatch_sensor_tmp102.markStart();
   if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
   stopwatch_sensor_tmp102.markStop();
+  stopwatch_sensor_gps.markStart();
+  while (SerialGPS.available()) {
+    if (gps.encode(Serial1.read())) { // process gps messages
+      unsigned long age;
+      int Year;
+      byte Month, Day, Hour, Minute, Second;
+      gps.crack_datetime(&Year, &Month, &Day, &Hour, &Minute, &Second, NULL, &age);
+      if (age < 500) {
+        // set the Time to the latest GPS reading
+        setTime(Hour, Minute, Second, Day, Month, Year);
+        //adjustTime(offset * SECS_PER_HOUR);
+      }
+    }
+  }
+  if (timeStatus()!= timeNotSet) {
+  }
+  stopwatch_sensor_gps.markStop();
+
+
 
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.

@@ -272,11 +272,8 @@ void uAppTricorder::_redraw_window() {
   }
   else {    // Thermopile
     if (graph_array_therm_mean.dirty()) {
-      const uint8_t PIXEL_SIZE  = 4;
-      const uint8_t TEXT_OFFSET = (PIXEL_SIZE*8)+5;
-      const float TEMP_RANGE = THERM_TEMP_MAX - THERM_TEMP_MIN;
-      const float BINSIZE_T  = TEMP_RANGE / (PIXEL_SIZE * 8);  // Space of display gives scale size.
-      float* therm_pixels = graph_array_therm_frame.memPtr();
+      const uint8_t FIELD_SIZE = 32;
+      const uint8_t TEXT_OFFSET = FIELD_SIZE+5;
       float  therm_field_min = graph_array_therm_frame.minValue();
       float  therm_field_max = graph_array_therm_frame.maxValue();
       bool lock_range_to_current = _cluttered_display();
@@ -292,16 +289,9 @@ void uAppTricorder::_redraw_window() {
         therm_field_max = graph_array_therm_mean.value() + therm_midpoint_lock;
         therm_field_min = graph_array_therm_mean.value() - therm_midpoint_lock;
       }
-      const float MIDPOINT_T = lock_range_to_absolute ? (TEMP_RANGE / 2.0) : therm_midpoint_lock;
 
-      for (uint8_t i = 0; i < 64; i++) {
-        uint x = (i & 0x07) * PIXEL_SIZE;
-        uint y = (i >> 3) * PIXEL_SIZE;
-        float pix_deviation = abs(MIDPOINT_T - therm_pixels[i]);
-        uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (therm_field_max - MIDPOINT_T));
-        uint16_t color = (therm_pixels[i] <= MIDPOINT_T) ? pix_intensity : (pix_intensity << 11);
-        display.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
-      }
+      draw_data_square_field(0, 0, 32, 32, &therm_field_min, &therm_field_max, 0, &graph_array_therm_frame);
+
       display.setTextSize(0);
       display.setCursor(TEXT_OFFSET, 0);
       display.setTextColor(RED, BLACK);
@@ -311,7 +301,7 @@ void uAppTricorder::_redraw_window() {
       display.setTextColor(WHITE, BLACK);
       display.print("ABS (C)");
 
-      display.setCursor(TEXT_OFFSET, (PIXEL_SIZE*8)-7);
+      display.setCursor(TEXT_OFFSET, FIELD_SIZE-7);
       display.setTextColor(BLUE, BLACK);
       display.print(therm_field_min);
 

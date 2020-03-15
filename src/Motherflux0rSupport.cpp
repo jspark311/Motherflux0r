@@ -236,20 +236,11 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
 }
 
 
+
 /*******************************************************************************
 * Functions for rendering cartesian graphs
 * TODO: This is getting to the point where it should be encapsulated.
 *******************************************************************************/
-
-#define GRAPH_FLAG_TEXT_RANGE_V             0x01000000   // Text overlay for axis values.
-#define GRAPH_FLAG_TEXT_VALUE               0x02000000   // Text overlay for current value.
-#define GRAPH_FLAG_PARTIAL_REDRAW           0x04000000   // Partial redraw
-#define GRAPH_FLAG_FULL_REDRAW              0x08000000   // Full redraw
-#define GRAPH_FLAG_DRAW_RULE_H              0x10000000   //
-#define GRAPH_FLAG_DRAW_RULE_V              0x20000000   //
-#define GRAPH_FLAG_DRAW_TICKS_H             0x40000000   //
-#define GRAPH_FLAG_DRAW_TICKS_V             0x80000000   //
-
 
 /*
 * Draws the frame of graph, and returns inlay size via parameters.
@@ -433,10 +424,10 @@ void draw_graph_obj(
 ) {
   const uint16_t DATA_SIZE = filt->windowSize();
   const uint16_t LAST_SIDX = filt->lastIndex();
-  const float*   F_MEM     = filt->memPtr();
+  const float*   F_MEM_PTR = filt->memPtr();
   float tmp_data[DATA_SIZE];
   for (uint16_t i = 0; i < DATA_SIZE; i++) {
-    tmp_data[i] = *(F_MEM + ((i + LAST_SIDX) % DATA_SIZE));
+    tmp_data[i] = *(F_MEM_PTR + ((i + LAST_SIDX) % DATA_SIZE));
   }
 
   uint32_t flags = (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
@@ -457,10 +448,10 @@ void draw_graph_obj(
 ) {
   const uint16_t  DATA_SIZE = filt->windowSize();
   const uint16_t  LAST_SIDX = filt->lastIndex();
-  const uint32_t* F_MEM     = filt->memPtr();
+  const uint32_t* F_MEM_PTR = filt->memPtr();
   float tmp_data[DATA_SIZE];
   for (uint16_t i = 0; i < DATA_SIZE; i++) {
-    tmp_data[i] = *(F_MEM + ((i + LAST_SIDX) % DATA_SIZE));
+    tmp_data[i] = *(F_MEM_PTR + ((i + LAST_SIDX) % DATA_SIZE));
   }
   uint32_t flags = (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
   flags |= (draw_v_ticks ? GRAPH_FLAG_TEXT_RANGE_V : 0);
@@ -544,6 +535,7 @@ void draw_compass(
 ) {
   int origin_x = x + (w >> 1);
   int origin_y = y + (h >> 1);
+  display.setAddrWindow(x, y, w, h);
   int maximal_extent = (strict_min((int16_t) w, (int16_t) h) >> 1) - 1;
   const int NEEDLE_WIDTH = maximal_extent >> 3;
   display.fillCircle(origin_x, origin_y, maximal_extent, BLACK);
@@ -565,6 +557,7 @@ void draw_compass(
   //display.drawLine(origin_x, origin_y, needle_tip_n_x, needle_tip_n_y, RED);
   display.fillTriangle(needle_tip_s_x, needle_tip_s_y, needle_x1, needle_y1, needle_x2, needle_y2, WHITE);
   display.fillTriangle(needle_tip_n_x, needle_tip_n_y, needle_x1, needle_y1, needle_x2, needle_y2, RED);
+  display.endWrite();
 }
 
 
@@ -602,6 +595,37 @@ void draw_3vector(
 
 
 /*
+* Draw the given data as a plane.
+*/
+void draw_data_square_field(
+  int x, int y, int w, int h,
+  uint32_t flags,
+  float* range_min, float* range_max,
+  SensorFilter<float>* filt
+) {
+  const bool lock_range_to_absolute = (flags & GRAPH_FLAG_LOCK_RANGE_V) ? true : false;
+  const uint16_t MIN_ELEMENTS = strict_min((uint16_t) filt->windowSize(), (uint16_t) w * h);
+  const uint8_t PIXEL_SIZE    = h / MIN_ELEMENTS;
+  const float TEMP_RANGE = *range_max - *range_min;
+  const float BINSIZE_T  = TEMP_RANGE / (PIXEL_SIZE * 8);  // Space of display gives scale size.
+  const float MIDPOINT_T = TEMP_RANGE / 2.0;
+  float* dataset = filt->memPtr();
+
+  display.setAddrWindow(x, y, w, h);
+  for (uint8_t i = 0; i < MIN_ELEMENTS; i++) {
+    uint x = (i & 0x07) * PIXEL_SIZE;
+    uint y = (i >> 3) * PIXEL_SIZE;
+    float pix_deviation = abs(MIDPOINT_T - dataset[i]);
+    uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (*range_max - MIDPOINT_T));
+    uint16_t color = (dataset[i] <= MIDPOINT_T) ? pix_intensity : (pix_intensity << 11);
+    display.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
+  }
+  display.endWrite();
+}
+
+
+
+/*
 * Draw the data view selector widget.
 */
 void draw_data_view_selector(
@@ -610,6 +634,7 @@ void draw_data_view_selector(
   DataVis selected
 ) {
   uint16_t offset = 0;
+  display.setAddrWindow(x, y, w, h);
   display.setTextSize(0);
   display.drawFastVLine(x, y, h, WHITE);
   display.drawFastHLine(x, y, w, WHITE);
@@ -691,4 +716,5 @@ void draw_data_view_selector(
     offset += 10;
     display.drawFastHLine(x, y + offset, w, WHITE);
   }
+  display.endWrite();
 }
