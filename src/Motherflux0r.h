@@ -42,7 +42,7 @@
 #define COMM_RX_PIN         24
 #define COMM_TX_PIN         25
 #define DISPLAY_DC_PIN      26
-#define MIC_ANA_PIN         27   // A16
+#define TOF_IRQ_PIN         27   // A16
 #define TOUCH_RESET_PIN     28
 #define IMU_IRQ_PIN         29
 #define AMG8866_IRQ_PIN    255 // 30
@@ -61,6 +61,15 @@
 #define MAGENTA         0xF81F
 #define YELLOW          0xFFE0
 #define WHITE           0xFFFF
+
+
+/*******************************************************************************
+* Data handling flags
+*******************************************************************************/
+#define DATA_REC_FLAG_               0x80000000   //
+#define DATA_RELAY_FLAG_             0x80000000   //
+
+
 
 
 /*******************************************************************************
@@ -90,7 +99,7 @@ enum class SensorID : uint8_t {
   UV            = 5,  //
   GPS           = 6,  //
   THERMOPILE    = 7,  //
-  PSU_TEMP      = 8,  // TMP102
+  TOF           = 8,  //
   BATT_VOLTAGE  = 9,  //
   LUX           = 10  //
 };
@@ -104,6 +113,7 @@ enum class DataVis : uint8_t {
   FIELD         = 4,  // A 2d array.
   TEXT          = 5   // Prefer alphanumeric readout.
 };
+
 
 
 

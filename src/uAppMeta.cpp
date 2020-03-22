@@ -150,6 +150,7 @@ void uAppMeta::_redraw_window() {
       if (_button_pressed_up()) {
         uApp::redraw_app_window("I2C Probe Wire", 0, 0);
         for (uint8_t addr = 0; addr < 0x80; addr++) {
+          delay(5);
           Wire.beginTransmission(addr);
           if (0 == Wire.endTransmission()) {
             disp_str.concatf("0x%02x ", addr);
@@ -165,6 +166,7 @@ void uAppMeta::_redraw_window() {
       else if (_button_pressed_dn()) {
         uApp::redraw_app_window("I2C Probe Wire1", 0, 0);
         for (uint8_t addr = 0; addr < 0x80; addr++) {
+          delay(5);
           Wire1.beginTransmission(addr);
           if (0 == Wire1.endTransmission()) {
             disp_str.concatf("0x%02x ", addr);

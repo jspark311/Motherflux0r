@@ -2,6 +2,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1331.h>
 #include <SensorFilter.h>
+#include <TinyGPS.h>
 #include "VEML6075.h"
 #include "ICM20948.h"
 #include "BME280.h"
@@ -9,9 +10,9 @@
 #include "DRV425.h"
 #include "TSL2561.h"
 #include "TMP102.h"
+#include "VL53L0X.h"
 #include "uApp.h"
 #include "Motherflux0r.h"
-
 
 extern Adafruit_SSD1331 display;
 
@@ -23,7 +24,8 @@ extern VEML6075 uv;
 extern ICM_20948_SPI imu;
 extern TSL2561 tsl2561;
 extern BME280I2C baro;
-
+extern VL53L0X tof;
+extern TinyGPS gps;
 
 extern SensorFilter<float> graph_array_pressure;
 extern SensorFilter<float> graph_array_humidity;
@@ -37,7 +39,7 @@ extern SensorFilter<float> graph_array_visible;
 extern SensorFilter<float> graph_array_therm_mean;
 extern SensorFilter<float> graph_array_therm_frame;
 extern SensorFilter<float> graph_array_mag_confidence;
-
+extern SensorFilter<float> graph_array_time_of_flight;
 
 
 void redraw_tricorder_window();
@@ -103,7 +105,11 @@ int8_t uAppTricorder::_process_user_input() {
       display.print("Temp  ");
     }
     else if (_slider_pending <= 22) {
-      redraw_app_window();
+      display.fillScreen(BLACK);
+      display.setTextSize(0);
+      display.setCursor(0, 0);
+      display.setTextColor(0x8235, BLACK);
+      display.print("Distance (mm)");
     }
     else if (_slider_pending <= 30) {
       display.fillScreen(BLACK);
@@ -215,6 +221,13 @@ void uAppTricorder::_redraw_window() {
     }
   }
   else if (_slider_current <= 22) {
+    if (graph_array_time_of_flight.dirty()) {
+      draw_graph_obj(
+        0, 10, 96, 54, 0x8235,
+        true, _cluttered_display(), _render_text_value(),
+        &graph_array_time_of_flight
+      );
+    }
   }
   else if (_slider_current <= 30) {
     // Light
@@ -272,8 +285,11 @@ void uAppTricorder::_redraw_window() {
   }
   else {    // Thermopile
     if (graph_array_therm_mean.dirty()) {
-      const uint8_t FIELD_SIZE = 32;
-      const uint8_t TEXT_OFFSET = FIELD_SIZE+5;
+      const uint8_t PIXEL_SIZE  = 4;
+      const uint8_t TEXT_OFFSET = (PIXEL_SIZE*8)+5;
+      const float TEMP_RANGE = THERM_TEMP_MAX - THERM_TEMP_MIN;
+      const float BINSIZE_T  = TEMP_RANGE / (PIXEL_SIZE * 8);  // Space of display gives scale size.
+      float* therm_pixels = graph_array_therm_frame.memPtr();
       float  therm_field_min = graph_array_therm_frame.minValue();
       float  therm_field_max = graph_array_therm_frame.maxValue();
       bool lock_range_to_current = _cluttered_display();
@@ -289,9 +305,16 @@ void uAppTricorder::_redraw_window() {
         therm_field_max = graph_array_therm_mean.value() + therm_midpoint_lock;
         therm_field_min = graph_array_therm_mean.value() - therm_midpoint_lock;
       }
+      const float MIDPOINT_T = lock_range_to_absolute ? (TEMP_RANGE / 2.0) : therm_midpoint_lock;
 
-      draw_data_square_field(0, 0, 32, 32, &therm_field_min, &therm_field_max, 0, &graph_array_therm_frame);
-
+      for (uint8_t i = 0; i < 64; i++) {
+        uint x = (i & 0x07) * PIXEL_SIZE;
+        uint y = (i >> 3) * PIXEL_SIZE;
+        float pix_deviation = abs(MIDPOINT_T - therm_pixels[i]);
+        uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (therm_field_max - MIDPOINT_T));
+        uint16_t color = (therm_pixels[i] <= MIDPOINT_T) ? pix_intensity : (pix_intensity << 11);
+        display.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
+      }
       display.setTextSize(0);
       display.setCursor(TEXT_OFFSET, 0);
       display.setTextColor(RED, BLACK);
@@ -301,7 +324,7 @@ void uAppTricorder::_redraw_window() {
       display.setTextColor(WHITE, BLACK);
       display.print("ABS (C)");
 
-      display.setCursor(TEXT_OFFSET, FIELD_SIZE-7);
+      display.setCursor(TEXT_OFFSET, (PIXEL_SIZE*8)-7);
       display.setTextColor(BLUE, BLACK);
       display.print(therm_field_min);
 

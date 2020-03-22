@@ -27,8 +27,10 @@
 #include "DRV425.h"
 #include "TSL2561.h"
 #include "TMP102.h"
+#include "VL53L0X.h"
 
 #include <TeensyThreads.h>
+
 
 
 /*******************************************************************************
@@ -68,7 +70,6 @@ AudioConnection          patchCord14(mixerFFT, fft256_1);
 AudioConnection          patchCord15(ampR, 0, i2s_dac, 1);
 AudioConnection          patchCord16(ampL, 0, i2s_dac, 0);
 
-TinyGPS gps;
 
 float volume_left_output  = 0.1;
 float volume_right_output = 0.1;
@@ -107,8 +108,10 @@ TMP102 tmp102(0x49, 255);    // No connection to the alert pin.
 GridEYE grideye(0x69, AMG8866_IRQ_PIN);
 VEML6075 uv;
 ICM_20948_SPI imu;
-TSL2561 tsl2561(0x39, TSL2561_IRQ_PIN);
+TSL2561 tsl2561(0x49, TSL2561_IRQ_PIN);
 BME280I2C baro(baro_settings);
+VL53L0X tof;
+TinyGPS gps;
 
 /* Immediate data... */
 static Vector3f64 grav;       // Gravity vector from the IMU.
@@ -130,6 +133,7 @@ SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0);
 SensorFilter<float> graph_array_mag_confidence(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_time_of_flight(FilteringStrategy::RAW, 96, 0);
 
 /* Profiling data */
 StopWatch stopwatch_main_loop_time;
@@ -142,6 +146,7 @@ StopWatch stopwatch_sensor_lux;
 StopWatch stopwatch_sensor_tmp102;
 StopWatch stopwatch_sensor_mag;
 StopWatch stopwatch_sensor_gps;
+StopWatch stopwatch_sensor_tof;
 
 StopWatch stopwatch_touch_poll;
 SensorFilter<float> graph_array_cpu_time(FilteringStrategy::MOVING_MED, 96, 0);
@@ -155,6 +160,9 @@ uint32_t last_interaction  = 0;      // millis() when the user last interacted.
 uint32_t disp_update_last  = 0;      // millis() when the display last updated.
 uint32_t disp_update_next  = 0;      // millis() when the display next updates.
 uint32_t disp_update_rate  = 1;      // Update in Hz for the display
+
+uint32_t tof_update_next   = 0;      //
+
 
 
 /* Console junk... */
@@ -300,6 +308,14 @@ int8_t read_magnetometer_sensor() {
   return 0;
 }
 
+
+int8_t read_time_of_flight_sensor() {
+  uint32_t tof_value = tof.readRangeContinuousMillimeters();
+  if (!tof.timeoutOccurred()) {
+    graph_array_time_of_flight.feedFilter(tof_value);
+  }
+  return 0;
+}
 
 
 /*******************************************************************************
@@ -456,6 +472,7 @@ int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* ar
     stopwatch_sensor_tmp102.reset();
     stopwatch_sensor_mag.reset();
     stopwatch_sensor_gps.reset();
+    stopwatch_sensor_tof.reset();
     stopwatch_touch_poll.reset();
   }
   StopWatch::printDebugHeader(text_return);
@@ -464,7 +481,8 @@ int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* ar
   stopwatch_sensor_grideye.printDebug("GridEye", text_return);
   stopwatch_sensor_imu.printDebug("IMU", text_return);
   stopwatch_sensor_lux.printDebug("TSL2561", text_return);
-  stopwatch_sensor_tmp102.printDebug("PSU Temp", text_return);
+  //stopwatch_sensor_tmp102.printDebug("PSU Temp", text_return);
+  stopwatch_sensor_tof.printDebug("ToF", text_return);
   stopwatch_sensor_mag.printDebug("Magnetometer", text_return);
   stopwatch_sensor_gps.printDebug("GPS", text_return);
   stopwatch_touch_poll.printDebug("Touch", text_return);
@@ -758,7 +776,7 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
       //case SensorID::IMU:                break;
       //case SensorID::MIC:                break;
       //case SensorID::GPS:                break;
-      //case SensorID::PSU_TEMP:       tmp102.printDebug(text_return);        break;
+      //case SensorID::TOF:            tmp102.printDebug(text_return);        break;
       default:
         text_return->concatf("Unsupported sensor: %d\n", arg0);
         return -1;
@@ -802,7 +820,7 @@ int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args)
       case SensorID::IMU:
       case SensorID::MIC:
       case SensorID::GPS:
-      case SensorID::PSU_TEMP:
+      case SensorID::TOF:
         break;
       case SensorID::LUX:
         text_return->concat("Lux Filters:\n");
@@ -904,7 +922,8 @@ int callback_sensor_filter_set_strat(StringBuilder* text_return, StringBuilder* 
     case SensorID::MIC:
     case SensorID::GPS:
       break;
-    case SensorID::PSU_TEMP:      ret = graph_array_psu_temp.setStrategy((FilteringStrategy) arg1);    break;
+    //case SensorID::PSU_TEMP:      ret = graph_array_psu_temp.setStrategy((FilteringStrategy) arg1);    break;
+    case SensorID::TOF:           ret = graph_array_time_of_flight.setStrategy((FilteringStrategy) arg1);    break;
     case SensorID::LUX:           ret = graph_array_visible.setStrategy((FilteringStrategy) arg1);     break;
     default:
       text_return->concatf("Unsupported sensor: %d\n", arg0);
@@ -1030,7 +1049,8 @@ int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
       case SensorID::LUX:            ret = tsl2561.init(&Wire1);         break;
       case SensorID::UV:             ret = uv.init(&Wire1);              break;
       case SensorID::THERMOPILE:     ret = grideye.init(&Wire1);         break;
-      case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);          break;
+      //case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);          break;
+      case SensorID::TOF:            ret = tof.init(&Wire1);             break;
       //case SensorID::BATT_VOLTAGE:       break;
       case SensorID::IMU:            ret = read_imu();               break;
       //case SensorID::MIC:                break;
@@ -1064,7 +1084,8 @@ int callback_sensor_enable(StringBuilder* text_return, StringBuilder* args) {
       case SensorID::IMU:           break;
       case SensorID::MIC:           break;
       case SensorID::GPS:           break;
-      case SensorID::PSU_TEMP:      break;
+      //case SensorID::PSU_TEMP:      break;
+      case SensorID::TOF:           break;
       case SensorID::LIGHT:         break;
       default:
         text_return->concatf("Unsupported sensor: %d\n", arg0);
@@ -1127,6 +1148,7 @@ void setup() {
   pinMode(DRV425_CS_PIN, INPUT); // Wrong
   pinMode(PSU_SX_IRQ_PIN, INPUT);
   pinMode(ANA_LIGHT_PIN, INPUT);
+  pinMode(TOF_IRQ_PIN, INPUT);
   pinMode(LED_R_PIN, INPUT);
   pinMode(LED_G_PIN, INPUT);
   pinMode(LED_B_PIN, INPUT);
@@ -1201,6 +1223,7 @@ void setup() {
   graph_array_cpu_time.init();
   graph_array_frame_rate.init();
   graph_array_mag_confidence.init();
+  graph_array_time_of_flight.init();
 
   display.begin();
   display.fillScreen(BLACK);
@@ -1301,13 +1324,15 @@ void setup() {
   }
   delay(10);
 
-  init_step_str = (const char*) "PSU Temperature";
+  init_step_str = (const char*) "ToF         ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
   display.print(init_step_str);
-  if (0 == tmp102.init(&Wire)) {
+  tof.setTimeout(500);
+  if (tof.init(&Wire1)) {
+    tof.startContinuous(100);
   }
   else {
     display.setTextColor(RED, BLACK);
@@ -1315,6 +1340,21 @@ void setup() {
     display.print(init_step_str);
     cursor_height += 8;
   }
+
+  //init_step_str = (const char*) "PSU Temperature";
+  //percent_setup += 0.08;
+  //draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  //display.setTextColor(WHITE);
+  //display.setCursor(4, 14);
+  //display.print(init_step_str);
+  //if (0 == tmp102.init(&Wire)) {
+  //}
+  //else {
+  //  display.setTextColor(RED, BLACK);
+  //  display.setCursor(0, cursor_height);
+  //  display.print(init_step_str);
+  //  cursor_height += 8;
+  //}
 
   init_step_str = (const char*) "Inertial        ";
   percent_setup += 0.08;
@@ -1538,9 +1578,18 @@ void loop() {
   stopwatch_sensor_grideye.markStart();
   if (0 < grideye.poll()) {        read_thermopile_sensor();            }
   stopwatch_sensor_grideye.markStop();
-  stopwatch_sensor_tmp102.markStart();
-  if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
-  stopwatch_sensor_tmp102.markStop();
+  //stopwatch_sensor_tmp102.markStart();
+  //if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
+  //stopwatch_sensor_tmp102.markStop();
+
+  if (tof_update_next <= millis_now) {
+    stopwatch_sensor_tof.markStart();
+    read_time_of_flight_sensor();
+    stopwatch_sensor_tof.markStop();
+    tof_update_next = now + 100;
+  }
+
+
   stopwatch_sensor_gps.markStart();
   while (SerialGPS.available()) {
     if (gps.encode(Serial1.read())) { // process gps messages

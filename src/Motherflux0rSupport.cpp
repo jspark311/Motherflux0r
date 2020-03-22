@@ -70,7 +70,8 @@ const char* const getSensorIDString(SensorID e) {
     case SensorID::UV:            return "UV";
     case SensorID::GPS:           return "GPS";
     case SensorID::THERMOPILE:    return "THERMOPILE";
-    case SensorID::PSU_TEMP:      return "PSU_TEMP";
+    //case SensorID::PSU_TEMP:      return "PSU_TEMP";
+    case SensorID::TOF:           return "ToF";
     case SensorID::BATT_VOLTAGE:  return "BATT_VOLTAGE";
     case SensorID::LUX:           return "LUX";
   }
