@@ -3,7 +3,9 @@
 #include <CppPotpourri.h>
 #include <StringBuilder.h>
 #include <SensorFilter.h>
-
+#include <Image/Image.h>
+#include <TripleAxisCompass.h>
+#include "SSD13xx.h"
 
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__

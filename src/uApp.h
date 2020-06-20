@@ -3,70 +3,61 @@
 */
 #include <Arduino.h>
 #include <StopWatch.h>
+#include <Image/Image.h>
 
 #ifndef __U_APP_H_
 #define __U_APP_H_
 
+// TODO: Might make this a config or load-contingent value.
+#define APP_POLLING_PERIOD    20    // App runs at ~30fps.
 
 /*******************************************************************************
 * Types
 *******************************************************************************/
 enum class AppID : uint8_t {
-  APP_SELECT   =  0,  // For choosing the app.
-  TOUCH_TEST   =  1,  // For diagnostics of the touch pad.
-  CONFIGURATOR =  2,  // For tuning all the things.
-  DATA_MGMT    =  3,  // For managing recorded datasets.
-  SYNTH_BOX    =  4,  // Sound synthesis from data.
-  COMMS_TEST   =  5,  // Connecting to the outside world.
-  META         =  6,  // Shutdown/reboot/reflash, profiles.
-  I2C_SCANNER  =  7,  // Tool for non-intrusively scanning foreign i2c buses.
+  APP_BOOT     =  0,  // Should run once on startup.
+  APP_SELECT   =  1,  // For choosing the app.
+  TOUCH_TEST   =  2,  // For diagnostics of the touch pad.
+  CONFIGURATOR =  3,  // For tuning all the things.
+  DATA_MGMT    =  4,  // For managing recorded datasets.
+  SYNTH_BOX    =  5,  // Sound synthesis from data.
+  COMMS_TEST   =  6,  // Connecting to the outside world.
+  META         =  7,  // Shutdown/reboot/reflash, profiles.
   TRICORDER    =  8,  // This is the primary purpose of the device.
   HOT_STANDBY  =  9,  // Full operation with powered-down UI elements.
   SUSPEND      = 10   // Minimal power without an obligatory reboot.
 };
 
-
-/* Struct for tracking application state. */
-// TODO: This should evolve into a class if we irradiate millions of copies of it.
-typedef struct {
-  const char* const title;           // Name of tha application.
-  const AppID       id;              // ID of the application.
-  uint8_t           page_count;      // Total page count.
-  uint8_t           page_top;        // The currently visible page.
-  uint8_t           slider_val;      // Cached slider value.
-  uint8_t           frame_rate;      // App's frame rate.
-  bool              screen_refresh;  // Set to indicate a refresh is needed.
-  bool              app_active;      // This app is active.
-  bool              locked;          // This app is locked into its current state.
-} AppHandle;
-
-/* Struct for defining global hotkeys. */
-typedef struct {
-  uint8_t id;        // Uniquely IDs this hotkey combo.
-  uint8_t buttons;   // To trigger, the button state must equal this...
-  uint32_t duration; // ...for at least this many milliseconds.
-} KeyCombo;
-
-
+/* Application lifecycle state machine positions. */
+enum class AppLifecycle : uint8_t {
+  UNINITIALIZED = 0,  //
+  PREINIT       = 1,  //
+  ACTIVE        = 2,  //
+  TEARDOWN      = 3,  //
+  INACTIVE      = 4   //
+};
 
 
 /* Class flags */
-#define UAPP_FLAG_ENABLED          0x00000001  // This application is active.
-#define UAPP_FLAG_CLUTTER_DISPLAY  0x00000002  // User wants more information on the display.
-#define UAPP_FLAG_TEXT_OF_VALUE    0x00000004  // User wants more information on the display.
-#define UAPP_FLAG_LOCK_RANGE       0x00000008  // Lock the output range.
+#define UAPP_FLAG_LIFECYC_SM_MASK  0x00000007  //
+#define UAPP_FLAG_IS_ACTIVE        0x00000010  // This application is active.
+#define UAPP_FLAG_CLUTTER_DISPLAY  0x00000020  // User wants more information on the display.
+#define UAPP_FLAG_TEXT_OF_VALUE    0x00000040  // User wants more information on the display.
+#define UAPP_FLAG_LOCK_RANGE       0x00000080  // Lock the output range.
 
-#define UAPP_FLAG_PRESS_UP         0x40000000  //
-#define UAPP_FLAG_PRESS_DOWN       0x80000000  //
+#define UAPP_FLAG_PRESS_UP         0x04000000  //
+#define UAPP_FLAG_PRESS_DOWN       0x08000000  //
+#define UAPP_FLAG_PRESS_LEFT       0x10000000  //
+#define UAPP_FLAG_PRESS_RIGHT      0x20000000  //
+#define UAPP_FLAG_PRESS_OK         0x40000000  //
+#define UAPP_FLAG_PRESS_CANCEL     0x80000000  //
 
 
 /*******************************************************************************
 *******************************************************************************/
 class uApp {
   public:
-    inline bool enabled() {          return _uapp_flag(UAPP_FLAG_ENABLED);        };
-
-    virtual int8_t refresh() =0;
+    int8_t refresh();  // TODO: Might-should be static?
 
     inline void deliverSliderValue(uint16_t val) {  _slider_pending  = val;   };
     inline void deliverButtonValue(uint16_t val) {  _buttons_pending  = val;  };
@@ -74,30 +65,33 @@ class uApp {
     inline void printStopwatch(StringBuilder* out) {  _stopwatch.printDebug(_UA_NAME, out);   };
     inline void resetStopwatch() {                    _stopwatch.reset();                     };
 
-    static void  setAppActive(AppID);
-    static AppID appActive();
-    static AppID drawnApp();
-    static AppID previousApp();
+    inline bool isActive() {     return _uapp_flag(UAPP_FLAG_IS_ACTIVE);  };
+    inline const char* getAppIDString() {   return _UA_NAME;    };
 
-    static int8_t redraw();
-    static uApp*  getActiveAppPtr();
-    static const char* const getAppIDString(AppID);
-    static void listAllApplications(StringBuilder*);
-
-    // TODO: Should be protected.
-    static void redraw_app_window(const char* title, uint8_t pages, uint8_t active_page);
+    static uApp* appActive();
+    static uApp* drawnApp();
+    static uApp* previousApp();
+    static void setAppActive(AppID);
 
 
   protected:
     const char*   _UA_NAME;
+    Image*        FB;
     StopWatch     _stopwatch;
     uint16_t      _slider_current  = 0;
     uint16_t      _slider_pending  = 0;
     uint16_t      _buttons_current = 0;
     uint16_t      _buttons_pending = 0;
 
-    uApp(const char* _n) : _UA_NAME(_n) {};
+    uApp(const char* _n, Image* img) : _UA_NAME(_n), FB(img) {};
     virtual ~uApp() {};
+
+    virtual int8_t _lc_on_preinit()      =0;
+    virtual int8_t _lc_on_active()       =0;
+    virtual int8_t _lc_on_teardown()     =0;
+    virtual int8_t _lc_on_inactive()     =0;
+    virtual int8_t _process_user_input() =0;
+    virtual void   _redraw_window()      =0;
 
     inline void redraw_app_window() {         redraw_app_window(_UA_NAME, 0, 0);  };
 
@@ -112,6 +106,19 @@ class uApp {
     inline void _button_pressed_up(bool x) {  _uapp_set_flag(UAPP_FLAG_PRESS_UP, x);        };
     inline bool _button_pressed_dn() {        return _uapp_flag(UAPP_FLAG_PRESS_DOWN);      };
     inline void _button_pressed_dn(bool x) {  _uapp_set_flag(UAPP_FLAG_PRESS_DOWN, x);      };
+    inline bool _button_pressed_l() {         return _uapp_flag(UAPP_FLAG_PRESS_LEFT);      };
+    inline void _button_pressed_l(bool x) {   _uapp_set_flag(UAPP_FLAG_PRESS_LEFT, x);      };
+    inline bool _button_pressed_u() {         return _uapp_flag(UAPP_FLAG_PRESS_RIGHT);     };
+    inline void _button_pressed_u(bool x) {   _uapp_set_flag(UAPP_FLAG_PRESS_RIGHT, x);     };
+    inline bool _button_pressed_ok() {        return _uapp_flag(UAPP_FLAG_PRESS_OK);        };
+    inline void _button_pressed_ok(bool x) {  _uapp_set_flag(UAPP_FLAG_PRESS_OK, x);        };
+    inline bool _button_pressed_x() {         return _uapp_flag(UAPP_FLAG_PRESS_CANCEL);    };
+    inline void _button_pressed_x(bool x) {   _uapp_set_flag(UAPP_FLAG_PRESS_CANCEL, x);    };
+
+    void _lc_increment_position();
+    inline AppLifecycle _lc_current_position() {
+      return (AppLifecycle) (_flags & UAPP_FLAG_LIFECYC_SM_MASK);
+    };
 
     /* Flag manipulation inlines */
     inline uint32_t _uapp_flags() {                return _flags;           };
@@ -122,6 +129,8 @@ class uApp {
       if (nu) _flags |= _flag;
       else    _flags &= ~_flag;
     };
+
+    static void redraw_app_window(const char* title, uint8_t pages, uint8_t active_page);
 
 
   private:
@@ -134,13 +143,31 @@ class uApp {
 * Specific derived classes
 *******************************************************************************/
 
+class uAppBoot : public uApp {
+  public:
+    uAppBoot();
+    ~uAppBoot();
+
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
+
+
 class uAppTricorder : public uApp {
   public:
     uAppTricorder();
     ~uAppTricorder();
-    int8_t refresh();
 
-  private:
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
 };
@@ -151,9 +178,12 @@ class uAppTouchTest : public uApp {
   public:
     uAppTouchTest();
     ~uAppTouchTest();
-    int8_t refresh();
 
-  private:
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
 };
@@ -164,11 +194,14 @@ class uAppMeta : public uApp {
   public:
     uAppMeta();
     ~uAppMeta();
-    int8_t refresh();
 
-  private:
+  protected:
     uint32_t _last_i2c_scan = 0;
 
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
 };
@@ -178,11 +211,14 @@ class uAppRoot : public uApp {
   public:
     uAppRoot();
     ~uAppRoot();
-    int8_t refresh();
 
-  private:
+  protected:
     AppID app_page = AppID::TRICORDER;
 
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
 };
@@ -192,11 +228,14 @@ class uAppSynthBox : public uApp {
   public:
     uAppSynthBox();
     ~uAppSynthBox();
-    int8_t refresh();
 
-  private:
+  protected:
     uint8_t fft_bars_shown[96];
 
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
 };
@@ -206,9 +245,12 @@ class uAppStandby : public uApp {
   public:
     uAppStandby();
     ~uAppStandby();
-    int8_t refresh();
 
-  private:
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
 };
@@ -218,9 +260,12 @@ class uAppConfigurator : public uApp {
   public:
     uAppConfigurator();
     ~uAppConfigurator();
-    int8_t refresh();
 
-  private:
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
 };
@@ -230,12 +275,29 @@ class uAppComms : public uApp {
   public:
     uAppComms();
     ~uAppComms();
-    int8_t refresh();
 
-  private:
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
 };
 
+
+class uAppDataMgmt : public uApp {
+  public:
+    uAppDataMgmt();
+    ~uAppDataMgmt();
+
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
 
 #endif   // __U_APP_H_

@@ -21,33 +21,13 @@ Original license text is reproduced in the header file.
 // and sets the last bit correctly based on reads and writes
 #define ADDRESS_DEFAULT 0x29 //0x52
 
-// Record the current time to check an upcoming timeout against
-#define startTimeout() (timeout_start_ms = millis())
-
-// Check if timeout is enabled (set to nonzero value) and has expired
-#define checkTimeoutExpired() (io_timeout > 0 && ((uint16_t)(millis() - timeout_start_ms) > io_timeout))
-
-// Decode VCSEL (vertical cavity surface emitting laser) pulse period in PCLKs
-// from register value
-// based on VL53L0X_decode_vcsel_period()
-#define decodeVcselPeriod(reg_val)      (((reg_val) + 1) << 1)
-
-// Encode VCSEL pulse period register value from period in PCLKs
-// based on VL53L0X_encode_vcsel_period()
-#define encodeVcselPeriod(period_pclks) (((period_pclks) >> 1) - 1)
-
-// Calculate macro period in *nanoseconds* from VCSEL period in PCLKs
-// based on VL53L0X_calc_macro_period_ps()
-// PLL_period_ps = 1655; macro_period_vclks = 2304
-#define calcMacroPeriod(vcsel_period_pclks) ((((uint32_t)2304 * (vcsel_period_pclks) * 1655) + 500) / 1000)
 
 // Constructors ////////////////////////////////////////////////////////////////
 
 VL53L0X::VL53L0X()
   : address(ADDRESS_DEFAULT)
   , io_timeout(0) // no timeout
-  , did_timeout(false)
-{}
+  , did_timeout(false) {}
 
 // Public Methods //////////////////////////////////////////////////////////////
 

@@ -1,16 +1,19 @@
-#include <CppPotpourri.h>
-#include <SensorFilter.h>
-#include "uApp.h"
 #include "Motherflux0r.h"
-
+#include "uApp.h"
 
 extern SSD13xx display;
 
 
+    // TODO: Put things into reset states.
+    // TODO: Power off non-essential rails.
+    // TODO: Scale back the CPU clock.
+    // TODO: Set wake sources.
 
-uAppConfigurator::uAppConfigurator() : uApp("Config", (Image*) &display) {}
 
-uAppConfigurator::~uAppConfigurator() {}
+uAppDataMgmt::uAppDataMgmt() : uApp("Data Mgmt", (Image*) &display) {}
+
+
+uAppDataMgmt::~uAppDataMgmt() {}
 
 
 
@@ -24,7 +27,7 @@ uAppConfigurator::~uAppConfigurator() {}
 *
 * @return 0 for no lifecycle FSM change, 1 for FSM increment, -1 for halt.
 */
-int8_t uAppConfigurator::_lc_on_preinit() {
+int8_t uAppDataMgmt::_lc_on_preinit() {
   int8_t ret = 1;
   return ret;
 }
@@ -36,7 +39,7 @@ int8_t uAppConfigurator::_lc_on_preinit() {
 *
 * @return 0 for no lifecycle FSM change, 1 for FSM increment, -1 for halt.
 */
-int8_t uAppConfigurator::_lc_on_active() {
+int8_t uAppDataMgmt::_lc_on_active() {
   int8_t ret = 0;
   return ret;
 }
@@ -48,7 +51,7 @@ int8_t uAppConfigurator::_lc_on_active() {
 *
 * @return 0 for no lifecycle FSM change, 1 for FSM increment, -1 for halt.
 */
-int8_t uAppConfigurator::_lc_on_teardown() {
+int8_t uAppDataMgmt::_lc_on_teardown() {
   int8_t ret = 1;
   return ret;
 }
@@ -60,7 +63,7 @@ int8_t uAppConfigurator::_lc_on_teardown() {
 *
 * @return 0 for no lifecycle FSM change, 1 for FSM reset to PREINIT, -1 for halt.
 */
-int8_t uAppConfigurator::_lc_on_inactive() {
+int8_t uAppDataMgmt::_lc_on_inactive() {
   int8_t ret = 1;
   return ret;
 }
@@ -72,18 +75,18 @@ int8_t uAppConfigurator::_lc_on_inactive() {
 *
 * @return 0 for no change, 1 for display refresh, -1 for application change.
 */
-int8_t uAppConfigurator::_process_user_input() {
+int8_t uAppDataMgmt::_process_user_input() {
   int8_t ret = 0;
 
   if (_slider_current != _slider_pending) {
-    redraw_app_window();
     _slider_current = _slider_pending;
     ret = 1;
   }
   if (_buttons_current != _buttons_pending) {
     uint16_t diff = _buttons_current ^ _buttons_pending;
     ret = 1;
-    if (diff & 0x0001) {   // Interpret a cancel press as a return to APP_SELECT.
+    if (_buttons_pending == 0x0028) {
+      // Interpret a cancel press as a return to APP_SELECT.
       uApp::setAppActive(AppID::APP_SELECT);
       ret = -1;
     }
@@ -97,7 +100,6 @@ int8_t uAppConfigurator::_process_user_input() {
 /*
 * Draws the app.
 */
-void uAppConfigurator::_redraw_window() {
-  const uint8_t TEXT_OFFSET = 56;
-  FB->fillRect(0, 11, FB->x()-1, FB->y()-12, 0);
+void uAppDataMgmt::_redraw_window() {
+  FB->fill(0);
 }

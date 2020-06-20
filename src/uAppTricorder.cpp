@@ -1,6 +1,4 @@
 #include <CppPotpourri.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1331.h>
 #include <SensorFilter.h>
 #include <TinyGPS.h>
 #include "VEML6075.h"
@@ -14,7 +12,7 @@
 #include "uApp.h"
 #include "Motherflux0r.h"
 
-extern Adafruit_SSD1331 display;
+extern SSD13xx display;
 
 /* Sensor representations... */
 extern DRV425 magneto;
@@ -26,6 +24,15 @@ extern TSL2561 tsl2561;
 extern BME280I2C baro;
 extern VL53L0X tof;
 extern TinyGPS gps;
+
+extern WakeLock* wakelock_tof;
+extern WakeLock* wakelock_mag;
+extern WakeLock* wakelock_lux;
+extern WakeLock* wakelock_imu;
+extern WakeLock* wakelock_grideye;
+extern WakeLock* wakelock_uv;
+extern WakeLock* wakelock_baro;
+extern WakeLock* wakelock_gps;
 
 extern SensorFilter<float> graph_array_pressure;
 extern SensorFilter<float> graph_array_humidity;
@@ -42,6 +49,17 @@ extern SensorFilter<float> graph_array_mag_confidence;
 extern SensorFilter<float> graph_array_time_of_flight;
 
 
+// Magnetic pipeline
+extern TripleAxisTerminus     mag_vect;   // The magnetic field vector.
+extern TripleAxisCompass      compass;    // Tilt-compensated compass.
+extern TripleAxisSingleFilter mag_filter; // Input-side filter.
+extern TripleAxisConvention   mag_conv;   // Gnomon conversion stage.
+
+// Inertial pipeline
+extern TripleAxisTerminus     down;       // Gnomon conversion stage.
+extern TripleAxisConvention   tilt_conv;  // Gnomon conversion stage.
+
+
 void redraw_tricorder_window();
 
 // Thermopile constants
@@ -52,111 +70,149 @@ static float    therm_midpoint_lock = 0.0;    // GidEye
 static DataVis current_data_vis = DataVis::TEXT;
 
 
-
-uAppTricorder::uAppTricorder() : uApp("Tricorder") {
-}
+uAppTricorder::uAppTricorder() : uApp("Tricorder", (Image*) &display) {}
 
 
-uAppTricorder::~uAppTricorder(){
-}
+uAppTricorder::~uAppTricorder() {}
 
 
 
-int8_t uAppTricorder::refresh() {
-  int8_t ret = 0;
-  _stopwatch.markStart();
-  if (uApp::drawnApp() != uApp::appActive()) {
-    redraw_app_window();
-  }
-  switch (_process_user_input()) {
-    case 2:
-    case 1:
-    case 0:
-      _redraw_window();
-    default:
-      break;
-  }
-  _stopwatch.markStop();
+/*******************************************************************************
+* Lifecycle callbacks from the super class
+*******************************************************************************/
+/**
+* Called by superclass on activation of lifecycle. This function should prepare
+*   the class as if it were freshly instantiated. Redraw will not happen until
+*   the tick following this function returning 1.
+*
+* @return 0 for no lifecycle FSM change, 1 for FSM increment, -1 for halt.
+*/
+int8_t uAppTricorder::_lc_on_preinit() {
+  int8_t ret = 1;
+  if (nullptr != wakelock_tof) {   wakelock_tof->acquire();   }
+  if (nullptr != wakelock_mag) {   wakelock_mag->acquire();   }
   return ret;
 }
 
 
-
-int8_t uAppTricorder::_process_user_input() {
+/**
+* Called by superclass to perform the first draw. Input will be processed and
+*   the display redrawn after this function returns.
+*
+* @return 0 for no lifecycle FSM change, 1 for FSM increment, -1 for halt.
+*/
+int8_t uAppTricorder::_lc_on_active() {
   int8_t ret = 0;
+  return ret;
+}
 
+
+/**
+* Called by superclass to warn us of impending destruction. Here, the class
+*   ought to dispatch any final I/O, and start to close down.
+*
+* @return 0 for no lifecycle FSM change, 1 for FSM increment, -1 for halt.
+*/
+int8_t uAppTricorder::_lc_on_teardown() {
+  int8_t ret = 1;
+  return ret;
+}
+
+
+/**
+* Called by superclass to perform the final cleanup. Any memory allocated on the
+*   heap needs to be cleaned up or accounted for before this function returns 1.
+*
+* @return 0 for no lifecycle FSM change, 1 for FSM reset to PREINIT, -1 for halt.
+*/
+int8_t uAppTricorder::_lc_on_inactive() {
+  int8_t ret = 1;
+  return ret;
+}
+
+
+/**
+* Called by superclass while app is ACTIVE to handle user input that has
+*   collected since the last tick.
+*
+* @return 0 for no change, 1 for display refresh, -1 for application change.
+*/
+int8_t uAppTricorder::_process_user_input() {
+  int8_t ret = 1;
   if (_slider_current != _slider_pending) {
     if (_slider_pending <= 7) {
-      display.fillScreen(BLACK);
-      display.setTextSize(0);
-      display.setCursor(0, 0);
-      display.setTextColor(0x03E0, BLACK);
-      display.print("Pressure (Pa)");
+      FB->fill(BLACK);
+      FB->setTextSize(0);
+      FB->setCursor(0, 0);
+      FB->setTextColor(0x03E0, BLACK);
+      FB->writeString("Pressure (Pa)");
     }
     else if (_slider_pending <= 15) {
-      display.fillScreen(BLACK);
-      display.setTextSize(0);
-      display.setCursor(0, 0);
-      display.setTextColor(0x3EE3, BLACK);
-      display.print("RelH%");
-      display.setTextColor(WHITE, BLACK);
-      display.print(" / ");
-      display.setTextColor(0x83D0, BLACK);
-      display.print("Temp  ");
+      FB->fill(BLACK);
+      FB->setTextSize(0);
+      FB->setCursor(0, 0);
+      FB->setTextColor(0x3EE3, BLACK);
+      FB->writeString("RelH%");
+      FB->setTextColor(WHITE, BLACK);
+      FB->writeString(" / ");
+      FB->setTextColor(0x83D0, BLACK);
+      FB->writeString("Temp  ");
     }
     else if (_slider_pending <= 22) {
-      display.fillScreen(BLACK);
-      display.setTextSize(0);
-      display.setCursor(0, 0);
-      display.setTextColor(0x8235, BLACK);
-      display.print("Distance (mm)");
+      FB->fill(BLACK);
+      FB->setTextSize(0);
+      FB->setCursor(0, 0);
+      FB->setTextColor(0x8235, BLACK);
+      FB->writeString("Distance (mm)");
     }
     else if (_slider_pending <= 30) {
-      display.fillScreen(BLACK);
-      display.setTextSize(0);
-      display.setCursor(0, 0);
-      display.setTextColor(0xF710, BLACK);
-      display.print("ANA");
-      display.setTextColor(WHITE, BLACK);
-      display.print(" / ");
-      display.setTextColor(0xF140, BLACK);
-      display.print("Lux");
-      display.setTextColor(WHITE, BLACK);
-      display.print(" / ");
-      display.setTextColor(0xF81F, BLACK);
-      display.print("UVI");
+      FB->fill(BLACK);
+      FB->setTextSize(0);
+      FB->setCursor(0, 0);
+      FB->setTextColor(0xF710, BLACK);
+      FB->writeString("ANA");
+      FB->setTextColor(WHITE, BLACK);
+      FB->writeString(" / ");
+      FB->setTextColor(0xF140, BLACK);
+      FB->writeString("Lux");
+      FB->setTextColor(WHITE, BLACK);
+      FB->writeString(" / ");
+      FB->setTextColor(0xF81F, BLACK);
+      FB->writeString("UVI");
     }
     else if (_slider_pending <= 37) {
-      display.fillScreen(BLACK);
-      display.setTextSize(0);
-      display.setCursor(0, 0);
-      display.setTextColor(0x781F, BLACK);
-      display.print("UVa");
-      display.setTextColor(WHITE, BLACK);
-      display.print(" / ");
-      display.setTextColor(0xF80F, BLACK);
-      display.print("UVb       ");
+      FB->fill(BLACK);
+      FB->setTextSize(0);
+      FB->setCursor(0, 0);
+      FB->setTextColor(0x781F, BLACK);
+      FB->writeString("UVa");
+      FB->setTextColor(WHITE, BLACK);
+      FB->writeString(" / ");
+      FB->setTextColor(0xF80F, BLACK);
+      FB->writeString("UVb       ");
     }
     else if (_slider_pending <= 45) {
       redraw_app_window();
     }
     else if (_slider_pending <= 52) {
-      display.fillScreen(BLACK);
-      display.setCursor(0, 0);
-      display.setTextColor(0x071F, BLACK);
-      display.print("Magnetometer  ");
+      FB->fill(BLACK);
+      FB->setCursor(0, 0);
+      FB->setTextColor(0x071F, BLACK);
+      FB->writeString("Magnetometer  ");
     }
     else {
-      //display.fillRect(0, 11, display.width()-1, display.height()-12, BLACK);
-      display.fillScreen(BLACK);
+      //FB->fillRect(0, 11, FB->width()-1, FB->y()-12, BLACK);
+      FB->fill(BLACK);
     }
     _slider_current = _slider_pending;
-    ret++;
   }
   if (_buttons_current != _buttons_pending) {
     uint16_t diff = _buttons_current ^ _buttons_pending;
     if (diff & 0x0001) {   // Interpret a cancel press as a return to APP_SELECT.
       uApp::setAppActive(AppID::APP_SELECT);
+      if (nullptr != wakelock_tof) {   wakelock_tof->release();   }
+      if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
+      ret = -1;
     }
     if (diff & 0x0002) {   // Cluttered display toggle.
       if (_buttons_pending & 0x0002) {
@@ -174,7 +230,6 @@ int8_t uAppTricorder::_process_user_input() {
       }
     }
     _buttons_current = _buttons_pending;
-    ret++;
   }
   return ret;
 }
@@ -185,6 +240,7 @@ int8_t uAppTricorder::_process_user_input() {
 * Draws the tricorder app.
 */
 void uAppTricorder::_redraw_window() {
+  StringBuilder tmp_val_str;
   if (_slider_current <= 7) {
     // Baro
     if (graph_array_humidity.dirty()) {
@@ -196,18 +252,20 @@ void uAppTricorder::_redraw_window() {
         true, _cluttered_display(), _render_text_value(),
         &graph_array_pressure
       );
-      display.setTextSize(0);
-      display.setCursor(0, 48);
-      display.setTextColor(WHITE, BLACK);
-      display.print("Alt: ");
-      display.setTextColor(GREEN, BLACK);
-      display.print(altitude);
-      display.println("m");
-      display.setTextColor(WHITE, BLACK);
-      display.print("Dew Point: ");
-      display.setTextColor(0x03E0, BLACK);
-      display.print(dew_point);
-      display.println("C");
+      FB->setTextSize(0);
+      FB->setCursor(0, 48);
+      FB->setTextColor(WHITE, BLACK);
+      FB->writeString("Alt: ");
+      FB->setTextColor(GREEN, BLACK);
+      tmp_val_str.clear();
+      tmp_val_str.concatf("%.3f ft", altitude);
+      FB->writeString(&tmp_val_str);
+      FB->setTextColor(WHITE, BLACK);
+      FB->writeString("Dew Point: ");
+      FB->setTextColor(0x03E0, BLACK);
+      tmp_val_str.clear();
+      tmp_val_str.concatf("%.2fC", dew_point);
+      FB->writeString(&tmp_val_str);
     }
   }
   else if (_slider_current <= 15) {
@@ -249,13 +307,13 @@ void uAppTricorder::_redraw_window() {
   }
   else if (_slider_current <= 45) {
     // IMU
-    display.setCursor(0, 11);
-    display.setTextColor(YELLOW, BLACK);
-    display.print("IMU");
+    FB->setCursor(0, 11);
+    FB->setTextColor(YELLOW, BLACK);
+    FB->writeString("IMU");
     StringBuilder temp0;
     temp0.concatf("uT<%.2f, %.2f, %.2f>", imu.accX(), imu.accY(), imu.accZ());
-    display.setTextColor(WHITE, BLACK);
-    display.println((char*) temp0.string());
+    FB->setTextColor(WHITE, BLACK);
+    FB->writeString(&temp0);
     //imu.gyrX();
     //imu.gyrY();
     //imu.gyrZ();
@@ -265,17 +323,18 @@ void uAppTricorder::_redraw_window() {
     //imu.temp();
   }
   else if (_slider_current <= 52) {
-    if (graph_array_mag_confidence.dirty()) {
-      display.setTextColor(WHITE, BLACK);
-      Vector3f64* mag_vect = magneto.getFieldVector();
+    if (compass.dataReady()) {
+      FB->setTextColor(WHITE, BLACK);
+      Vector3f* mag_vect_ptr = mag_vect.getData();
       float bearing_north = 0.0;
       float bearing_mag = 0.0;
-      magneto.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
-      magneto.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
+      compass.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
+      compass.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
       draw_compass(0, 10, 45, 45, false, _render_text_value(), bearing_mag, bearing_north);
-      display.setCursor(0, 57);
-      display.print(mag_vect->length());
-      display.print(" uT");
+      FB->setCursor(0, 57);
+      tmp_val_str.clear();
+      tmp_val_str.concatf("%.3f uT", mag_vect_ptr->length());
+      FB->writeString(&tmp_val_str);
       draw_graph_obj(
         46, 10, 50, 55, 0x071F,
         true, false, _render_text_value(),
@@ -313,36 +372,46 @@ void uAppTricorder::_redraw_window() {
         float pix_deviation = abs(MIDPOINT_T - therm_pixels[i]);
         uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (therm_field_max - MIDPOINT_T));
         uint16_t color = (therm_pixels[i] <= MIDPOINT_T) ? pix_intensity : (pix_intensity << 11);
-        display.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
+        FB->fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
       }
-      display.setTextSize(0);
-      display.setCursor(TEXT_OFFSET, 0);
-      display.setTextColor(RED, BLACK);
-      display.print(therm_field_max);
+      FB->setTextSize(0);
+      FB->setCursor(TEXT_OFFSET, 0);
+      FB->setTextColor(RED, BLACK);
+      tmp_val_str.concat(therm_field_max);
+      FB->writeString(&tmp_val_str);
+      tmp_val_str.clear();
 
-      display.setCursor(TEXT_OFFSET, 12);
-      display.setTextColor(WHITE, BLACK);
-      display.print("ABS (C)");
+      FB->setCursor(TEXT_OFFSET, 12);
+      FB->setTextColor(WHITE, BLACK);
+      FB->writeString("ABS (C)");
 
-      display.setCursor(TEXT_OFFSET, (PIXEL_SIZE*8)-7);
-      display.setTextColor(BLUE, BLACK);
-      display.print(therm_field_min);
+      FB->setCursor(TEXT_OFFSET, (PIXEL_SIZE*8)-7);
+      FB->setTextColor(BLUE, BLACK);
+      tmp_val_str.concat(therm_field_min);
+      FB->writeString(&tmp_val_str);
+      tmp_val_str.clear();
 
-      display.setCursor(0, TEXT_OFFSET);
-      display.setTextColor(WHITE);
-      display.print("Mean:  ");
-      display.setTextColor(RED, BLACK);
-      display.println(graph_array_therm_mean.value());
+      FB->setCursor(0, TEXT_OFFSET);
+      FB->setTextColor(WHITE);
+      FB->writeString("Mean:  ");
+      FB->setTextColor(RED, BLACK);
+      tmp_val_str.concat(graph_array_therm_mean.value());
+      FB->writeString(&tmp_val_str);
+      tmp_val_str.clear();
 
-      display.setTextColor(WHITE);
-      display.print("Range: ");
-      display.setTextColor(RED, BLACK);
-      display.println(therm_field_max - therm_field_min);
+      FB->setTextColor(WHITE);
+      FB->writeString("Range: ");
+      FB->setTextColor(RED, BLACK);
+      tmp_val_str.concat(therm_field_max - therm_field_min);
+      FB->writeString(&tmp_val_str);
+      tmp_val_str.clear();
 
-      display.setTextColor(WHITE);
-      display.print("STDEV: ");
-      display.setTextColor(RED, BLACK);
-      display.println(graph_array_therm_frame.stdevValue());
+      FB->setTextColor(WHITE);
+      FB->writeString("STDEV: ");
+      FB->setTextColor(RED, BLACK);
+      tmp_val_str.concat(graph_array_therm_frame.stdevValue());
+      FB->writeString(&tmp_val_str);
+      tmp_val_str.clear();
     }
   }
 }

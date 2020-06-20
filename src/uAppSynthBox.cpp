@@ -1,13 +1,11 @@
 #include <CppPotpourri.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1331.h>
 #include <SensorFilter.h>
 #include <Audio.h>
 #include "uApp.h"
 #include "Motherflux0r.h"
 
 
-extern Adafruit_SSD1331 display;
+extern SSD13xx display;
 
 extern float volume_left_output;
 extern float volume_right_output;
@@ -49,84 +47,120 @@ static const uint16_t BIN_INDICIES[] = {
 };
 
 
-
-uAppSynthBox::uAppSynthBox() : uApp("SynthBox") {}
-
+uAppSynthBox::uAppSynthBox() : uApp("SynthBox", (Image*) &display) {}
 
 uAppSynthBox::~uAppSynthBox() {}
 
 
 
-int8_t uAppSynthBox::refresh() {
-  int8_t ret = 0;
-  _stopwatch.markStart();
-  if (uApp::drawnApp() != uApp::appActive()) {
-    redraw_app_window();
-  }
-  switch (_process_user_input()) {
-    case 2:
-    case 1:
-    case 0:
-      _redraw_window();
-    default:
-      break;
-  }
-  _stopwatch.markStop();
+/*******************************************************************************
+* Lifecycle callbacks from the super class
+*******************************************************************************/
+/**
+* Called by superclass on activation of lifecycle. This function should prepare
+*   the class as if it were freshly instantiated. Redraw will not happen until
+*   the tick following this function returning 1.
+*
+* @return 0 for no lifecycle FSM change, 1 for FSM increment, -1 for halt.
+*/
+int8_t uAppSynthBox::_lc_on_preinit() {
+  int8_t ret = 1;
   return ret;
 }
 
 
+/**
+* Called by superclass to perform the first draw. Input will be processed and
+*   the display redrawn after this function returns.
+*
+* @return 0 for no lifecycle FSM change, 1 for FSM increment, -1 for halt.
+*/
+int8_t uAppSynthBox::_lc_on_active() {
+  int8_t ret = 0;
+  return ret;
+}
 
+
+/**
+* Called by superclass to warn us of impending destruction. Here, the class
+*   ought to dispatch any final I/O, and start to close down.
+*
+* @return 0 for no lifecycle FSM change, 1 for FSM increment, -1 for halt.
+*/
+int8_t uAppSynthBox::_lc_on_teardown() {
+  int8_t ret = 1;
+  return ret;
+}
+
+
+/**
+* Called by superclass to perform the final cleanup. Any memory allocated on the
+*   heap needs to be cleaned up or accounted for before this function returns 1.
+*
+* @return 0 for no lifecycle FSM change, 1 for FSM reset to PREINIT, -1 for halt.
+*/
+int8_t uAppSynthBox::_lc_on_inactive() {
+  int8_t ret = 1;
+  return ret;
+}
+
+
+/**
+* Called by superclass while app is ACTIVE to handle user input that has
+*   collected since the last tick.
+*
+* @return 0 for no change, 1 for display refresh, -1 for application change.
+*/
 int8_t uAppSynthBox::_process_user_input() {
   int8_t ret = 0;
 
   if (_slider_current != _slider_pending) {
-    redraw_app_window();
-    display.setCursor(64, 0);
-    display.setTextColor(YELLOW, BLACK);
+    FB->setCursor(64, 0);
+    FB->setTextColor(YELLOW, BLACK);
     if (_slider_pending <= 7) {
-      display.print("Vol  ");
+      FB->writeString("Vol  ");
       draw_progress_bar_vertical(0,  11, 27, 52, GREEN, true, true, volume_left_output);
       draw_progress_bar_vertical(29, 11, 27, 52, GREEN, true, true, volume_right_output);
       draw_progress_bar_vertical(58, 11, 27, 52, GREEN, true, true, volume_pink_noise);
     }
     else if (_slider_pending <= 15) {
-      display.print("Mix F");
+      FB->writeString("Mix F");
       draw_progress_bar_vertical(0,  11, 22, 52, GREEN, true, true, mix_queueL_to_fft);
       draw_progress_bar_vertical(23, 11, 22, 52, GREEN, true, true, mix_queueR_to_fft);
       draw_progress_bar_vertical(46, 11, 22, 52, GREEN, true, true, mix_noise_to_fft);
       draw_progress_bar_vertical(69, 11, 22, 52, GREEN, true, true, 0.0);
     }
     else if (_slider_pending <= 22) {
-      display.print("Mix O");
+      FB->writeString("Mix O");
       draw_progress_bar_vertical(0,  11, 22, 52, GREEN, true, true, mix_synth_to_line);
       draw_progress_bar_vertical(23, 11, 22, 52, GREEN, true, true, mix_queue_to_line);
       draw_progress_bar_vertical(46, 11, 22, 52, GREEN, true, true, mix_noise_to_line);
       draw_progress_bar_vertical(69, 11, 22, 52, GREEN, true, true, 0.0);
     }
     else if (_slider_pending <= 30) {
-      display.print("DTMF ");
+      FB->writeString("DTMF ");
     }
     else if (_slider_pending <= 37) {
-      display.print("Slot0 ");
+      FB->writeString("Slot0 ");
     }
     else if (_slider_pending <= 45) {
-      display.print("Slot1 ");
+      FB->writeString("Slot1 ");
     }
     else if (_slider_pending <= 52) {
-      display.print("Slot2 ");
+      FB->writeString("Slot2 ");
     }
     else {
-      display.print("FFT  ");
+      FB->writeString("FFT  ");
     }
     _slider_current = _slider_pending;
-    ret++;
+    ret = 1;
   }
   if (_buttons_current != _buttons_pending) {
     uint16_t diff = _buttons_current ^ _buttons_pending;
 
     if (diff & 0x0001) {   // Interpret a cancel press as a return to APP_SELECT.
       uApp::setAppActive(AppID::APP_SELECT);
+      ret = -1;
     }
     if (diff & 0x0002) {   // Cluttered display toggle.
       if (_buttons_pending & 0x0002) {
@@ -148,7 +182,7 @@ int8_t uAppSynthBox::_process_user_input() {
     bool down_pressed = (_buttons_current & 0x0010);
     _button_pressed_up(!down_pressed && up_pressed);
     _button_pressed_dn(down_pressed && !up_pressed);
-    ret++;
+    ret = 1;
   }
   return ret;
 }
@@ -252,19 +286,19 @@ void uAppSynthBox::_redraw_window() {
     }
     for (uint8_t i = 0; i < 96; i++) {
       uint8_t scaled_val = fft_bins[i] * SCALER_PIX;
-      uint y_real  = (display.height()-12) - scaled_val;
-      uint h_real  = (display.height()-12) - scaled_val;
-      display.drawFastVLine(i, 11, display.height()-12, BLACK);
+      uint y_real  = (FB->y()-12) - scaled_val;
+      uint h_real  = (FB->y()-12) - scaled_val;
+      FB->drawFastVLine(i, 11, FB->y()-12, BLACK);
       if (scaled_val >= fft_bars_shown[i]) {
         fft_bars_shown[i] = scaled_val;
-        display.drawFastVLine(i, y_real, h_real, GREEN);
+        FB->drawFastVLine(i, y_real, h_real, GREEN);
       }
       else {
         if (fft_bars_shown[i] > 0) fft_bars_shown[i] = fft_bars_shown[i] - SHOWN_DECAY;
-        uint y_decay = (display.height()-12) - fft_bars_shown[i];
+        uint y_decay = (FB->y()-12) - fft_bars_shown[i];
         uint h_decay = y_decay - h_real;
-        display.drawFastVLine(i, y_decay, h_decay, GREEN);
-        display.drawFastVLine(i, y_real, h_real, WHITE);
+        FB->drawFastVLine(i, y_decay, h_decay, GREEN);
+        FB->drawFastVLine(i, y_real, h_real, WHITE);
       }
     }
   }

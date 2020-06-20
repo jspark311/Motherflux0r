@@ -1,34 +1,124 @@
 #include <CppPotpourri.h>
-#include <Adafruit_SSD1331.h>
 #include "uApp.h"
 #include "Motherflux0r.h"
 
-extern Adafruit_SSD1331 display;
+extern SSD13xx display;
 
+/* Application tracking and interrupts... */
+uAppBoot app_boot;
+uAppTricorder app_tricorder;
+uAppMeta app_meta;
+uAppTouchTest app_touch_test;
+uAppRoot app_root;
+uAppSynthBox app_synthbox;
+uAppStandby app_standby;
+uAppConfigurator app_config;
+uAppComms app_comms;
+uAppDataMgmt app_data_mgmt;
 
-static AppID active_app   = AppID::APP_SELECT;
-static AppID drawn_app    = AppID::META;
-static AppID app_previous = AppID::APP_SELECT;
+/*******************************************************************************
+* Statics
+*******************************************************************************/
+volatile static uApp* previous_app_ptr = &app_root;
+volatile static uApp* drawn_app_ptr    = &app_root;
+volatile static uApp* active_app_ptr   = &app_root;
+volatile static uApp* pending_app_ptr  = &app_root;
 
+uApp* uApp::appActive() {      return (uApp*) active_app_ptr;     }
+uApp* uApp::drawnApp() {       return (uApp*) drawn_app_ptr;      }
+uApp* uApp::previousApp() {    return (uApp*) previous_app_ptr;   }
 
 
 void  uApp::setAppActive(AppID new_app) {
-  active_app = new_app;
+  switch (new_app) {
+    case AppID::APP_BOOT:       pending_app_ptr = &app_boot;           break;
+    case AppID::APP_SELECT:     pending_app_ptr = &app_root;           break;
+    case AppID::TOUCH_TEST:     pending_app_ptr = &app_touch_test;     break;
+    case AppID::TRICORDER:      pending_app_ptr = &app_tricorder;      break;
+    case AppID::CONFIGURATOR:   pending_app_ptr = &app_config;         break;
+    case AppID::DATA_MGMT:      pending_app_ptr = &app_data_mgmt;      break;
+    case AppID::SYNTH_BOX:      pending_app_ptr = &app_synthbox;       break;
+    case AppID::COMMS_TEST:     pending_app_ptr = &app_comms;          break;
+    case AppID::META:           pending_app_ptr = &app_meta;           break;
+    case AppID::HOT_STANDBY:    pending_app_ptr = &app_standby;        break;
+    case AppID::SUSPEND:        pending_app_ptr = &app_standby;        break;
+  }
 }
 
-AppID uApp::appActive() {      return active_app;     }
-AppID uApp::drawnApp() {       return drawn_app;      }
-AppID uApp::previousApp() {    return app_previous;   }
+/*******************************************************************************
+* Base class functions
+*******************************************************************************/
 
 
+// TODO: This is the nexus point for an idea that is still full of logical holes,
+//   overly-complicated premises, and code written under duress.
+int8_t uApp::refresh() {
+  int8_t ret = 0;
+  uint32_t now = millis();
+  if (wrap_accounted_delta(_last_draw, now) >= APP_POLLING_PERIOD) {
+    _stopwatch.markStart();
+    switch (_lc_current_position()) {
+      case AppLifecycle::UNINITIALIZED:
+        // Adds a one-tick delay so the superclass can march the state forward in
+        //   a predictable manner.
+        _uapp_clear_flag(UAPP_FLAG_IS_ACTIVE);
+        ret = 1;
+        break;
+      case AppLifecycle::PREINIT:
+        drawn_app_ptr = active_app_ptr;
+        redraw_app_window();
+        ret = _lc_on_preinit();
+        break;
+      case AppLifecycle::ACTIVE:
+        if (_uapp_flag(UAPP_FLAG_IS_ACTIVE)) {
+          switch (_process_user_input()) {
+            case -1:
+              ret = 1;
+              if (pending_app_ptr == active_app_ptr) {
+                // If the implementing class didn't set a new active app, and yet
+                //   is asking for us for teardown, go back to the prior uApp.
+                pending_app_ptr = previous_app_ptr;
+              }
+              break;
+            case 1:
+              _redraw_window();
+              display.commitFrameBuffer();
+              break;
+            case 0:
+            default:
+              break;
+          }
+          if (pending_app_ptr != active_app_ptr) {
+            ret = 1;
+          }
+        }
+        else {
+          ret = _lc_on_active();
+          _uapp_set_flag(UAPP_FLAG_IS_ACTIVE);
+          display.commitFrameBuffer();
+        }
+        _last_draw = now;
+        break;
+      case AppLifecycle::TEARDOWN:
+        ret = _lc_on_teardown();
+        break;
+      case AppLifecycle::INACTIVE:
+        ret = _lc_on_inactive();
+        if (1 == ret) {
+          // Relinquish the active app slot and allow the next tick to service
+          //   the next application.
+          previous_app_ptr = this;
+          active_app_ptr = pending_app_ptr;
+        }
+        break;
+    }
 
-int8_t uApp::redraw() {
-  return 0;
-}
-
-
-uApp* uApp::getActiveAppPtr() {
-  return nullptr;
+    if (1 == ret) {
+      _lc_increment_position();
+    }
+    _stopwatch.markStop();
+  }
+  return ret;
 }
 
 
@@ -38,45 +128,29 @@ uApp* uApp::getActiveAppPtr() {
 * 96x64
 */
 void uApp::redraw_app_window(const char* title, uint8_t pages, uint8_t active_page) {
-  display.fillScreen(BLACK);
-  display.setTextSize(0);
+  display.fill(0);
+  display.setTextSize(1);
   display.setCursor(0, 0);
-  display.setTextColor(WHITE);
-  //display.setTextColor(MAGENTA, BLACK);
-  display.print(title);
-  //display.drawLine(0, 10, display.width()-1, 10, WHITE);
-  //display.drawLine(0, display.height()-1, display.width()-1, display.height()-1, WHITE);
-  //display.drawLine(0, 10, 0, display.height()-1, WHITE);
-  //display.drawLine(display.width()-1, 10, display.width()-1, display.height()-1, WHITE);
-  //display.drawRect(0, 14, display.width()-1, display.height()-15, WHITE);
-  display.drawFastHLine(0, 9, display.width(), WHITE);
-  //render_button_icon(2, 46, 0, WHITE);
-  //render_button_icon(3, 55, 0, WHITE);
-  app_previous = drawn_app;
-  drawn_app = active_app;
+  display.setTextColor(0xFFFF);
+  //display.setTextColor(MAGENTA, 0);
+  display.writeString(title);
+  //display.drawLine(0, 10, display.x()-1, 10, 0xFFFF);
+  //display.drawLine(0, display.y()-1, display.x()-1, display.y()-1, 0xFFFF);
+  //display.drawLine(0, 10, 0, display.y()-1, 0xFFFF);
+  //display.drawLine(display.x()-1, 10, display.x()-1, display.y()-1, 0xFFFF);
+  //display.drawRect(0, 14, display.x()-1, display.y()-15, 0xFFFF);
+  display.drawFastHLine(0, 9, display.x(), 0xFFFF);
+  //render_button_icon(2, 46, 0, 0xFFFF);
+  //render_button_icon(3, 55, 0, 0xFFFF);
 }
 
 
-
-const char* const uApp::getAppIDString(AppID e) {
-  switch (e) {
-    case AppID::APP_SELECT:       return "APP_SELECT";
-    case AppID::TOUCH_TEST:       return "TOUCH_TEST";
-    case AppID::CONFIGURATOR:     return "CONFIGURATOR";
-    case AppID::DATA_MGMT:        return "DATA_MGMT";
-    case AppID::SYNTH_BOX:        return "SYNTH_BOX";
-    case AppID::COMMS_TEST:       return "COMMS_TEST";
-    case AppID::META:             return "META";
-    case AppID::I2C_SCANNER:      return "I2C_SCANNER";
-    case AppID::TRICORDER:        return "TRICORDER";
-    case AppID::HOT_STANDBY:      return "HOT_STANDBY";
-    case AppID::SUSPEND:          return "SUSPEND";
-  }
-  return "UNKNOWN";
-}
-
-void uApp::listAllApplications(StringBuilder* output) {
-  for (uint8_t i = 0; i < 11; i++) {
-    output->concatf("%2u: %s\n", i, getAppIDString((AppID) i));
-  }
+/**
+* Increment the Lifecycle state machine and ping the notification function in
+*   the extending class.
+*/
+void uApp::_lc_increment_position() {
+  uint32_t fsm_pos = (_flags & UAPP_FLAG_LIFECYC_SM_MASK);
+  uint32_t nu_fsm_pos = (4 <= fsm_pos) ? 0 : (fsm_pos + 1);
+  _flags = (_flags & ~UAPP_FLAG_LIFECYC_SM_MASK) | nu_fsm_pos;
 }

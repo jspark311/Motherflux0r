@@ -6,8 +6,14 @@
 #include <StringBuilder.h>
 #include <SensorFilter.h>
 #include <ParsingConsole.h>
+#include <TripleAxisPipe.h>
+#include <GPSWrapper.h>
+//#include <TinyGPS.h>
 #include <StopWatch.h>
 #include <cbor-cpp/cbor.h>
+#include <uuid.h>
+
+#include <SPIAdapter.h>
 
 #include <Audio.h>
 #include <Wire.h>
@@ -15,11 +21,10 @@
 #include <SD.h>
 #include <EEPROM.h>
 #include <SX8634.h>
-#include <TinyGPS.h>
 #include <TimeLib.h>
 
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1331.h>
+#include "SSD13xx.h"
+#include <Image/Image.h>
 #include "VEML6075.h"
 #include "ICM20948.h"
 #include "BME280.h"
@@ -29,14 +34,17 @@
 #include "TMP102.h"
 #include "VL53L0X.h"
 
-#include <TeensyThreads.h>
+#include "CommPeer.h"
 
+
+
+/* Forward declarations for 3-axis callbacks. */
+int8_t callback_3axis(SpatialSense, Vector3f* dat, Vector3f* err, uint32_t seq_num);
 
 
 /*******************************************************************************
 * Globals
 *******************************************************************************/
-Adafruit_SSD1331 display = Adafruit_SSD1331(&SPI, DISPLAY_CS_PIN, DISPLAY_DC_PIN, DISPLAY_RST_PIN);
 
 /* Audio library... */
 //AudioInputAnalog         light_adc(ANA_LIGHT_PIN); //xy=224,801.4000358581543
@@ -70,7 +78,6 @@ AudioConnection          patchCord14(mixerFFT, fft256_1);
 AudioConnection          patchCord15(ampR, 0, i2s_dac, 1);
 AudioConnection          patchCord16(ampL, 0, i2s_dac, 0);
 
-
 float volume_left_output  = 0.1;
 float volume_right_output = 0.1;
 float volume_pink_noise   = 1.0;
@@ -83,6 +90,43 @@ float mix_queue_to_line   = 0.0;
 float mix_noise_to_line   = 1.0;
 
 
+/*******************************************************************************
+* 3-Axis pipelines
+*******************************************************************************/
+
+// Magnetic pipeline
+TripleAxisTerminus     mag_vect(SpatialSense::MAG, callback_3axis);   // The magnetic field vector.
+TripleAxisCompass      compass(callback_3axis);
+TripleAxisFork         mag_fork(&compass, &mag_vect);
+TripleAxisSingleFilter mag_filter(SpatialSense::MAG, &mag_fork, FilteringStrategy::MOVING_AVG, 2, 0);
+TripleAxisConvention   mag_conv(&mag_filter, GnomonType::RH_POS_Z);   // TODO: Determine true value.
+
+// Inertial pipeline
+TripleAxisTerminus     down(SpatialSense::ACC, callback_3axis);  // The tilt sensor's best-estimate of "down".
+TripleAxisFork         imu_fork(&compass, &down);
+TripleAxisConvention   tilt_conv(&imu_fork, GnomonType::RH_POS_Z);   // TODO: Determine true value.
+
+
+/*******************************************************************************
+* Display
+*******************************************************************************/
+/* Configuration for the back panel display. */
+const SSD13xxOpts disp_opts(
+  ImgOrientation::ROTATION_0,
+  DISPLAY_RST_PIN,
+  DISPLAY_DC_PIN,
+  DISPLAY_CS_PIN,
+  SSDModel::SSD1331
+);
+
+/* Driver classes */
+SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 8);
+SSD13xx display(&disp_opts);
+
+
+/*******************************************************************************
+* Sensors
+*******************************************************************************/
 BME280Settings baro_settings(
   0x76,
   BME280OSR::X1,
@@ -111,7 +155,8 @@ ICM_20948_SPI imu;
 TSL2561 tsl2561(0x49, TSL2561_IRQ_PIN);
 BME280I2C baro(baro_settings);
 VL53L0X tof;
-TinyGPS gps;
+//TinyGPS gps;
+GPSWrapper gps;
 
 /* Immediate data... */
 static Vector3f64 grav;       // Gravity vector from the IMU.
@@ -157,13 +202,7 @@ SensorFilter<float> graph_array_frame_rate(FilteringStrategy::RAW, 96, 0);
 uint32_t boot_time         = 0;      // millis() at boot.
 uint32_t config_time       = 0;      // millis() at end of setup().
 uint32_t last_interaction  = 0;      // millis() when the user last interacted.
-uint32_t disp_update_last  = 0;      // millis() when the display last updated.
-uint32_t disp_update_next  = 0;      // millis() when the display next updates.
-uint32_t disp_update_rate  = 1;      // Update in Hz for the display
-
 uint32_t tof_update_next   = 0;      //
-
-
 
 /* Console junk... */
 ParsingConsole console(128);
@@ -177,16 +216,30 @@ static const TCode arg_list_4_uuff[]  = {TCode::UINT,  TCode::UINT,  TCode::FLOA
 static const TCode arg_list_4_float[] = {TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::NONE};
 
 /* Application tracking and interrupts... */
-uAppTricorder app_tricorder;
-uAppMeta app_meta;
-uAppTouchTest app_touch_test;
-uAppRoot app_root;
-uAppSynthBox app_synthbox;
-uAppStandby app_standby;
-uAppConfigurator app_config;
-uAppComms app_comms;
+extern uAppBoot app_boot;
+extern uAppTricorder app_tricorder;
+extern uAppMeta app_meta;
+extern uAppTouchTest app_touch_test;
+extern uAppRoot app_root;
+extern uAppSynthBox app_synthbox;
+extern uAppStandby app_standby;
+extern uAppConfigurator app_config;
+extern uAppComms app_comms;
+extern uAppDataMgmt app_data_mgmt;
+
+/* First stab at WakeLock... */
+WakeLock* wakelock_tof         = nullptr;
+WakeLock* wakelock_mag         = nullptr;
+WakeLock* wakelock_lux         = nullptr;
+WakeLock* wakelock_imu         = nullptr;
+WakeLock* wakelock_grideye     = nullptr;
+WakeLock* wakelock_uv          = nullptr;
+WakeLock* wakelock_baro        = nullptr;
+WakeLock* wakelock_gps         = nullptr;
+
 
 static bool     imu_irq_fired       = false;
+
 
 
 
@@ -195,31 +248,6 @@ static bool     imu_irq_fired       = false;
 * ISRs
 *******************************************************************************/
 void imu_isr_fxn() {         imu_irq_fired = true;        }
-
-
-
-/*******************************************************************************
-* Display functions
-*******************************************************************************/
-/*
-* Called at the frame-rate interval for the display.
-*/
-void updateDisplay() {
-  switch (uApp::appActive()) {
-    case AppID::TOUCH_TEST:     app_touch_test.refresh();   break;
-    case AppID::META:           app_meta.refresh();         break;
-    case AppID::TRICORDER:      app_tricorder.refresh();    break;
-    case AppID::APP_SELECT:     app_root.refresh();         break;
-    case AppID::SYNTH_BOX:      app_synthbox.refresh();     break;
-    case AppID::CONFIGURATOR:   app_config.refresh();       break;
-    case AppID::COMMS_TEST:     app_comms.refresh();        break;
-    case AppID::SUSPEND:
-    case AppID::HOT_STANDBY:    app_standby.refresh();      break;
-    default:
-      break;
-  }
-}
-
 
 
 
@@ -301,11 +329,23 @@ int8_t read_thermopile_sensor() {
 * Reads the magnetometer and adds the data to the pile.
 */
 int8_t read_magnetometer_sensor() {
-  Vector3f64* mag_vect = magneto.getFieldVector();
-  // TODO: Move into Compass class.
-  // TODO: Should be confidence
-  graph_array_mag_confidence.feedFilter(mag_vect->length());
-  return 0;
+  int8_t ret = -1;
+  int8_t poll_ret = magneto.poll();
+  switch (poll_ret) {
+    case -5: // if not initialized and enabled.
+    case -4: // if not calibrated.
+    case -3: // if the ADC needed to be read, but doing so failed.
+    case -2: // if the GPIO needed to be read, but doing so failed.
+    case -1: // if we experienced a fault signal from the sensor.
+      break;
+    case 0:  // if nothing needs doing.
+    case 1:  // if new ADC data is ready.
+    case 2:  // if new compass data is ready.
+      stopwatch_sensor_mag.markStop();
+      ret = 0;
+      break;
+  }
+  return ret;
 }
 
 
@@ -339,12 +379,41 @@ int8_t read_unit_settings() {
 /*******************************************************************************
 * Data aggregation and packaging
 *******************************************************************************/
+/*
+* All packets
+*/
+void pack_cbor_comm_packet(cbor::encoder* pkt, CommPeer* peer) {
+  const uint8_t PROTO_VER = 0;
+  if (nullptr == peer) {
+    pkt->write_map(3);
+  }
+  else {
+    pkt->write_map(4);
+    peer->serializeCBOR(pkt, PROTO_VER);
+  }
+  pkt->write_string("comver");
+  pkt->write_int(PROTO_VER);   // The protocol version
+
+    pkt->write_string("orig");
+    pkt->write_map(4);
+      pkt->write_string("mod");
+      pkt->write_string("Motherflux0r");
+      pkt->write_string("ser");
+      pkt->write_int(1);
+      pkt->write_string("firm_ver");
+      pkt->write_string(TEST_PROG_VERSION);
+      pkt->write_string("ts");
+      pkt->write_tag(1);
+      pkt->write_int((uint) now());
+    pkt->write_string("pdu");
+}
+
 
 void package_sensor_data_cbor(StringBuilder* cbor_return) {
   cbor::output_dynamic out;
   cbor::encoder encoded(out);
-  encoded.write_map(4);
-    encoded.write_string("ds_version");
+  encoded.write_map(2);
+    encoded.write_string("ds_ver");
     encoded.write_int(0);
 
     encoded.write_string("origin");
@@ -358,15 +427,6 @@ void package_sensor_data_cbor(StringBuilder* cbor_return) {
       encoded.write_string("ts");
       encoded.write_tag(1);
       encoded.write_int((uint) now());
-
-    encoded.write_string("tilt_cal");
-    encoded.write_map(3);
-      encoded.write_string("offsetpitch");
-      encoded.write_float(4.066);
-      encoded.write_string("offsetyaw");
-      encoded.write_float(-1.5114);
-      encoded.write_string("offsetroll");
-      encoded.write_float(-9.701);
 
     encoded.write_string("meta");
     encoded.write_map(2);
@@ -382,6 +442,39 @@ void package_sensor_data_cbor(StringBuilder* cbor_return) {
 
 
 /*******************************************************************************
+* 3-axis callbacks
+*******************************************************************************/
+/*
+* Pipeline sinks that have a callback configured will call this function on
+*   value updates. If this function returns zero, the terminating class will not
+*   be marked "fresh", since we have presumably already noted the value.
+*/
+int8_t callback_3axis(SpatialSense s, Vector3f* dat, Vector3f* err, uint32_t seq_num) {
+  StringBuilder output;
+  int8_t ret = 0;
+  switch (s) {
+    case SpatialSense::BEARING:
+      // TODO: Move calculation into Compass class.
+      // TODO: Should be a confidence value.
+      graph_array_mag_confidence.feedFilter(compass.getError()->length());
+      ret = -1;
+      break;
+    case SpatialSense::MAG:
+      ret = -1;
+      break;
+    case SpatialSense::UNITLESS:
+    case SpatialSense::ACC:
+    case SpatialSense::GYR:
+    case SpatialSense::EULER_ANG:
+    default:
+      //output.concatf("Unhandled SpatialSense in callback: %s\n", TripleAxisPipe::spatialSenseStr(s));
+      break;
+  }
+  return ret;
+}
+
+
+/*******************************************************************************
 * Touch callbacks
 *******************************************************************************/
 
@@ -393,42 +486,14 @@ static void cb_button(int button, bool pressed) {
   ledOn(LED_B_PIN, 2, 3500);
   uint16_t value = touch->buttonStates();
   last_interaction = millis();
-  switch (uApp::appActive()) {
-    case AppID::TOUCH_TEST:     app_touch_test.deliverButtonValue(value);    break;
-    case AppID::META:           app_meta.deliverButtonValue(value);          break;
-    case AppID::TRICORDER:      app_tricorder.deliverButtonValue(value);     break;
-    case AppID::APP_SELECT:     app_root.deliverButtonValue(value);          break;
-    case AppID::SYNTH_BOX:      app_synthbox.deliverButtonValue(value);      break;
-    case AppID::CONFIGURATOR:   app_config.deliverButtonValue(value);        break;
-    case AppID::COMMS_TEST:     app_comms.deliverButtonValue(value);         break;
-    case AppID::SUSPEND:
-    case AppID::HOT_STANDBY:    app_standby.deliverButtonValue(value);       break;
-    case AppID::DATA_MGMT:
-    case AppID::I2C_SCANNER:
-    default:
-      break;
-  }
+  uApp::appActive()->deliverButtonValue(value);
 }
 
 
 static void cb_slider(int slider, int value) {
   last_interaction = millis();
   ledOn(LED_R_PIN, 60, 3500);
-  switch (uApp::appActive()) {
-    case AppID::TOUCH_TEST:     app_touch_test.deliverSliderValue(value);    break;
-    case AppID::META:           app_meta.deliverSliderValue(value);          break;
-    case AppID::TRICORDER:      app_tricorder.deliverSliderValue(value);     break;
-    case AppID::APP_SELECT:     app_root.deliverSliderValue(value);          break;
-    case AppID::SYNTH_BOX:      app_synthbox.deliverSliderValue(value);      break;
-    case AppID::CONFIGURATOR:   app_config.deliverSliderValue(value);        break;
-    case AppID::COMMS_TEST:     app_comms.deliverSliderValue(value);         break;
-    case AppID::SUSPEND:
-    case AppID::HOT_STANDBY:    app_standby.deliverSliderValue(value);       break;
-    case AppID::DATA_MGMT:
-    case AppID::I2C_SCANNER:
-    default:
-      break;
-  }
+  uApp::appActive()->deliverSliderValue(value);
 }
 
 
@@ -557,36 +622,21 @@ int callback_touch_mode(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_display_rate(StringBuilder* text_return, StringBuilder* args) {
-  if (args->count() > 0) {
-    int rate_int = args->position_as_int(0);
-    disp_update_rate = (rate_int > 0) ? rate_int : 0;
-  }
-  if (disp_update_rate) {
-    text_return->concatf("Display capped at %ufps.\n", disp_update_rate);
-  }
-  else {
-    text_return->concat("Display framerate is not limited.\n");
-  }
-  return 0;
-}
-
-
 int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
   int arg0 = args->position_as_int(0);
   uint32_t millis_0 = millis();
   uint32_t millis_1 = millis_0;
   switch (arg0) {
-    case 0:    display.fillScreen(BLACK);                   break;
-    case 1:    uApp::redraw_app_window("Test App Title", 0, 0);   break;
-    case 2:    app_touch_test.refresh();                    break;
-    case 3:    app_tricorder.refresh();                     break;
-    case 4:    app_synthbox.refresh();                      break;
-    case 5:      break;
-    case 6:      break;
-    case 7:      break;
+    case 0:    display.fill(WHITE);     break;
+    case 1:    text_return->concatf("display.reset() returns %d\n", display.reset());        break;
+    case 2:    text_return->concatf("display.init() returns %d\n", display.init());          break;
+    case 3:    text_return->concatf("commitFrameBuffer() returns %d\n", display.commitFrameBuffer());   break;
+    case 4:    break;
+    case 5:    break;
+    case 6:    break;
+    case 7:    break;
     case 8:
-      display.fillScreen(BLACK);
+      display.fill(BLACK);
       draw_progress_bar_vertical(0, 0, 12, 63, CYAN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_vertical(0, 0, 12, 63, CYAN, false, false, (i * 0.01));
@@ -619,7 +669,7 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       break;
 
     case 9:    // Progress bar test
-      display.fillScreen(BLACK);
+      display.fill(BLACK);
       draw_progress_bar_horizontal(0, 14, 95, 7, CYAN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_horizontal(0, 14, 95, 7, CYAN, false, false, (i * 0.01));
@@ -651,7 +701,7 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       }
       break;
     case 10:    // Vector display test
-      display.fillScreen(BLACK);
+      display.fill(BLACK);
       draw_3vector(0, 0, 50, 50, RED,    true,  false, 1.0, 0.0, 0.0);
       draw_3vector(0, 0, 50, 50, GREEN,  false, false, 0.0, 1.0, 0.0);
       draw_3vector(0, 0, 50, 50, BLUE,   false, false, 0.0, 0.0, 1.0);
@@ -746,17 +796,13 @@ int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
       case 4:   uApp::setAppActive(AppID::SYNTH_BOX);     break;
       case 5:   uApp::setAppActive(AppID::COMMS_TEST);    break;
       case 6:   uApp::setAppActive(AppID::META);          break;
-      case 7:   uApp::setAppActive(AppID::I2C_SCANNER);   break;
-      case 8:   uApp::setAppActive(AppID::TRICORDER);     break;
-      case 9:   uApp::setAppActive(AppID::HOT_STANDBY);   break;
-      case 10:  uApp::setAppActive(AppID::SUSPEND);       break;
+      case 7:   uApp::setAppActive(AppID::TRICORDER);     break;
+      case 8:   uApp::setAppActive(AppID::HOT_STANDBY);   break;
+      case 9:   uApp::setAppActive(AppID::SUSPEND);       break;
       default:
         text_return->concatf("Unsupported app: %d\n", arg0);
         return -1;
     }
-  }
-  else {   // No arguments means print the app index list.
-    uApp::listAllApplications(text_return);
   }
   return 0;
 }
@@ -794,6 +840,7 @@ int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args)
   if (0 < args->count()) {
     switch ((SensorID) arg0) {
       case SensorID::MAGNETOMETER:
+        mag_filter.printFilter(text_return);
         break;
       case SensorID::BARO:
         text_return->concat("Baro Filters:\n");
@@ -867,7 +914,7 @@ int callback_sensor_filter_set_strat(StringBuilder* text_return, StringBuilder* 
   uint8_t arg2 = (2 < args->count()) ? args->position_as_int(2) : 255;
 
   switch ((SensorID) arg0) {
-    case SensorID::MAGNETOMETER:  ret = magneto.setFilter((FilteringStrategy) arg1);   break;
+    case SensorID::MAGNETOMETER:  ret = mag_filter.setStrategy((FilteringStrategy) arg1);   break;
     case SensorID::BARO:
       switch (arg2) {
         case 0:    ret = graph_array_humidity.setStrategy((FilteringStrategy) arg1);   break;
@@ -964,9 +1011,9 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
         switch (args->position_as_int(1)) {
           default:
           case 0:   magneto.printDebug(text_return);           break;
-          case 1:   magneto.printField(text_return);           break;
-          case 2:   magneto.printfilter(text_return);          break;
-          case 3:   magneto.printBearing(HeadingType::MAGNETIC_NORTH, text_return);  break;
+          case 1:   magneto.printPipeline(text_return);        break;
+          case 2:   compass.printPipe(text_return, 0, 7);      break;
+          case 3:   compass.printBearing(HeadingType::MAGNETIC_NORTH, text_return);  break;
           case 4:   magneto.printChannelValues(text_return);   break;
           case 5:   magneto.printRegs(text_return);            break;
           case 6:   magneto.printPins(text_return);            break;
@@ -975,6 +1022,7 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
           case 9:
             text_return->concatf("ADC Temperature: %u.\n", (uint8_t) magneto.getTemperature());
             break;
+          case 10:  magneto.printChannelValues(text_return);   break;
         }
         break;
 
@@ -982,6 +1030,7 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
         stopwatch_sensor_mag.markStart();
         ret = magneto.poll();
         stopwatch_sensor_mag.markStop();
+        text_return->concatf("Polling the magnetometer returns %d.\n", ret);
         break;
 
       case 2:
@@ -1000,9 +1049,9 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
 
       case 4:
         if (1 < args->count()) {
-          magneto.setMagGnomon((GnomonType) args->position_as_int(1));
+          mag_conv.setAfferentGnomon((GnomonType) args->position_as_int(1));
         }
-        magneto.printSpatialTransforms(text_return);
+        mag_conv.printPipe(text_return, 0, 0);
         break;
 
       case 5:
@@ -1014,6 +1063,29 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
         break;
       case 6:   ret = magneto.reset();               break;
       case 7:   ret = magneto.refresh();             break;
+      case 8:
+        if (1 < args->count()) {
+          uint32_t arg1 = args->position_as_int(1);
+          if (0 != arg1) {
+            ret = mag_filter.setParam0(strict_min(arg1, 512));
+          }
+        }
+        text_return->concatf("Magnetometer filter size is now %u.\n", mag_filter.getParam0());
+        break;
+      case 9:
+        if (1 < args->count()) {
+          if (0 != args->position_as_int(1)) {
+            magneto.getWakeLock()->acquire();
+          }
+          else {
+            magneto.getWakeLock()->release();
+          }
+        }
+        text_return->concatf("Mag WAKELOCK held: %c.\n", magneto.getWakeLock()->isHeld() ? 'y':'n');
+        break;
+      case 10:
+        text_return->concatf("Magnetometer init() returns %d\n", magneto.init(&Wire1, &SPI));
+        break;
       default:  ret = -3;                            break;
     }
   }
@@ -1027,6 +1099,9 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
     text_return->concat("5:  Bandwidth\n");
     text_return->concat("6:  Reset\n");
     text_return->concat("7:  Refresh\n");
+    text_return->concat("8:  Filter depth\n");
+    text_return->concat("9:  WakeLock\n");
+    text_return->concat("10: Init\n");
   }
   else if (0 != ret) {
     text_return->concatf("Function returned %d\n", ret);
@@ -1114,17 +1189,17 @@ int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
 
 
 int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
-  int ret = -1;
-  if (1 == args->count()) {
-    int arg0 = args->position_as_int(0);
-  }
-
+  int ret = 0;
   int eeprom_len = EEPROM.length();
   text_return->concatf("EEPROM len:  %d\n", eeprom_len);
   StringBuilder cbor_return;
   package_sensor_data_cbor(&cbor_return);
   text_return->concatf("CBOR test results: %d\n", ret);
   StringBuilder::printBuffer(text_return, cbor_return.string(), cbor_return.length(), "\t");
+  text_return->concatf("CBOR test results: %d\n", ret);
+  UUID testuuid;
+  uuid_gen(&testuuid);
+  uuid_to_sb(&testuuid, text_return);
   return ret;
 }
 
@@ -1134,29 +1209,31 @@ int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
 /*******************************************************************************
 * Setup function
 *******************************************************************************/
-void i2c_thread();
-
+void spi_spin();
 
 void setup() {
   boot_time = millis();
   float percent_setup = 0.0;
-  char* init_step_str = "";
+  char* init_step_str = (char*) "";
   int cursor_height = 26;
   Serial.begin(115200);   // USB
 
-  pinMode(IMU_IRQ_PIN, INPUT_PULLUP);
-  pinMode(DRV425_CS_PIN, INPUT); // Wrong
-  pinMode(PSU_SX_IRQ_PIN, INPUT);
-  pinMode(ANA_LIGHT_PIN, INPUT);
-  pinMode(TOF_IRQ_PIN, INPUT);
-  pinMode(LED_R_PIN, INPUT);
-  pinMode(LED_G_PIN, INPUT);
-  pinMode(LED_B_PIN, INPUT);
+  uint16_t serial_timeout = 0;
+  while (!Serial && (100 > serial_timeout)) {
+    serial_timeout++;
+    delay(70);
+  }
 
-  SPI.setSCK(SPISCK_PIN);
-  SPI.setMISO(SPIMISO_PIN);
-  SPI.setMOSI(SPIMOSI_PIN);
-  SPI.begin();
+  pinMode(IMU_IRQ_PIN,    GPIOMode::INPUT_PULLUP);
+  pinMode(DRV425_CS_PIN,  GPIOMode::INPUT); // Wrong
+  pinMode(PSU_SX_IRQ_PIN, GPIOMode::INPUT);
+  pinMode(ANA_LIGHT_PIN,  GPIOMode::INPUT);
+  pinMode(TOF_IRQ_PIN,    GPIOMode::INPUT);
+  pinMode(LED_R_PIN,      GPIOMode::INPUT);
+  pinMode(LED_G_PIN,      GPIOMode::INPUT);
+  pinMode(LED_B_PIN,      GPIOMode::INPUT);
+
+  spi0.init();
 
   Wire.setSDA(SDA0_PIN);
   Wire.setSCL(SCL0_PIN);
@@ -1225,92 +1302,115 @@ void setup() {
   graph_array_mag_confidence.init();
   graph_array_time_of_flight.init();
 
-  display.begin();
-  display.fillScreen(BLACK);
+  display.init(&spi0);
+  while (!display.enabled()) {
+    spi_spin();
+  }
+  Serial.println("display initialized.");
+
+  display.fill(BLACK);
   display.setCursor(14, 0);
   display.setTextSize(1);
-  display.println("Motherflux0r");
+  display.writeString("Motherflux0r\n");
   display.setTextSize(0);
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, true, false, percent_setup);
+  spi_spin();
+  Serial.println("Inital screen write complete.");
 
-  init_step_str = (const char*) "Audio           ";
+  init_step_str = (char*) "Audio           ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
+  display.writeString(init_step_str);
+  //display.commitFrameBuffer();
+  //spi_spin();
   delay(10);
 
-  init_step_str = (const char*) "GridEye         ";
+  init_step_str = (char*) "GridEye         ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
+  display.writeString(init_step_str);
+  //display.commitFrameBuffer();
+  spi_spin();
   if (0 == grideye.init(&Wire1)) {
   }
   else {
     display.setTextColor(RED);
     display.setCursor(0, cursor_height);
-    display.print(init_step_str);
+    display.writeString(init_step_str);
+    //display.commitFrameBuffer();
+    spi_spin();
     cursor_height += 8;
   }
 
-  init_step_str = (const char*) "Magnetometer    ";
+  init_step_str = (char*) "Magnetometer    ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
-  magneto.setOptions(COMPASS_FLAG_TILT_COMPENSATE, true);
-  magneto.setOptions(COMPASS_FLAG_INVERT_X | COMPASS_FLAG_INVERT_Z, true);
-  magneto.setGnomons(GnomonType::LH_NEG_Y, GnomonType::LH_POS_Z);
-  if (0 == magneto.init(&Wire1, &SPI)) {
-    magneto.setGravity(0.0, 0.0, 1.0);
-  }
-  else {
-    display.setTextColor(RED);
-    display.setCursor(0, cursor_height);
-    display.print(init_step_str);
-    cursor_height += 8;
-  }
+  display.writeString(init_step_str);
+  //display.commitFrameBuffer();
+  spi_spin();
+  magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
+  //if (0 == magneto.init(&Wire1, &SPI)) {
+  //  // TODO: This is just to prod the compass into returning a complete
+  //  //   dataset. It's bogus until there is an IMU.
+  //  Vector3f gravity(0.0, 0.0, 1.0);
+  //  Vector3f gravity_err(0.002, 0.002, 0.002);
+  //  compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
+  //}
+  //else {
+  //  display.setTextColor(RED);
+  //  display.setCursor(0, cursor_height);
+  //  display.writeString(init_step_str);
+  //  display.commitFrameBuffer();
+  //  spi_spin();
+  //  cursor_height += 8;
+  //}
 
-  init_step_str = (const char*) "Baro            ";
+  init_step_str = (char*) "Baro            ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
+  display.writeString(init_step_str);
+  //display.commitFrameBuffer();
+  spi_spin();
   if (0 == baro.init(&Wire1)) {
   }
   else {
     display.setTextColor(RED);
     display.setCursor(0, cursor_height);
-    display.print(init_step_str);
+    display.writeString(init_step_str);
+    //display.commitFrameBuffer();
+    spi_spin();
     cursor_height += 8;
   }
 
-  init_step_str = (const char*) "UVI";
+  init_step_str = (char*) "UVI";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
+  display.writeString(init_step_str);
   if (VEML6075_ERROR_SUCCESS == uv.init(&Wire1)) {
   }
   else {
     display.setTextColor(RED, BLACK);
     display.setCursor(0, cursor_height);
-    display.print(init_step_str);
+    display.writeString(init_step_str);
     cursor_height += 8;
   }
 
-  init_step_str = (const char*) "Lux ";
+  init_step_str = (char*) "Lux ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
+  display.writeString(init_step_str);
   int8_t lux_ret = tsl2561.init(&Wire1);
   if (0 == lux_ret) {
     tsl2561.integrationTime(TSLIntegrationTime::MS_101);
@@ -1318,18 +1418,18 @@ void setup() {
   else {
     display.setTextColor(RED, BLACK);
     display.setCursor(0, cursor_height);
-    display.print(init_step_str);
-    display.print(lux_ret);
+    display.writeString(init_step_str);
+    //display.writeString(lux_ret);
     cursor_height += 8;
   }
   delay(10);
 
-  init_step_str = (const char*) "ToF         ";
+  init_step_str = (char*) "ToF         ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
+  display.writeString(init_step_str);
   tof.setTimeout(500);
   if (tof.init(&Wire1)) {
     tof.startContinuous(100);
@@ -1337,7 +1437,7 @@ void setup() {
   else {
     display.setTextColor(RED, BLACK);
     display.setCursor(0, cursor_height);
-    display.print(init_step_str);
+    display.writeString(init_step_str);
     cursor_height += 8;
   }
 
@@ -1346,22 +1446,22 @@ void setup() {
   //draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   //display.setTextColor(WHITE);
   //display.setCursor(4, 14);
-  //display.print(init_step_str);
+  //display.writeString(init_step_str);
   //if (0 == tmp102.init(&Wire)) {
   //}
   //else {
   //  display.setTextColor(RED, BLACK);
   //  display.setCursor(0, cursor_height);
-  //  display.print(init_step_str);
+  //  display.writeString(init_step_str);
   //  cursor_height += 8;
   //}
 
-  init_step_str = (const char*) "Inertial        ";
+  init_step_str = (char*) "Inertial        ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
+  display.writeString(init_step_str);
   if (ICM_20948_Stat_Ok == imu.begin(IMU_CS_PIN, SPI, 6000000)) {
     imu.swReset();
     imu.sleep(false);
@@ -1386,31 +1486,29 @@ void setup() {
     // Choose whether or not to use DLPF
     ICM_20948_Status_e accDLPEnableStat = imu.enableDLPF((ICM_20948_Internal_Gyr | ICM_20948_Internal_Acc), true);
     if (255 != IMU_IRQ_PIN) {
-      pinMode(IMU_IRQ_PIN, INPUT);
+      pinMode(IMU_IRQ_PIN, GPIOMode::INPUT);
       //imu.cfgIntActiveLow(true);
       //imu.cfgIntOpenDrain(false);
       //imu.cfgIntLatch(true);          // IRQ is a 50us pulse.
       //imu.intEnableRawDataReady(true);
-      attachInterrupt(digitalPinToInterrupt(IMU_IRQ_PIN), imu_isr_fxn, FALLING);
+      setPinFxn(IMU_IRQ_PIN, IRQCondition::FALLING, imu_isr_fxn);
     }
   //if (false) {
   }
   else {
     display.setTextColor(RED);
     display.setCursor(0, cursor_height);
-    display.print(init_step_str);
+    display.writeString(init_step_str);
     cursor_height += 8;
   }
 
-  init_step_str = (const char*) "Console         ";
+  init_step_str = (char*) "Console         ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
+  display.writeString(init_step_str);
 
-  disp_update_last = millis();
-  disp_update_next = disp_update_last + 1800;
   console.defineCommand("help",        '?', arg_list_1_str, "Prints help to console.", "", 0, callback_help);
   console.defineCommand("history",     arg_list_0, "Print command history.", "", 0, callback_print_history);
   console.defineCommand("reboot",      arg_list_0, "Reboot the controller.", "", 0, callback_reboot);
@@ -1420,7 +1518,6 @@ void setup() {
   console.defineCommand("led",         arg_list_3_uint, "LED Test", "", 1, callback_led_test);
   console.defineCommand("vib",         'v', arg_list_2_uint, "Vibrator test", "", 0, callback_vibrator_test);
   console.defineCommand("disp",        'd', arg_list_1_uint, "Display test", "", 1, callback_display_test);
-  console.defineCommand("disprate",    arg_list_1_uint, "Display frame rate", "", 0, callback_display_rate);
   console.defineCommand("aout",        arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
   console.defineCommand("fft",         arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
   console.defineCommand("synth",       arg_list_4_uuff, "Synth parameters.", "", 2, callback_synth_set);
@@ -1446,39 +1543,36 @@ void setup() {
   //ptc.concat(TEST_PROG_VERSION);
   console.printToLog(&ptc);
 
-  init_step_str = (const char*) "Touchpad        ";
+  init_step_str = (char*) "Touchpad        ";
   touch = new SX8634(&_touch_opts);
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
+  display.writeString(init_step_str);
   if (0 == touch->init(&Wire)) {
   }
   else {
     display.setTextColor(RED);
     display.setCursor(0, cursor_height);
-    display.print(init_step_str);
+    display.writeString(init_step_str);
     cursor_height += 8;
   }
 
-  disp_update_last = millis();
-  disp_update_next = disp_update_last + 2000;
-
   config_time = millis();
   //display.setTextColor(GREEN);
-  //display.print((config_time - boot_time), DEC);
-  //display.println("ms");
+  //display.writeString((config_time - boot_time), DEC);
+  //display.writeString("ms\n");
 
-  init_step_str = (const char*) "USB        ";
+  init_step_str = (char*) "USB        ";
   percent_setup += 0.08;
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
   display.setTextColor(WHITE);
   display.setCursor(4, 14);
-  display.print(init_step_str);
-  uint16_t serial_timeout = 0;
+  display.writeString(init_step_str);
   while (!Serial && (100 > serial_timeout)) {
-    draw_progress_bar_horizontal(0, 54, 95, 9, RED, (0 == serial_timeout), false, (serial_timeout++ * 0.01));
+    draw_progress_bar_horizontal(0, 54, 95, 9, RED, (0 == serial_timeout), false, (serial_timeout * 0.01));
+    serial_timeout++;
     delay(70);
   }
   if (Serial) {
@@ -1486,10 +1580,20 @@ void setup() {
     while (Serial.available()) {
       Serial.read();
     }
-    //display.println("Serial");
+    //display.writeString("Serial\n");
   }
 
-  while (disp_update_next > millis()) {}
+  wakelock_tof     = nullptr;
+  //wakelock_mag     = magneto.getWakeLock();
+  wakelock_lux     = nullptr;
+  wakelock_imu     = nullptr;
+  wakelock_grideye = nullptr;
+  wakelock_uv      = nullptr;
+  wakelock_baro    = nullptr;
+  wakelock_gps     = nullptr;
+
+  wakelock_mag->referenceCounted(false);
+
   if (touch->deviceFound()) {
     touch->poll();
     touch->setMode(SX8634OpMode::ACTIVE);
@@ -1500,7 +1604,6 @@ void setup() {
   }
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, 1.0);
   delay(50);
-  //threads.addThread(i2c_thread);
 }
 
 
@@ -1509,7 +1612,20 @@ void setup() {
 * Main loop
 *******************************************************************************/
 
-void i2c_thread() {
+
+void spi_spin() {
+  int8_t polling_ret = spi0.poll();
+  while (0 < polling_ret) {
+    //Serial.print("\tpoll(): ");
+    //Serial.println(polling_ret);
+    polling_ret = spi0.poll();
+  }
+  polling_ret = spi0.service_callback_queue();
+  while (0 < polling_ret) {
+    //Serial.print("\tcallbacks: ");
+    //Serial.println(polling_ret);
+    polling_ret = spi0.service_callback_queue();
+  }
 }
 
 
@@ -1544,11 +1660,12 @@ void loop() {
     console.fetchLog(&output);
   }
 
+  spi_spin();
+
   stopwatch_touch_poll.markStart();
   int8_t t_res = touch->poll();
   if (0 < t_res) {
     // Something changed in the hardware.
-    disp_update_rate  = 30;
   }
   stopwatch_touch_poll.markStop();
 
@@ -1563,9 +1680,11 @@ void loop() {
   timeoutCheckVibLED();
 
   /* Poll each sensor class. */
-  stopwatch_sensor_mag.markStart();
-  if (2 == magneto.poll()) {       read_magnetometer_sensor();          }
-  stopwatch_sensor_mag.markStop();
+  if (magneto.power()) {
+    stopwatch_sensor_mag.markStart();
+    //if (2 == magneto.poll()) {       read_magnetometer_sensor();          }
+    stopwatch_sensor_mag.markStop();
+  }
   stopwatch_sensor_baro.markStart();
   if (0 < baro.poll()) {           read_baro_sensor();                  }
   stopwatch_sensor_baro.markStop();
@@ -1584,52 +1703,38 @@ void loop() {
 
   if (tof_update_next <= millis_now) {
     stopwatch_sensor_tof.markStart();
-    read_time_of_flight_sensor();
+    //read_time_of_flight_sensor();
     stopwatch_sensor_tof.markStop();
-    tof_update_next = now + 100;
+    tof_update_next = millis_now + 100;
   }
 
 
   stopwatch_sensor_gps.markStart();
-  while (SerialGPS.available()) {
-    if (gps.encode(Serial1.read())) { // process gps messages
-      unsigned long age;
-      int Year;
-      byte Month, Day, Hour, Minute, Second;
-      gps.crack_datetime(&Year, &Month, &Day, &Hour, &Minute, &Second, NULL, &age);
-      if (age < 500) {
-        // set the Time to the latest GPS reading
-        setTime(Hour, Minute, Second, Day, Month, Year);
-        //adjustTime(offset * SECS_PER_HOUR);
-      }
+  const int GPS_LEN = 160;
+  if (SerialGPS.available()) {
+    uint8_t gps_buf[GPS_LEN];
+    int gps_bytes_read = 0;
+    while (SerialGPS.available() && (gps_bytes_read < GPS_LEN)) {
+      gps_buf[gps_bytes_read++] = SerialGPS.read();
     }
+    gps.feed(gps_buf, gps_bytes_read);
+    stopwatch_sensor_gps.markStop();
   }
-  if (timeStatus()!= timeNotSet) {
-  }
-  stopwatch_sensor_gps.markStop();
-
 
 
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
-    if (AppID::HOT_STANDBY != uApp::appActive()) {
+    if (&app_standby != uApp::appActive()) {
       uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
 
   millis_now = millis();
-  if (disp_update_next <= millis_now) {
-    // TODO: for some reason this hard-locks the program occasionally if the
-    //   framerate is too high at boot. I suspect it has something to do with
-    //   touchpad driver.
-    stopwatch_display.markStart();
-    updateDisplay();
-    stopwatch_display.markStop();
-    // For tracking framerate, convert from period in micros to hz...
-    graph_array_frame_rate.feedFilter(1000000.0 / stopwatch_display.meanTime());
-    disp_update_last = millis_now;
-    disp_update_next = (0 != disp_update_rate) ? (1000 / disp_update_rate) + disp_update_last : disp_update_last;
-  }
+  stopwatch_display.markStart();
+  uApp::appActive()->refresh();
+  stopwatch_display.markStop();
+  // For tracking framerate, convert from period in micros to hz...
+  graph_array_frame_rate.feedFilter(1000000.0 / 1+stopwatch_display.meanTime());
 
   if ((Serial) && (output.length() > 0)) {
     Serial.write(output.string(), output.length());

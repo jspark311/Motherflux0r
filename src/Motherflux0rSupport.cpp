@@ -3,10 +3,10 @@
 #include <stdint.h>
 #include <math.h>
 #include <CppPotpourri.h>
-#include <Adafruit_SSD1331.h>
+#include <Image/Image.h>
 
 
-extern Adafruit_SSD1331 display;
+extern SSD13xx display;
 
 static uint32_t off_time_vib      = 0;      // millis() when vibrator should be disabled.
 static uint32_t off_time_led_r    = 0;      // millis() when LED_R should be disabled.
@@ -48,10 +48,10 @@ void vibrateOn(uint32_t duration, uint16_t intensity = 4095) {
 
 void timeoutCheckVibLED() {
   uint32_t millis_now = millis();
-  if (millis_now >= off_time_led_r) {   pinMode(LED_R_PIN, INPUT);     }
-  if (millis_now >= off_time_led_g) {   pinMode(LED_G_PIN, INPUT);     }
-  if (millis_now >= off_time_led_b) {   pinMode(LED_B_PIN, INPUT);     }
-  if (millis_now >= off_time_vib) {     pinMode(VIBRATOR_PIN, INPUT);  }
+  if (millis_now >= off_time_led_r) {   pinMode(LED_R_PIN, GPIOMode::INPUT);     }
+  if (millis_now >= off_time_led_g) {   pinMode(LED_G_PIN, GPIOMode::INPUT);     }
+  if (millis_now >= off_time_led_b) {   pinMode(LED_B_PIN, GPIOMode::INPUT);     }
+  if (millis_now >= off_time_vib) {     pinMode(VIBRATOR_PIN, GPIOMode::INPUT);  }
 }
 
 
@@ -224,13 +224,13 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
         uint16_t* iptr = bitmapPointer(sym);
         const uint16_t EXTENT_X = *iptr++;
         const uint16_t EXTENT_Y = *iptr++;
-        display.setAddrWindow(x, y, EXTENT_X, EXTENT_Y);
+        //display.setAddrWindow(x, y, EXTENT_X, EXTENT_Y);
         for (uint8_t h = 0; h < EXTENT_Y; h++) {
           for (uint8_t w = 0; w < EXTENT_X; w++) {
-            display.writePixel(x+w, y+h, *iptr++);
+            display.setPixel(x+w, y+h, *iptr++);
           }
         }
-        display.endWrite();
+        //display.endWrite();
       }
       break;
   }
@@ -272,19 +272,25 @@ void _draw_graph_obj_text_overlay(
   int x, int y, int w, int h, uint16_t color, uint32_t flags,
   float v_max, float v_min, float v_scale, float last_datum
 ) {
+  StringBuilder tmp_val_str;
   if (flags & GRAPH_FLAG_TEXT_RANGE_V) {
     display.setCursor(x+1, y);
     display.setTextColor(WHITE);
-    display.print(v_max);
+    tmp_val_str.concat(v_max);
+    display.writeString(&tmp_val_str);
+    tmp_val_str.clear();
     display.setCursor(x+1, (y+h) - 8);
-    display.print(v_min);
+    tmp_val_str.concat(v_min);
+    display.writeString(&tmp_val_str);
   }
   if (flags & GRAPH_FLAG_TEXT_VALUE) {
     uint8_t tmp = last_datum / v_scale;
     //display.fillCircle(x+w, tmp+y, 1, color);
     display.setCursor(x, strict_min((uint16_t) ((y+h)-tmp), (uint16_t) (h-1)));
     display.setTextColor(color);
-    display.print(last_datum);
+    tmp_val_str.clear();
+    tmp_val_str.concat(last_datum);
+    display.writeString(&tmp_val_str);
   }
 }
 
@@ -297,7 +303,7 @@ void draw_graph_obj(
   int x, int y, int w, int h, uint16_t color, uint32_t flags,
   float* dataset, uint32_t data_len
 ) {
-  display.setAddrWindow(x, y, w, h);
+  //display.setAddrWindow(x, y, w, h);
   _draw_graph_obj_frame(&x, &y, &w, &h, WHITE, flags);
 
   if (w < (int32_t) data_len) {
@@ -326,12 +332,12 @@ void draw_graph_obj(
 
   for (uint32_t i = 0; i < data_len; i++) {
     uint8_t tmp = *(dataset + i) / v_scale;
-    display.writePixel(i + x, (y+h)-tmp, color);
+    display.setPixel(i + x, (y+h)-tmp, color);
   }
 
   float last_datum = *(dataset + (data_len-1));
   _draw_graph_obj_text_overlay(x, y, w, h, color, flags, v_max, v_min, v_scale, last_datum);
-  display.endWrite();
+  //display.endWrite();
 }
 
 
@@ -491,7 +497,7 @@ void draw_progress_bar_horizontal(
     display.setTextSize(0);
     display.setCursor(txt_x, txt_y);
     display.setTextColor(WHITE);
-    display.print((char*) temp_str.string());
+    display.writeString((char*) temp_str.string());
   }
 }
 
@@ -523,7 +529,7 @@ void draw_progress_bar_vertical(
     display.setTextSize(0);
     display.setCursor(txt_x, txt_y);
     display.setTextColor(WHITE);
-    display.print((char*) temp_str.string());
+    display.writeString((char*) temp_str.string());
   }
 }
 
@@ -536,7 +542,7 @@ void draw_compass(
 ) {
   int origin_x = x + (w >> 1);
   int origin_y = y + (h >> 1);
-  display.setAddrWindow(x, y, w, h);
+  //display.setAddrWindow(x, y, w, h);
   int maximal_extent = (strict_min((int16_t) w, (int16_t) h) >> 1) - 1;
   const int NEEDLE_WIDTH = maximal_extent >> 3;
   display.fillCircle(origin_x, origin_y, maximal_extent, BLACK);
@@ -558,7 +564,7 @@ void draw_compass(
   //display.drawLine(origin_x, origin_y, needle_tip_n_x, needle_tip_n_y, RED);
   display.fillTriangle(needle_tip_s_x, needle_tip_s_y, needle_x1, needle_y1, needle_x2, needle_y2, WHITE);
   display.fillTriangle(needle_tip_n_x, needle_tip_n_y, needle_x1, needle_y1, needle_x2, needle_y2, RED);
-  display.endWrite();
+  //display.endWrite();
 }
 
 
@@ -612,7 +618,7 @@ void draw_data_square_field(
   const float MIDPOINT_T = TEMP_RANGE / 2.0;
   float* dataset = filt->memPtr();
 
-  display.setAddrWindow(x, y, w, h);
+  //display.setAddrWindow(x, y, w, h);
   for (uint8_t i = 0; i < MIN_ELEMENTS; i++) {
     uint x = (i & 0x07) * PIXEL_SIZE;
     uint y = (i >> 3) * PIXEL_SIZE;
@@ -621,7 +627,7 @@ void draw_data_square_field(
     uint16_t color = (dataset[i] <= MIDPOINT_T) ? pix_intensity : (pix_intensity << 11);
     display.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
   }
-  display.endWrite();
+  //display.endWrite();
 }
 
 
@@ -635,13 +641,13 @@ void draw_data_view_selector(
   DataVis selected
 ) {
   uint16_t offset = 0;
-  display.setAddrWindow(x, y, w, h);
+  //display.setAddrWindow(x, y, w, h);
   display.setTextSize(0);
   display.drawFastVLine(x, y, h, WHITE);
   display.drawFastHLine(x, y, w, WHITE);
   display.setCursor(x+2, y+2);
   display.setTextColor(BLACK, WHITE);
-  display.print("VIS");
+  display.writeString("VIS");
   offset += 9;
   display.drawFastHLine(x, y + offset, w, WHITE);
 
@@ -653,7 +659,7 @@ void draw_data_view_selector(
       display.setTextColor(YELLOW, BLACK);
     }
     display.setCursor(x+2, y+offset+2);
-    display.print(*getDataVisString(opt0));
+    display.writeString(getDataVisString(opt0));
     offset += 10;
     display.drawFastHLine(x, y + offset, w, WHITE);
   }
@@ -665,7 +671,7 @@ void draw_data_view_selector(
       display.setTextColor(YELLOW, BLACK);
     }
     display.setCursor(x+2, y+offset+2);
-    display.print(*getDataVisString(opt1));
+    display.writeString(getDataVisString(opt1));
     offset += 10;
     display.drawFastHLine(x, y + offset, w, WHITE);
   }
@@ -677,7 +683,7 @@ void draw_data_view_selector(
       display.setTextColor(YELLOW, BLACK);
     }
     display.setCursor(x+2, y+offset+2);
-    display.print(*getDataVisString(opt2));
+    display.writeString(getDataVisString(opt2));
     offset += 10;
     display.drawFastHLine(x, y + offset, w, WHITE);
   }
@@ -689,7 +695,7 @@ void draw_data_view_selector(
       display.setTextColor(YELLOW, BLACK);
     }
     display.setCursor(x+2, y+offset+2);
-    display.print(*getDataVisString(opt3));
+    display.writeString(getDataVisString(opt3));
     offset += 10;
     display.drawFastHLine(x, y + offset, w, WHITE);
   }
@@ -701,7 +707,7 @@ void draw_data_view_selector(
       display.setTextColor(YELLOW, BLACK);
     }
     display.setCursor(x+2, y+offset+2);
-    display.print(*getDataVisString(opt4));
+    display.writeString(getDataVisString(opt4));
     offset += 10;
     display.drawFastHLine(x, y + offset, w, WHITE);
   }
@@ -713,9 +719,9 @@ void draw_data_view_selector(
       display.setTextColor(YELLOW, BLACK);
     }
     display.setCursor(x+2, y+offset+2);
-    display.print(*getDataVisString(opt5));
+    display.writeString(getDataVisString(opt5));
     offset += 10;
     display.drawFastHLine(x, y + offset, w, WHITE);
   }
-  display.endWrite();
+  //display.endWrite();
 }
