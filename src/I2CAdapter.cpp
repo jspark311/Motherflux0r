@@ -46,7 +46,7 @@ int8_t I2CAdapter::bus_init() {
 int8_t I2CAdapter::bus_deinit() {
   busOnline(false);
   switch (ADAPTER_NUM) {
-    case 0:  // Dedicated pins
+    case 0:
       break;
     case 1:
       break;
@@ -81,50 +81,93 @@ int8_t I2CAdapter::generateStop() {
 *******************************************************************************/
 
 XferFault I2CBusOp::begin() {
+  uint8_t ord = 0;
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
   switch (device->adapterNumber()) {
     case 0:
+      switch (get_opcode()) {
+        case BusOpcode::TX_CMD:
+          set_state(XferState::TX_WAIT);
+          Wire.beginTransmission(dev_addr);
+          if (0 != Wire.endTransmission()) {
+            abort(XferFault::DEV_NOT_FOUND);
+          }
+          break;
+        case BusOpcode::TX:
+          Wire.beginTransmission(dev_addr);
+          if (need_to_send_subaddr()) {
+            set_state(XferState::ADDR);
+            Wire.write(sub_addr);
+          }
+          set_state(XferState::TX_WAIT);
+          while (ord < _buf_len) {
+            Wire.write(*(_buf + ord++));
+          }
+          set_fault((0 != Wire.endTransmission()) ? XferFault::NONE : XferFault::BUS_FAULT);
+          break;
+        case BusOpcode::RX:
+          if (need_to_send_subaddr()) {
+            Wire.beginTransmission(dev_addr);
+            set_state(XferState::ADDR);
+            Wire.write(sub_addr);
+            if (0 != Wire.endTransmission()) {
+              abort(XferFault::DEV_NOT_FOUND);
+            }
+          }
+          set_state(XferState::RX_WAIT);
+          Wire.requestFrom(dev_addr, _buf_len, true);   // Send STOP
+          while(Wire.available()) {
+            *(_buf + ord++) = Wire.read();
+          }
+          set_fault((ord == _buf_len) ? XferFault::NONE : XferFault::BUS_FAULT);
+          break;
+        default:
+          abort(XferFault::BAD_PARAM);
+          break;
+      }
+      break;
+
     case 1:
-      // {
-      //   // TODO: Most of this is ugly and reeks of duress. Re-work on async conversion.
-      //   switch (opcode) {
-      //     case BusOpcode::TX_CMD:
-      //       set_state(XferState::TX_WAIT);
-      //       xfer_fault = (0 != Chip_I2CM_XferBlocking(b_enum, &xfer_struct)) ? XferFault::NONE : XferFault::DEV_FAULT;
-      //       break;
-      //     case BusOpcode::TX:
-      //       if (buf_len) {
-      //         const uint8_t TEMP_BUF_LEN = (-1 != sub_addr) ? buf_len + 1 : buf_len;
-      //         uint8_t stacked_buf[TEMP_BUF_LEN];
-      //         uint8_t i = 0;
-      //         if (-1 != sub_addr) {
-      //           stacked_buf[i++] = (uint8_t) sub_addr;
-      //         }
-      //         while (i < TEMP_BUF_LEN) {
-      //           stacked_buf[i] = *(buf + i);
-      //           i++;
-      //         }
-      //         xfer_struct.txSz   = TEMP_BUF_LEN;
-      //         xfer_struct.txBuff = stacked_buf;
-      //         set_state(XferState::TX_WAIT);
-      //         xfer_fault = (0 != Chip_I2CM_XferBlocking(b_enum, &xfer_struct)) ? XferFault::NONE : XferFault::BUS_FAULT;
-      //       }
-      //       break;
-      //     case BusOpcode::RX:
-      //       if (buf_len) {
-      //         xfer_struct.txSz   = (-1 != sub_addr) ? 1 : 0;
-      //         xfer_struct.txBuff = (-1 != sub_addr) ? (uint8_t*) &sub_addr : nullptr;
-      //         xfer_struct.rxSz   = buf_len;
-      //         xfer_struct.rxBuff = buf;
-      //         set_state(XferState::RX_WAIT);
-      //         xfer_fault = (0 != Chip_I2CM_XferBlocking(b_enum, &xfer_struct)) ? XferFault::NONE : XferFault::BUS_FAULT;
-      //       }
-      //       break;
-      //     default:
-      //       abort(XferFault::BAD_PARAM);
-      //       break;
-      //   }
-      // }
+      switch (get_opcode()) {
+        case BusOpcode::TX_CMD:
+          set_state(XferState::TX_WAIT);
+          Wire1.beginTransmission(dev_addr);
+          if (0 != Wire1.endTransmission()) {
+            abort(XferFault::DEV_NOT_FOUND);
+          }
+          break;
+        case BusOpcode::TX:
+          Wire1.beginTransmission(dev_addr);
+          if (need_to_send_subaddr()) {
+            set_state(XferState::ADDR);
+            Wire1.write(sub_addr);
+          }
+          set_state(XferState::TX_WAIT);
+          while (ord < _buf_len) {
+            Wire1.write(*(_buf + ord++));
+          }
+          set_fault((0 != Wire1.endTransmission()) ? XferFault::NONE : XferFault::BUS_FAULT);
+          break;
+        case BusOpcode::RX:
+          if (need_to_send_subaddr()) {
+            Wire1.beginTransmission(dev_addr);
+            set_state(XferState::ADDR);
+            Wire1.write(sub_addr);
+            if (0 != Wire1.endTransmission()) {
+              abort(XferFault::DEV_NOT_FOUND);
+            }
+          }
+          set_state(XferState::RX_WAIT);
+          Wire1.requestFrom(dev_addr, _buf_len, true);   // Send STOP
+          while(Wire1.available()) {
+            *(_buf + ord++) = Wire1.read();
+          }
+          set_fault((ord == _buf_len) ? XferFault::NONE : XferFault::BUS_FAULT);
+          break;
+        default:
+          abort(XferFault::BAD_PARAM);
+          break;
+      }
       break;
     default:
       abort(XferFault::BAD_PARAM);

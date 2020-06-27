@@ -8,12 +8,13 @@
 #include <ParsingConsole.h>
 #include <TripleAxisPipe.h>
 #include <GPSWrapper.h>
-//#include <TinyGPS.h>
 #include <StopWatch.h>
+#include <Image/Image.h>
 #include <cbor-cpp/cbor.h>
 #include <uuid.h>
 
 #include <SPIAdapter.h>
+#include <I2CAdapter.h>
 
 #include <Audio.h>
 #include <Wire.h>
@@ -23,7 +24,6 @@
 #include <TimeLib.h>
 
 #include "SSD13xx.h"
-#include <Image/Image.h>
 #include "VEML6075.h"
 #include "ICM20948.h"
 #include "BME280.h"
@@ -35,6 +35,7 @@
 
 #include "CommPeer.h"
 
+//#include <TinyGPS.h>
 
 
 /* Forward declarations for 3-axis callbacks. */
@@ -104,6 +105,29 @@ TripleAxisConvention   mag_conv(&mag_filter, GnomonType::RH_POS_Z);   // TODO: D
 TripleAxisTerminus     down(SpatialSense::ACC, callback_3axis);  // The tilt sensor's best-estimate of "down".
 TripleAxisFork         imu_fork(&compass, &down);
 TripleAxisConvention   tilt_conv(&imu_fork, GnomonType::RH_POS_Z);   // TODO: Determine true value.
+
+
+/*******************************************************************************
+* Buses
+*******************************************************************************/
+const I2CAdapterOptions i2c0_opts(
+  0,   // Device number
+  SDA0_PIN,
+  SCL0_PIN,
+  0,   // No pullups.
+  400000
+);
+
+const I2CAdapterOptions i2c1_opts(
+  1,   // Device number
+  SDA1_PIN,
+  SCL1_PIN,
+  0,   // No pullups.
+  400000
+);
+
+I2CAdapter i2c0(&i2c0_opts);
+I2CAdapter i2c1(&i2c1_opts);
 
 
 /*******************************************************************************
@@ -1233,15 +1257,8 @@ void setup() {
   pinMode(LED_B_PIN,      GPIOMode::INPUT);
 
   spi0.init();
-
-  Wire.setSDA(SDA0_PIN);
-  Wire.setSCL(SCL0_PIN);
-  Wire.setClock(400000);
-  Wire.begin();
-  Wire1.setSDA(SDA1_PIN);
-  Wire1.setSCL(SCL1_PIN);
-  Wire.setClock(400000);
-  Wire1.begin();
+  i2c0.init();
+  i2c1.init();
 
   // GPS
   Serial1.setRX(GPS_TX_PIN);
@@ -1624,6 +1641,21 @@ void spi_spin() {
 }
 
 
+void i2c0_spin() {
+  int8_t polling_ret = i2c0.poll();
+  while (0 < polling_ret) {
+    polling_ret = i2c0.poll();
+  }
+}
+
+void i2c1_spin() {
+  int8_t polling_ret = i2c1.poll();
+  while (0 < polling_ret) {
+    polling_ret = i2c1.poll();
+  }
+}
+
+
 void loop() {
   stopwatch_main_loop_time.markStart();
   StringBuilder output;
@@ -1656,6 +1688,8 @@ void loop() {
   }
 
   spi_spin();
+  i2c0_spin();
+  i2c1_spin();
 
   stopwatch_touch_poll.markStart();
   int8_t t_res = touch->poll();
