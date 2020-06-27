@@ -17,7 +17,6 @@
 
 #include <Audio.h>
 #include <Wire.h>
-#include <SPI.h>
 #include <SD.h>
 #include <EEPROM.h>
 #include <SX8634.h>
@@ -1084,7 +1083,7 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
         text_return->concatf("Mag WAKELOCK held: %c.\n", magneto.getWakeLock()->isHeld() ? 'y':'n');
         break;
       case 10:
-        text_return->concatf("Magnetometer init() returns %d\n", magneto.init(&Wire1, &SPI));
+        text_return->concatf("Magnetometer init() returns %d\n", magneto.init(&Wire1, &spi0));
         break;
       default:  ret = -3;                            break;
     }
@@ -1119,7 +1118,7 @@ int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
     int arg0 = args->position_as_int(0);
     //int arg1 = args->position_as_int(1);
     switch ((SensorID) arg0) {
-      case SensorID::MAGNETOMETER:   ret = magneto.init(&Wire1, &SPI);   break;
+      case SensorID::MAGNETOMETER:   ret = magneto.init(&Wire1, &spi0);  break;
       case SensorID::BARO:           ret = baro.init(&Wire1);            break;
       case SensorID::LUX:            ret = tsl2561.init(&Wire1);         break;
       case SensorID::UV:             ret = uv.init(&Wire1);              break;
@@ -1355,13 +1354,13 @@ void setup() {
   //display.commitFrameBuffer();
   spi_spin();
   magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
-  //if (0 == magneto.init(&Wire1, &SPI)) {
+  if (0 == magneto.init(&Wire1, &spi0)) {
   //  // TODO: This is just to prod the compass into returning a complete
   //  //   dataset. It's bogus until there is an IMU.
   //  Vector3f gravity(0.0, 0.0, 1.0);
   //  Vector3f gravity_err(0.002, 0.002, 0.002);
   //  compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
-  //}
+  }
   //else {
   //  display.setTextColor(RED);
   //  display.setCursor(0, cursor_height);
@@ -1616,14 +1615,10 @@ void setup() {
 void spi_spin() {
   int8_t polling_ret = spi0.poll();
   while (0 < polling_ret) {
-    //Serial.print("\tpoll(): ");
-    //Serial.println(polling_ret);
     polling_ret = spi0.poll();
   }
   polling_ret = spi0.service_callback_queue();
   while (0 < polling_ret) {
-    //Serial.print("\tcallbacks: ");
-    //Serial.println(polling_ret);
     polling_ret = spi0.service_callback_queue();
   }
 }

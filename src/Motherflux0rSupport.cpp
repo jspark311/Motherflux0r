@@ -276,11 +276,11 @@ void _draw_graph_obj_text_overlay(
   if (flags & GRAPH_FLAG_TEXT_RANGE_V) {
     display.setCursor(x+1, y);
     display.setTextColor(WHITE);
-    tmp_val_str.concat(v_max);
+    tmp_val_str.concatf("%.2f", v_max);
     display.writeString(&tmp_val_str);
     tmp_val_str.clear();
     display.setCursor(x+1, (y+h) - 8);
-    tmp_val_str.concat(v_min);
+    tmp_val_str.concatf("%.2f", v_min);
     display.writeString(&tmp_val_str);
   }
   if (flags & GRAPH_FLAG_TEXT_VALUE) {
@@ -289,7 +289,7 @@ void _draw_graph_obj_text_overlay(
     display.setCursor(x, strict_min((uint16_t) ((y+h)-tmp), (uint16_t) (h-1)));
     display.setTextColor(color);
     tmp_val_str.clear();
-    tmp_val_str.concat(last_datum);
+    tmp_val_str.concatf("%.2f", last_datum);
     display.writeString(&tmp_val_str);
   }
 }

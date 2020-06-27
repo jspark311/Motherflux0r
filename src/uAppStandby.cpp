@@ -42,6 +42,7 @@ int8_t uAppStandby::_lc_on_preinit() {
 */
 int8_t uAppStandby::_lc_on_active() {
   int8_t ret = 0;
+  FB->fill(BLACK);
   return ret;
 }
 

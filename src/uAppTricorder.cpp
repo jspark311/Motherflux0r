@@ -377,7 +377,7 @@ void uAppTricorder::_redraw_window() {
       FB->setTextSize(0);
       FB->setCursor(TEXT_OFFSET, 0);
       FB->setTextColor(RED, BLACK);
-      tmp_val_str.concat(therm_field_max);
+      tmp_val_str.concatf("%.2f", therm_field_max);
       FB->writeString(&tmp_val_str);
       tmp_val_str.clear();
 
@@ -387,7 +387,7 @@ void uAppTricorder::_redraw_window() {
 
       FB->setCursor(TEXT_OFFSET, (PIXEL_SIZE*8)-7);
       FB->setTextColor(BLUE, BLACK);
-      tmp_val_str.concat(therm_field_min);
+      tmp_val_str.concatf("%.2f", therm_field_min);
       FB->writeString(&tmp_val_str);
       tmp_val_str.clear();
 
@@ -395,21 +395,21 @@ void uAppTricorder::_redraw_window() {
       FB->setTextColor(WHITE);
       FB->writeString("Mean:  ");
       FB->setTextColor(RED, BLACK);
-      tmp_val_str.concat(graph_array_therm_mean.value());
+      tmp_val_str.concatf("%.2f", graph_array_therm_mean.value());
       FB->writeString(&tmp_val_str);
       tmp_val_str.clear();
 
       FB->setTextColor(WHITE);
       FB->writeString("Range: ");
       FB->setTextColor(RED, BLACK);
-      tmp_val_str.concat(therm_field_max - therm_field_min);
+      tmp_val_str.concatf("%.2f", (therm_field_max - therm_field_min));
       FB->writeString(&tmp_val_str);
       tmp_val_str.clear();
 
       FB->setTextColor(WHITE);
       FB->writeString("STDEV: ");
       FB->setTextColor(RED, BLACK);
-      tmp_val_str.concat(graph_array_therm_frame.stdevValue());
+      tmp_val_str.concatf("%.2f", graph_array_therm_frame.stdevValue());
       FB->writeString(&tmp_val_str);
       tmp_val_str.clear();
     }
