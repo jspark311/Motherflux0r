@@ -817,13 +817,11 @@ int8_t GridEYE::io_op_callback(BusOp* _op) {
           switch ((AMG88XXRegID) reg_idx) {
             case AMG88XXRegID::POWER_CONTROL:
               _amg_set_flag(GRIDEYE_FLAG_ENABLED, !(value & 0x10));
-              Serial.println("AMG88XXRegID::POWER_CONTROL");
               break;
             case AMG88XXRegID::RESET:
               // We just reset.
               break;
             case AMG88XXRegID::FRAMERATE:
-              Serial.println("AMG88XXRegID::FRAMERATE");
               _amg_set_flag(GRIDEYE_FLAG_10FPS, (0 == value));
               break;
             case AMG88XXRegID::INT_CONTROL:
@@ -835,6 +833,8 @@ int8_t GridEYE::io_op_callback(BusOp* _op) {
               }
               break;
             case AMG88XXRegID::AVERAGE:
+              _amg_set_flag(GRIDEYE_FLAG_HW_AVERAGING, (value & (1 << 5)));
+              break;
             case AMG88XXRegID::INT_LEVEL_UPPER_LSB:
             case AMG88XXRegID::INT_LEVEL_UPPER_MSB:
             case AMG88XXRegID::INT_LEVEL_LOWER_LSB:
@@ -886,11 +886,6 @@ int8_t GridEYE::io_op_callback(BusOp* _op) {
       default:
         break;
     }
-  }
-  else {
-    StringBuilder output;
-    op->printDebug(&output);
-    Serial.println((char*) output.string());
   }
   return ret;
 }

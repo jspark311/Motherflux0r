@@ -1362,7 +1362,7 @@ void i2c1_spin() {
   int8_t polling_ret = i2c1.poll();
   while (0 < polling_ret) {
     polling_ret = i2c1.poll();
-    Serial.print("i2c1_spin() ");
+    //Serial.print("i2c1_spin() ");
     Serial.println(polling_ret);
   }
 }
