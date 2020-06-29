@@ -16,13 +16,14 @@ uAppConfigurator app_config;
 uAppComms app_comms;
 uAppDataMgmt app_data_mgmt;
 
+
 /*******************************************************************************
 * Statics
 *******************************************************************************/
-volatile static uApp* previous_app_ptr = &app_root;
-volatile static uApp* drawn_app_ptr    = &app_root;
-volatile static uApp* active_app_ptr   = &app_root;
-volatile static uApp* pending_app_ptr  = &app_root;
+volatile static uApp* previous_app_ptr = &app_boot;
+volatile static uApp* drawn_app_ptr    = &app_boot;
+volatile static uApp* active_app_ptr   = &app_boot;
+volatile static uApp* pending_app_ptr  = &app_boot;
 
 uApp* uApp::appActive() {      return (uApp*) active_app_ptr;     }
 uApp* uApp::drawnApp() {       return (uApp*) drawn_app_ptr;      }
@@ -66,7 +67,7 @@ int8_t uApp::refresh() {
         break;
       case AppLifecycle::PREINIT:
         drawn_app_ptr = active_app_ptr;
-        redraw_app_window();
+        _buttons_current = _buttons_pending;  // TODO: Not sure if this is universally desirable.
         ret = _lc_on_preinit();
         break;
       case AppLifecycle::ACTIVE:

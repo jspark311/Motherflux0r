@@ -9,7 +9,7 @@
 #define __U_APP_H_
 
 // TODO: Might make this a config or load-contingent value.
-#define APP_POLLING_PERIOD    20    // App runs at ~30fps.
+#define APP_POLLING_PERIOD    20    // App runs at ~50fps.
 
 /*******************************************************************************
 * Types

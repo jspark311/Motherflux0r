@@ -39,6 +39,7 @@ uAppMeta::~uAppMeta() {}
 */
 int8_t uAppMeta::_lc_on_preinit() {
   int8_t ret = 1;
+  redraw_app_window();
   return ret;
 }
 

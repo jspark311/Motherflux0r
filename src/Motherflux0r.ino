@@ -30,7 +30,6 @@
 #include "AMG88xx.h"
 #include "DRV425.h"
 #include "TSL2561.h"
-#include "TMP102.h"
 #include "VL53L0X.h"
 
 #include "CommPeer.h"
@@ -171,7 +170,6 @@ SX8634* touch = nullptr;
 
 /* Sensor representations... */
 DRV425 magneto(DRV425_ADC_IRQ_PIN, DRV425_GPIO_IRQ_PIN, 255, DRV425_CS_PIN);   // No GPIO reset pin.
-TMP102 tmp102(0x49, 255);    // No connection to the alert pin.
 GridEYE grideye(0x69, AMG8866_IRQ_PIN);
 VEML6075 uv;
 ICM_20948_SPI imu;
@@ -211,7 +209,6 @@ StopWatch stopwatch_sensor_uv;
 StopWatch stopwatch_sensor_grideye;
 StopWatch stopwatch_sensor_imu;
 StopWatch stopwatch_sensor_lux;
-StopWatch stopwatch_sensor_tmp102;
 StopWatch stopwatch_sensor_mag;
 StopWatch stopwatch_sensor_gps;
 StopWatch stopwatch_sensor_tof;
@@ -262,8 +259,6 @@ WakeLock* wakelock_gps         = nullptr;
 
 
 static bool     imu_irq_fired       = false;
-
-
 
 
 
@@ -322,14 +317,6 @@ int8_t read_visible_sensor() {
   int8_t ret = 0;
   ret = graph_array_visible.feedFilter(1.0 * tsl2561.getLux());
   return ret;
-}
-
-
-/*
-* Reads the TMP102 (near the PSU and battery) and adds the data to the pile.
-*/
-int8_t read_battery_temperature_sensor() {
-  return graph_array_psu_temp.feedFilter(tmp102.temperature());
 }
 
 
@@ -557,7 +544,6 @@ int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* ar
     stopwatch_sensor_grideye.reset();
     stopwatch_sensor_imu.reset();
     stopwatch_sensor_lux.reset();
-    stopwatch_sensor_tmp102.reset();
     stopwatch_sensor_mag.reset();
     stopwatch_sensor_gps.reset();
     stopwatch_sensor_tof.reset();
@@ -569,7 +555,6 @@ int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* ar
   stopwatch_sensor_grideye.printDebug("GridEye", text_return);
   stopwatch_sensor_imu.printDebug("IMU", text_return);
   stopwatch_sensor_lux.printDebug("TSL2561", text_return);
-  //stopwatch_sensor_tmp102.printDebug("PSU Temp", text_return);
   stopwatch_sensor_tof.printDebug("ToF", text_return);
   stopwatch_sensor_mag.printDebug("Magnetometer", text_return);
   stopwatch_sensor_gps.printDebug("GPS", text_return);
@@ -827,6 +812,9 @@ int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
         return -1;
     }
   }
+  else {
+    uApp::appActive()->refresh();
+  }
   return 0;
 }
 
@@ -837,11 +825,11 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
     switch ((SensorID) arg0) {
       case SensorID::MAGNETOMETER:   magneto.printDebug(text_return);  break;
       //case SensorID::BARO:           baro.printDebug(text_return);          break;
-      //case SensorID::LIGHT:            break;
+      case SensorID::LIGHT:            i2c1.printDebug(text_return);   break;
       //case SensorID::UV:             uv.printDebug(text_return);            break;
-      //case SensorID::THERMOPILE:     grideye.printDebug(text_return);       break;
+      case SensorID::THERMOPILE:     grideye.printDebug(text_return);       break;
       //case SensorID::LUX:            tsl2561.printDebug(text_return);       break;
-      //case SensorID::BATT_VOLTAGE:       break;
+      case SensorID::BATT_VOLTAGE:   grideye.poll();    break;
       //case SensorID::IMU:                break;
       //case SensorID::MIC:                break;
       //case SensorID::GPS:                break;
@@ -1146,8 +1134,7 @@ int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
       case SensorID::BARO:           ret = baro.init(&Wire1);            break;
       case SensorID::LUX:            ret = tsl2561.init(&Wire1);         break;
       case SensorID::UV:             ret = uv.init(&Wire1);              break;
-      case SensorID::THERMOPILE:     ret = grideye.init(&Wire1);         break;
-      //case SensorID::PSU_TEMP:       ret = tmp102.init(&Wire1);          break;
+      case SensorID::THERMOPILE:     ret = grideye.init(&i2c1);          break;
       case SensorID::TOF:            ret = tof.init(&Wire1);             break;
       //case SensorID::BATT_VOLTAGE:       break;
       case SensorID::IMU:            ret = read_imu();               break;
@@ -1178,11 +1165,10 @@ int callback_sensor_enable(StringBuilder* text_return, StringBuilder* args) {
       case SensorID::LUX:           tsl2561.enabled(arg1);  en = tsl2561.enabled();   break;
       case SensorID::UV:            uv.enabled(arg1);       en = uv.enabled();        break;
       case SensorID::THERMOPILE:    grideye.enabled(arg1);  en = grideye.enabled();   break;
-      case SensorID::BATT_VOLTAGE:  tmp102.enabled(arg1);   en = tmp102.enabled();    break;
+      case SensorID::BATT_VOLTAGE:  break;
       case SensorID::IMU:           break;
       case SensorID::MIC:           break;
       case SensorID::GPS:           break;
-      //case SensorID::PSU_TEMP:      break;
       case SensorID::TOF:           break;
       case SensorID::LIGHT:         break;
       default:
@@ -1232,20 +1218,9 @@ int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
 /*******************************************************************************
 * Setup function
 *******************************************************************************/
-void spi_spin();
-
 void setup() {
   boot_time = millis();
-  float percent_setup = 0.0;
-  char* init_step_str = (char*) "";
-  int cursor_height = 26;
   Serial.begin(115200);   // USB
-
-  uint16_t serial_timeout = 0;
-  while (!Serial && (100 > serial_timeout)) {
-    serial_timeout++;
-    delay(70);
-  }
 
   pinMode(IMU_IRQ_PIN,    GPIOMode::INPUT_PULLUP);
   pinMode(DRV425_CS_PIN,  GPIOMode::INPUT); // Wrong
@@ -1255,6 +1230,15 @@ void setup() {
   pinMode(LED_R_PIN,      GPIOMode::INPUT);
   pinMode(LED_G_PIN,      GPIOMode::INPUT);
   pinMode(LED_B_PIN,      GPIOMode::INPUT);
+
+  AudioMemory(32);
+  analogWriteResolution(12);
+
+  uint16_t serial_timeout = 0;
+  while (!Serial && (100 > serial_timeout)) {
+    serial_timeout++;
+    delay(70);
+  }
 
   spi0.init();
   i2c0.init();
@@ -1268,38 +1252,8 @@ void setup() {
   Serial6.setRX(COMM_TX_PIN);
   Serial6.setTX(COMM_RX_PIN);
   Serial6.begin(115200);    // Comm
-  AudioMemory(32);
 
   //SD.begin(BUILTIN_SDCARD);
-
-  sineL.amplitude(1.0);
-  sineL.frequency(440);
-  sineL.phase(0);
-  sineR.amplitude(0.8);
-  sineR.frequency(660);
-  sineR.phase(0);
-
-  mixerFFT.gain(0, mix_queueL_to_fft);
-  mixerFFT.gain(1, mix_queueR_to_fft);
-  mixerFFT.gain(2, mix_noise_to_fft);
-  mixerFFT.gain(3, 0.0);
-
-  mixerL.gain(0, mix_queue_to_line);
-  mixerL.gain(1, mix_noise_to_line);
-  mixerL.gain(2, mix_synth_to_line);
-  mixerL.gain(3, 0.0);
-
-  mixerR.gain(0, mix_queue_to_line);
-  mixerR.gain(1, mix_noise_to_line);
-  mixerR.gain(2, mix_synth_to_line);
-  mixerR.gain(3, 0.0);
-
-  pinkNoise.amplitude(volume_pink_noise);
-
-  ampL.gain(volume_left_output);
-  ampR.gain(volume_right_output);
-
-  analogWriteResolution(12);
 
   /* Allocate memory for the filters. */
   graph_array_pressure.init();
@@ -1317,213 +1271,6 @@ void setup() {
   graph_array_frame_rate.init();
   graph_array_mag_confidence.init();
   graph_array_time_of_flight.init();
-
-  display.init(&spi0);
-  while (!display.enabled()) {
-    spi_spin();
-  }
-  Serial.println("display initialized.");
-
-  display.fill(BLACK);
-  display.setCursor(14, 0);
-  display.setTextSize(1);
-  display.writeString("Motherflux0r\n");
-  display.setTextSize(0);
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, true, false, percent_setup);
-  spi_spin();
-  Serial.println("Inital screen write complete.");
-
-  init_step_str = (char*) "Audio           ";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  //display.commitFrameBuffer();
-  //spi_spin();
-  delay(10);
-
-  init_step_str = (char*) "GridEye         ";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  //display.commitFrameBuffer();
-  spi_spin();
-  if (0 == grideye.init(&Wire1)) {
-  }
-  else {
-    display.setTextColor(RED);
-    display.setCursor(0, cursor_height);
-    display.writeString(init_step_str);
-    //display.commitFrameBuffer();
-    spi_spin();
-    cursor_height += 8;
-  }
-
-  init_step_str = (char*) "Magnetometer    ";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  //display.commitFrameBuffer();
-  spi_spin();
-  magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
-  if (0 == magneto.init(&Wire1, &spi0)) {
-  //  // TODO: This is just to prod the compass into returning a complete
-  //  //   dataset. It's bogus until there is an IMU.
-  //  Vector3f gravity(0.0, 0.0, 1.0);
-  //  Vector3f gravity_err(0.002, 0.002, 0.002);
-  //  compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
-  }
-  //else {
-  //  display.setTextColor(RED);
-  //  display.setCursor(0, cursor_height);
-  //  display.writeString(init_step_str);
-  //  display.commitFrameBuffer();
-  //  spi_spin();
-  //  cursor_height += 8;
-  //}
-
-  init_step_str = (char*) "Baro            ";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  //display.commitFrameBuffer();
-  spi_spin();
-  if (0 == baro.init(&Wire1)) {
-  }
-  else {
-    display.setTextColor(RED);
-    display.setCursor(0, cursor_height);
-    display.writeString(init_step_str);
-    //display.commitFrameBuffer();
-    spi_spin();
-    cursor_height += 8;
-  }
-
-  init_step_str = (char*) "UVI";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  if (VEML6075_ERROR_SUCCESS == uv.init(&Wire1)) {
-  }
-  else {
-    display.setTextColor(RED, BLACK);
-    display.setCursor(0, cursor_height);
-    display.writeString(init_step_str);
-    cursor_height += 8;
-  }
-
-  init_step_str = (char*) "Lux ";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  int8_t lux_ret = tsl2561.init(&Wire1);
-  if (0 == lux_ret) {
-    tsl2561.integrationTime(TSLIntegrationTime::MS_101);
-  }
-  else {
-    display.setTextColor(RED, BLACK);
-    display.setCursor(0, cursor_height);
-    display.writeString(init_step_str);
-    //display.writeString(lux_ret);
-    cursor_height += 8;
-  }
-  delay(10);
-
-  init_step_str = (char*) "ToF         ";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  tof.setTimeout(500);
-  if (tof.init(&Wire1)) {
-    tof.startContinuous(100);
-  }
-  else {
-    display.setTextColor(RED, BLACK);
-    display.setCursor(0, cursor_height);
-    display.writeString(init_step_str);
-    cursor_height += 8;
-  }
-
-  //init_step_str = (const char*) "PSU Temperature";
-  //percent_setup += 0.08;
-  //draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  //display.setTextColor(WHITE);
-  //display.setCursor(4, 14);
-  //display.writeString(init_step_str);
-  //if (0 == tmp102.init(&Wire)) {
-  //}
-  //else {
-  //  display.setTextColor(RED, BLACK);
-  //  display.setCursor(0, cursor_height);
-  //  display.writeString(init_step_str);
-  //  cursor_height += 8;
-  //}
-
-  init_step_str = (char*) "Inertial        ";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  if (ICM_20948_Stat_Ok == imu.begin(IMU_CS_PIN, SPI, 6000000)) {
-    imu.swReset();
-    imu.sleep(false);
-    imu.lowPower(false);
-    imu.setSampleMode((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr | ICM_20948_Internal_Mag), ICM_20948_Sample_Mode_Continuous);
-    ICM_20948_fss_t myFSS;  // This uses a "Full Scale Settings" structure that can contain values for all configurable sensors
-    myFSS.a = gpm2;         // gpm2, gpm4, gpm8, gpm16
-    myFSS.g = dps250;       // dps250, dps500, dps1000, dps2000
-    imu.setFullScale((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myFSS);
-    // Set up Digital Low-Pass Filter configuration
-    ICM_20948_dlpcfg_t myDLPcfg;      // Similar to FSS, this uses a configuration structure for the desired sensors
-    myDLPcfg.a = acc_d473bw_n499bw;   // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
-                                      // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
-                                      // acc_d111bw4_n136bw
-                                      // acc_d50bw4_n68bw8
-                                      // acc_d23bw9_n34bw4
-                                      // acc_d11bw5_n17bw
-                                      // acc_d5bw7_n8bw3        - means 3 db bandwidth is 5.7 hz and nyquist bandwidth is 8.3 hz
-                                      // acc_d473bw_n499bw
-    myDLPcfg.g = gyr_d361bw4_n376bw5;    // gyr_d196bw6_n229bw8, gyr_d151bw8_n187bw6, gyr_d119bw5_n154bw3, gyr_d51bw2_n73bw3, gyr_d23bw9_n35bw9, gyr_d11bw6_n17bw8, gyr_d5bw7_n8bw9, gyr_d361bw4_n376bw5
-    imu.setDLPFcfg((ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg);
-    // Choose whether or not to use DLPF
-    ICM_20948_Status_e accDLPEnableStat = imu.enableDLPF((ICM_20948_Internal_Gyr | ICM_20948_Internal_Acc), true);
-    if (255 != IMU_IRQ_PIN) {
-      pinMode(IMU_IRQ_PIN, GPIOMode::INPUT);
-      //imu.cfgIntActiveLow(true);
-      //imu.cfgIntOpenDrain(false);
-      //imu.cfgIntLatch(true);          // IRQ is a 50us pulse.
-      //imu.intEnableRawDataReady(true);
-      setPinFxn(IMU_IRQ_PIN, IRQCondition::FALLING, imu_isr_fxn);
-    }
-  //if (false) {
-  }
-  else {
-    display.setTextColor(RED);
-    display.setCursor(0, cursor_height);
-    display.writeString(init_step_str);
-    cursor_height += 8;
-  }
-
-  init_step_str = (char*) "Console         ";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
 
   console.defineCommand("help",        '?', arg_list_1_str, "Prints help to console.", "", 0, callback_help);
   console.defineCommand("history",     arg_list_0, "Print command history.", "", 0, callback_print_history);
@@ -1559,48 +1306,15 @@ void setup() {
   //ptc.concat(TEST_PROG_VERSION);
   console.printToLog(&ptc);
 
-  init_step_str = (char*) "Touchpad        ";
   touch = new SX8634(&_touch_opts);
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  if (0 == touch->init(&Wire)) {
-  }
-  else {
-    display.setTextColor(RED);
-    display.setCursor(0, cursor_height);
-    display.writeString(init_step_str);
-    cursor_height += 8;
-  }
 
   config_time = millis();
   //display.setTextColor(GREEN);
   //display.writeString((config_time - boot_time), DEC);
   //display.writeString("ms\n");
 
-  init_step_str = (char*) "USB        ";
-  percent_setup += 0.08;
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  display.setTextColor(WHITE);
-  display.setCursor(4, 14);
-  display.writeString(init_step_str);
-  while (!Serial && (100 > serial_timeout)) {
-    draw_progress_bar_horizontal(0, 54, 95, 9, RED, (0 == serial_timeout), false, (serial_timeout * 0.01));
-    serial_timeout++;
-    delay(70);
-  }
-  if (Serial) {
-    draw_progress_bar_horizontal(0, 54, 95, 9, GREEN, false, false, 1.0);
-    while (Serial.available()) {
-      Serial.read();
-    }
-    //display.writeString("Serial\n");
-  }
-
   wakelock_tof     = nullptr;
-  //wakelock_mag     = magneto.getWakeLock();
+  wakelock_mag     = magneto.getWakeLock();
   wakelock_lux     = nullptr;
   wakelock_imu     = nullptr;
   wakelock_grideye = nullptr;
@@ -1608,18 +1322,12 @@ void setup() {
   wakelock_baro    = nullptr;
   wakelock_gps     = nullptr;
 
-  wakelock_mag->referenceCounted(false);
+  //wakelock_mag->referenceCounted(false);
 
-  if (touch->deviceFound()) {
-    touch->poll();
-    touch->setMode(SX8634OpMode::ACTIVE);
-    touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
-    touch->setButtonFxn(cb_button);
-    touch->setSliderFxn(cb_slider);
-    touch->setLongpressFxn(cb_longpress);
-  }
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, 1.0);
-  delay(50);
+  touch->setButtonFxn(cb_button);
+  touch->setSliderFxn(cb_slider);
+  touch->setLongpressFxn(cb_longpress);
+  Serial.println("End of setup()");
 }
 
 
@@ -1628,23 +1336,25 @@ void setup() {
 * Main loop
 *******************************************************************************/
 
-
 void spi_spin() {
   int8_t polling_ret = spi0.poll();
   while (0 < polling_ret) {
     polling_ret = spi0.poll();
+    //Serial.println("spi_spin() 0");
   }
   polling_ret = spi0.service_callback_queue();
   while (0 < polling_ret) {
     polling_ret = spi0.service_callback_queue();
+    //Serial.println("spi_spin() 1");
   }
 }
-
 
 void i2c0_spin() {
   int8_t polling_ret = i2c0.poll();
   while (0 < polling_ret) {
     polling_ret = i2c0.poll();
+    Serial.print("i2c0_spin() ");
+    Serial.println(polling_ret);
   }
 }
 
@@ -1652,6 +1362,8 @@ void i2c1_spin() {
   int8_t polling_ret = i2c1.poll();
   while (0 < polling_ret) {
     polling_ret = i2c1.poll();
+    Serial.print("i2c1_spin() ");
+    Serial.println(polling_ret);
   }
 }
 
@@ -1698,63 +1410,65 @@ void loop() {
   }
   stopwatch_touch_poll.markStop();
 
-  if (imu_irq_fired) {
-    imu_irq_fired = false;
-    stopwatch_sensor_imu.markStart();
-    read_imu();
-    stopwatch_sensor_imu.markStop();
-  }
+  //if (imu_irq_fired) {
+  //  imu_irq_fired = false;
+  //  stopwatch_sensor_imu.markStart();
+  //  read_imu();
+  //  stopwatch_sensor_imu.markStop();
+  //}
+
   /* Run our async cleanup stuff. */
   uint32_t millis_now = millis();
   timeoutCheckVibLED();
 
-  /* Poll each sensor class. */
-  if (magneto.power()) {
-    stopwatch_sensor_mag.markStart();
-    //if (2 == magneto.poll()) {       read_magnetometer_sensor();          }
-    stopwatch_sensor_mag.markStop();
-  }
-  stopwatch_sensor_baro.markStart();
-  if (0 < baro.poll()) {           read_baro_sensor();                  }
-  stopwatch_sensor_baro.markStop();
-  stopwatch_sensor_uv.markStart();
-  if (0 < uv.poll()) {             read_uv_sensor();                    }
-  stopwatch_sensor_uv.markStop();
-  stopwatch_sensor_lux.markStart();
-  if (0 < tsl2561.poll()) {        read_visible_sensor();               }
-  stopwatch_sensor_lux.markStop();
-  stopwatch_sensor_grideye.markStart();
-  if (0 < grideye.poll()) {        read_thermopile_sensor();            }
-  stopwatch_sensor_grideye.markStop();
-  //stopwatch_sensor_tmp102.markStart();
-  //if (0 < tmp102.poll()) {         read_battery_temperature_sensor();   }
-  //stopwatch_sensor_tmp102.markStop();
+  // /* Poll each sensor class. */
+  // if (magneto.power()) {
+  //   stopwatch_sensor_mag.markStart();
+  //   //if (2 == magneto.poll()) {       read_magnetometer_sensor();          }
+  //   stopwatch_sensor_mag.markStop();
+  // }
+  // stopwatch_sensor_baro.markStart();
+  // if (0 < baro.poll()) {           read_baro_sensor();                  }
+  // stopwatch_sensor_baro.markStop();
+  // stopwatch_sensor_uv.markStart();
+  // if (0 < uv.poll()) {             read_uv_sensor();                    }
+  // stopwatch_sensor_uv.markStop();
+  // stopwatch_sensor_lux.markStart();
+  // if (0 < tsl2561.poll()) {        read_visible_sensor();               }
+  // stopwatch_sensor_lux.markStop();
 
-  if (tof_update_next <= millis_now) {
-    stopwatch_sensor_tof.markStart();
-    //read_time_of_flight_sensor();
-    stopwatch_sensor_tof.markStop();
-    tof_update_next = millis_now + 100;
+  if (grideye.enabled()) {
+    stopwatch_sensor_grideye.markStart();
+    grideye.poll();
+    if (0 < grideye.frameReady()) {      read_thermopile_sensor();           }
+    stopwatch_sensor_grideye.markStop();
   }
 
+  // if (tof_update_next <= millis_now) {
+  //   stopwatch_sensor_tof.markStart();
+  //   //read_time_of_flight_sensor();
+  //   stopwatch_sensor_tof.markStop();
+  //   tof_update_next = millis_now + 100;
+  // }
 
-  stopwatch_sensor_gps.markStart();
-  const int GPS_LEN = 160;
-  if (SerialGPS.available()) {
-    uint8_t gps_buf[GPS_LEN];
-    int gps_bytes_read = 0;
-    while (SerialGPS.available() && (gps_bytes_read < GPS_LEN)) {
-      gps_buf[gps_bytes_read++] = SerialGPS.read();
-    }
-    gps.feed(gps_buf, gps_bytes_read);
-    stopwatch_sensor_gps.markStop();
-  }
+
+  // stopwatch_sensor_gps.markStart();
+  // const int GPS_LEN = 160;
+  // if (SerialGPS.available()) {
+  //   uint8_t gps_buf[GPS_LEN];
+  //   int gps_bytes_read = 0;
+  //   while (SerialGPS.available() && (gps_bytes_read < GPS_LEN)) {
+  //     gps_buf[gps_bytes_read++] = SerialGPS.read();
+  //   }
+  //   gps.feed(gps_buf, gps_bytes_read);
+  //   stopwatch_sensor_gps.markStop();
+  // }
 
 
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
     if (&app_standby != uApp::appActive()) {
-      uApp::setAppActive(AppID::HOT_STANDBY);
+      //uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
 
@@ -1764,6 +1478,8 @@ void loop() {
   stopwatch_display.markStop();
   // For tracking framerate, convert from period in micros to hz...
   graph_array_frame_rate.feedFilter(1000000.0 / 1+stopwatch_display.meanTime());
+  //delay(80);
+
 
   if ((Serial) && (output.length() > 0)) {
     Serial.write(output.string(), output.length());

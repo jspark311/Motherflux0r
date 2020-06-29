@@ -103,23 +103,32 @@ XferFault I2CBusOp::begin() {
           while (ord < _buf_len) {
             Wire.write(*(_buf + ord++));
           }
-          set_fault((0 != Wire.endTransmission()) ? XferFault::NONE : XferFault::BUS_FAULT);
+          set_fault((0 == Wire.endTransmission()) ? XferFault::NONE : XferFault::BUS_FAULT);
           break;
         case BusOpcode::RX:
-          if (need_to_send_subaddr()) {
-            Wire.beginTransmission(dev_addr);
-            set_state(XferState::ADDR);
-            Wire.write(sub_addr);
-            if (0 != Wire.endTransmission()) {
-              abort(XferFault::DEV_NOT_FOUND);
+          {
+            const uint8_t READ_BLOCK_SIZE = 32;
+            uint8_t dev_reg = sub_addr;
+            bool block_continue = true;
+            while (block_continue && (ord < _buf_len)) {
+              const uint8_t THIS_BLK_SIZE = strict_min(READ_BLOCK_SIZE, (_buf_len - ord));
+              uint8_t btr = 0;
+              if (sub_addr != -1) {
+                Wire.beginTransmission(dev_addr);
+                Wire.write(dev_reg);
+                Wire.endTransmission(false);
+              }
+              Wire.requestFrom(dev_addr, THIS_BLK_SIZE);
+              while (Wire.available()) {
+                *(_buf + ord++) = Wire.read();
+                btr++;
+              }
+              block_continue = (0 == Wire.endTransmission()) && (btr == THIS_BLK_SIZE);
+              //block_continue = (btr == THIS_BLK_SIZE);
+              dev_reg += THIS_BLK_SIZE;
             }
+            set_fault((_buf_len == ord) ? XferFault::NONE : XferFault::BUS_FAULT);
           }
-          set_state(XferState::RX_WAIT);
-          Wire.requestFrom(dev_addr, _buf_len, true);   // Send STOP
-          while(Wire.available()) {
-            *(_buf + ord++) = Wire.read();
-          }
-          set_fault((ord == _buf_len) ? XferFault::NONE : XferFault::BUS_FAULT);
           break;
         default:
           abort(XferFault::BAD_PARAM);
@@ -146,23 +155,32 @@ XferFault I2CBusOp::begin() {
           while (ord < _buf_len) {
             Wire1.write(*(_buf + ord++));
           }
-          set_fault((0 != Wire1.endTransmission()) ? XferFault::NONE : XferFault::BUS_FAULT);
+          set_fault((0 == Wire1.endTransmission()) ? XferFault::NONE : XferFault::BUS_FAULT);
           break;
         case BusOpcode::RX:
-          if (need_to_send_subaddr()) {
-            Wire1.beginTransmission(dev_addr);
-            set_state(XferState::ADDR);
-            Wire1.write(sub_addr);
-            if (0 != Wire1.endTransmission()) {
-              abort(XferFault::DEV_NOT_FOUND);
+          {
+            const uint8_t READ_BLOCK_SIZE = 32;
+            uint8_t dev_reg = sub_addr;
+            bool block_continue = true;
+            while (block_continue && (ord < _buf_len)) {
+              const uint8_t THIS_BLK_SIZE = strict_min(READ_BLOCK_SIZE, (_buf_len - ord));
+              uint8_t btr = 0;
+              if (sub_addr != -1) {
+                Wire1.beginTransmission(dev_addr);
+                Wire1.write(dev_reg);
+                Wire1.endTransmission(false);
+              }
+              Wire1.requestFrom(dev_addr, THIS_BLK_SIZE);
+              while (Wire1.available()) {
+                *(_buf + ord++) = Wire1.read();
+                btr++;
+              }
+              block_continue = (0 == Wire1.endTransmission()) && (btr == THIS_BLK_SIZE);
+              //block_continue = (btr == THIS_BLK_SIZE);
+              dev_reg += THIS_BLK_SIZE;
             }
+            set_fault((_buf_len == ord) ? XferFault::NONE : XferFault::BUS_FAULT);
           }
-          set_state(XferState::RX_WAIT);
-          Wire1.requestFrom(dev_addr, _buf_len, true);   // Send STOP
-          while(Wire1.available()) {
-            *(_buf + ord++) = Wire1.read();
-          }
-          set_fault((ord == _buf_len) ? XferFault::NONE : XferFault::BUS_FAULT);
           break;
         default:
           abort(XferFault::BAD_PARAM);
@@ -176,6 +194,8 @@ XferFault I2CBusOp::begin() {
   markComplete();
   return getFault();
 }
+
+
 
 
 /*

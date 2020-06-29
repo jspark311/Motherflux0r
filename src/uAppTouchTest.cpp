@@ -27,6 +27,7 @@ uAppTouchTest::~uAppTouchTest() {}
 */
 int8_t uAppTouchTest::_lc_on_preinit() {
   int8_t ret = 1;
+  redraw_app_window();
   return ret;
 }
 

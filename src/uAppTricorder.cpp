@@ -89,6 +89,7 @@ uAppTricorder::~uAppTricorder() {}
 */
 int8_t uAppTricorder::_lc_on_preinit() {
   int8_t ret = 1;
+  redraw_app_window();
   if (nullptr != wakelock_tof) {   wakelock_tof->acquire();   }
   if (nullptr != wakelock_mag) {   wakelock_mag->acquire();   }
   return ret;

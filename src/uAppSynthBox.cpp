@@ -65,6 +65,7 @@ uAppSynthBox::~uAppSynthBox() {}
 */
 int8_t uAppSynthBox::_lc_on_preinit() {
   int8_t ret = 1;
+  redraw_app_window();
   return ret;
 }
 

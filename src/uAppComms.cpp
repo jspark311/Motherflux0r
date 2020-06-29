@@ -26,6 +26,7 @@ uAppComms::~uAppComms() {}
 */
 int8_t uAppComms::_lc_on_preinit() {
   int8_t ret = 1;
+  redraw_app_window();
   return ret;
 }
 

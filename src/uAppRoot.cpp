@@ -23,6 +23,7 @@ uAppRoot::~uAppRoot() {}
 */
 int8_t uAppRoot::_lc_on_preinit() {
   int8_t ret = 1;
+  redraw_app_window();
   return ret;
 }
 

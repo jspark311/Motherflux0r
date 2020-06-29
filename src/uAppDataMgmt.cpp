@@ -29,6 +29,7 @@ uAppDataMgmt::~uAppDataMgmt() {}
 */
 int8_t uAppDataMgmt::_lc_on_preinit() {
   int8_t ret = 1;
+  redraw_app_window();
   return ret;
 }
 
