@@ -185,6 +185,11 @@ int8_t uAppSynthBox::_process_user_input() {
     _button_pressed_dn(down_pressed && !up_pressed);
     ret = 1;
   }
+
+  if ((0 == ret) && (52 < _slider_current)) {
+    // We want the FFT window to refresh always.
+    ret = 1;
+  }
   return ret;
 }
 

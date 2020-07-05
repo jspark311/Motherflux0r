@@ -493,7 +493,7 @@ static void cb_button(int button, bool pressed) {
   if (pressed) {
     vibrateOn(19);
   }
-  ledOn(LED_B_PIN, 2, 3500);
+  ledOn(LED_B_PIN, 2, (4095 - graph_array_ana_light.value() * 3000));
   uint16_t value = touch->buttonStates();
   last_interaction = millis();
   uApp::appActive()->deliverButtonValue(value);
@@ -502,13 +502,13 @@ static void cb_button(int button, bool pressed) {
 
 static void cb_slider(int slider, int value) {
   last_interaction = millis();
-  ledOn(LED_R_PIN, 60, 3500);
+  ledOn(LED_R_PIN, 30, (4095 - graph_array_ana_light.value() * 3000));
   uApp::appActive()->deliverSliderValue(value);
 }
 
 
 static void cb_longpress(int button, uint32_t duration) {
-  ledOn(LED_G_PIN, 50, 3500);
+  ledOn(LED_G_PIN, 30, (4095 - graph_array_ana_light.value() * 3000));
 }
 
 
@@ -1095,9 +1095,26 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
         text_return->concatf("Mag WAKELOCK held: %c.\n", magneto.getWakeLock()->isHeld() ? 'y':'n');
         break;
       case 10:
-        text_return->concatf("Magnetometer init() returns %d\n", magneto.init(&Wire1, &spi0));
+        text_return->concatf("Magnetometer init() returns %d\n", magneto.init(&i2c1, &spi0));
         break;
-      default:  ret = -3;                            break;
+
+      case 11:
+      case 12:
+      case 13:
+      case 14:
+      case 15:
+      case 16:
+      case 17:
+      case 18:
+        {
+          uint8_t eidx = (args->position_as_int(0) - 11);
+          DRV425State state = (DRV425State) eidx;
+          text_return->concatf("magneto.setDesiredState(%s) returns %d\n", DRV425::drvStateStr(state), magneto.setDesiredState(state));
+        }
+        break;
+      default:
+        ret = -3;
+        break;
     }
   }
   if (-3 == ret) {
@@ -1130,7 +1147,7 @@ int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
     int arg0 = args->position_as_int(0);
     //int arg1 = args->position_as_int(1);
     switch ((SensorID) arg0) {
-      case SensorID::MAGNETOMETER:   ret = magneto.init(&Wire1, &spi0);  break;
+      case SensorID::MAGNETOMETER:   ret = magneto.init(&i2c1, &spi0);   break;
       case SensorID::BARO:           ret = baro.init(&Wire1);            break;
       case SensorID::LUX:            ret = tsl2561.init(&Wire1);         break;
       case SensorID::UV:             ret = uv.init(&Wire1);              break;
@@ -1303,7 +1320,9 @@ void setup() {
   console.init();
 
   StringBuilder ptc("Motherflux0r ");
-  //ptc.concat(TEST_PROG_VERSION);
+  ptc.concat(TEST_PROG_VERSION);
+  ptc.concat("\t Build date " __DATE__ " " __TIME__ "\n");
+
   console.printToLog(&ptc);
 
   touch = new SX8634(&_touch_opts);
@@ -1327,7 +1346,6 @@ void setup() {
   touch->setButtonFxn(cb_button);
   touch->setSliderFxn(cb_slider);
   touch->setLongpressFxn(cb_longpress);
-  Serial.println("End of setup()");
 }
 
 
@@ -1353,8 +1371,8 @@ void i2c0_spin() {
   int8_t polling_ret = i2c0.poll();
   while (0 < polling_ret) {
     polling_ret = i2c0.poll();
-    Serial.print("i2c0_spin() ");
-    Serial.println(polling_ret);
+    //Serial.print("i2c0_spin() ");
+    //Serial.println(polling_ret);
   }
 }
 
@@ -1363,7 +1381,7 @@ void i2c1_spin() {
   while (0 < polling_ret) {
     polling_ret = i2c1.poll();
     //Serial.print("i2c1_spin() ");
-    Serial.println(polling_ret);
+    //Serial.println(polling_ret);
   }
 }
 
@@ -1423,9 +1441,9 @@ void loop() {
 
   // /* Poll each sensor class. */
   // if (magneto.power()) {
-  //   stopwatch_sensor_mag.markStart();
-  //   //if (2 == magneto.poll()) {       read_magnetometer_sensor();          }
-  //   stopwatch_sensor_mag.markStop();
+     stopwatch_sensor_mag.markStart();
+     magneto.poll();
+     stopwatch_sensor_mag.markStop();
   // }
   // stopwatch_sensor_baro.markStart();
   // if (0 < baro.poll()) {           read_baro_sensor();                  }
@@ -1468,7 +1486,7 @@ void loop() {
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
     if (&app_standby != uApp::appActive()) {
-      //uApp::setAppActive(AppID::HOT_STANDBY);
+      uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
 

@@ -67,6 +67,8 @@ extern AudioAmplifier           ampR;
 extern AudioAmplifier           ampL;
 extern AudioAnalyzeFFT256       fft256_1;
 
+extern SensorFilter<float> graph_array_ana_light;
+
 
 bool   _display_init_called   = false;
 bool   _display_init_complete = false;
@@ -97,11 +99,10 @@ uint16_t serial_timeout = 0;
 
 
 
-uAppBoot::uAppBoot() : uApp("Comms", (Image*) &display) {}
 
+uAppBoot::uAppBoot() : uApp("Boot", (Image*) &display) {}
 
 uAppBoot::~uAppBoot() {}
-
 
 
 /*******************************************************************************
@@ -116,6 +117,11 @@ uAppBoot::~uAppBoot() {}
 */
 int8_t uAppBoot::_lc_on_preinit() {
   int8_t ret = 1;
+  for (uint8_t i = 0; i < 100; i++) {
+    // Collect a baseline for use in tuning display intensity.
+    // TODO: Data should come in passively as a stream, and not require this.
+    graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
+  }
   display.init(&spi0);
   _display_init_called = true;
   return ret;
@@ -303,20 +309,20 @@ void uAppBoot::_redraw_window() {
 //  }
 //  percent_setup += 0.08;
 
-  if (!_baro_init_complete) {
-    _baro_init_complete = baro.initialized();
-    if (!_baro_init_called) {
-      init_step_str = (char*) "Baro    ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-      _baro_init_called = true;
-      _baro_init_complete = (0 != baro.init(&Wire1));  // Abort init wait if it failed.
-    }
-    return;
-  }
-  percent_setup += 0.08;
+  //if (!_baro_init_complete) {
+  //  _baro_init_complete = baro.initialized();
+  //  if (!_baro_init_called) {
+  //    init_step_str = (char*) "Baro    ";
+  //    draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  //    FB->setTextColor(WHITE);
+  //    FB->setCursor(4, 14);
+  //    FB->writeString(init_step_str);
+  //    _baro_init_called = true;
+  //    _baro_init_complete = (0 != baro.init(&Wire1));  // Abort init wait if it failed.
+  //  }
+  //  return;
+  //}
+  //percent_setup += 0.08;
 
   //if (!_mag_init_complete) {
   //  if (!_mag_init_called) {
@@ -326,7 +332,7 @@ void uAppBoot::_redraw_window() {
   //    FB->setCursor(4, 14);
   //    FB->writeString(init_step_str);
   //    magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
-  //    _mag_init_called = (0 == magneto.init(&Wire1, &spi0));
+  //    _mag_init_called = (0 == magneto.init(&i2c1, &spi0));
   //  }
   //  _mag_init_complete = grideye.initialized();
   //  if (_mag_init_complete) {
@@ -420,7 +426,7 @@ void uAppBoot::_redraw_window() {
 //    return;
 //  }
 //  percent_setup += 0.08;
-//
+
 //  if (!_tof_init_complete) {
 //    if (!_tof_init_called) {
 //      init_step_str = (char*) "ToF         ";

@@ -56,12 +56,12 @@
 
 /* Common 16-bit colors */
 #define	BLACK           0x0000
-#define	BLUE            0x001F
-#define	RED             0xF800
-#define	GREEN           0x07E0
-#define CYAN            0x07FF
-#define MAGENTA         0xF81F
-#define YELLOW          0xFFE0
+#define	BLUE            0x1F00
+#define	RED             0x00F8
+#define	GREEN           0xE007
+#define CYAN            0xFF07
+#define MAGENTA         0x1FF8
+#define YELLOW          0xE0FF
 #define WHITE           0xFFFF
 
 
@@ -70,7 +70,6 @@
 *******************************************************************************/
 #define DATA_REC_FLAG_               0x80000000   //
 #define DATA_RELAY_FLAG_             0x80000000   //
-
 
 
 
