@@ -5,7 +5,7 @@
 #include <SensorFilter.h>
 #include <Image/Image.h>
 #include <TripleAxisCompass.h>
-#include "SSD13xx.h"
+#include <ManuvrDrivers.h>
 
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__

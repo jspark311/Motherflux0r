@@ -23,13 +23,9 @@
 #include <SX8634.h>
 #include <TimeLib.h>
 
-#include "SSD13xx.h"
-#include "VEML6075.h"
+#include <ManuvrDrivers.h>
 #include "ICM20948.h"
-#include "BME280.h"
-#include "AMG88xx.h"
 #include "DRV425.h"
-#include "TSL2561.h"
 #include "VL53L0X.h"
 
 #include "CommPeer.h"
@@ -227,13 +223,13 @@ uint32_t tof_update_next   = 0;      //
 /* Console junk... */
 ParsingConsole console(128);
 static const TCode arg_list_0[]       = {TCode::NONE};
-static const TCode arg_list_1_str[]   = {TCode::STR,   TCode::NONE};
-static const TCode arg_list_1_uint[]  = {TCode::UINT,  TCode::NONE};
-static const TCode arg_list_1_float[] = {TCode::FLOAT, TCode::NONE};
-static const TCode arg_list_2_uint[]  = {TCode::UINT,  TCode::UINT,  TCode::NONE};
-static const TCode arg_list_3_uint[]  = {TCode::UINT,  TCode::UINT,  TCode::UINT,  TCode::NONE};
-static const TCode arg_list_4_uuff[]  = {TCode::UINT,  TCode::UINT,  TCode::FLOAT, TCode::FLOAT, TCode::NONE};
-static const TCode arg_list_4_float[] = {TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::FLOAT, TCode::NONE};
+static const TCode arg_list_1_str[]   = {TCode::STR,    TCode::NONE};
+static const TCode arg_list_1_uint[]  = {TCode::UINT32, TCode::NONE};
+static const TCode arg_list_1_float[] = {TCode::FLOAT,  TCode::NONE};
+static const TCode arg_list_2_uint[]  = {TCode::UINT32, TCode::UINT32, TCode::NONE};
+static const TCode arg_list_3_uint[]  = {TCode::UINT32, TCode::UINT32, TCode::UINT32,  TCode::NONE};
+static const TCode arg_list_4_uuff[]  = {TCode::UINT32, TCode::UINT32, TCode::FLOAT,   TCode::FLOAT, TCode::NONE};
+static const TCode arg_list_4_float[] = {TCode::FLOAT,  TCode::FLOAT,  TCode::FLOAT,   TCode::FLOAT, TCode::NONE};
 
 /* Application tracking and interrupts... */
 extern uAppBoot app_boot;
@@ -828,7 +824,7 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
       case SensorID::LIGHT:            i2c1.printDebug(text_return);   break;
       //case SensorID::UV:             uv.printDebug(text_return);            break;
       case SensorID::THERMOPILE:     grideye.printDebug(text_return);       break;
-      //case SensorID::LUX:            tsl2561.printDebug(text_return);       break;
+      case SensorID::LUX:            tsl2561.printDebug(text_return);       break;
       case SensorID::BATT_VOLTAGE:   grideye.poll();    break;
       //case SensorID::IMU:                break;
       //case SensorID::MIC:                break;
@@ -1148,9 +1144,9 @@ int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
     //int arg1 = args->position_as_int(1);
     switch ((SensorID) arg0) {
       case SensorID::MAGNETOMETER:   ret = magneto.init(&i2c1, &spi0);   break;
-      case SensorID::BARO:           ret = baro.init(&Wire1);            break;
-      case SensorID::LUX:            ret = tsl2561.init(&Wire1);         break;
-      case SensorID::UV:             ret = uv.init(&Wire1);              break;
+      case SensorID::BARO:           ret = baro.init();                  break;
+      case SensorID::LUX:            ret = tsl2561.init();               break;
+      case SensorID::UV:             ret = uv.init();                    break;
       case SensorID::THERMOPILE:     ret = grideye.init(&i2c1);          break;
       case SensorID::TOF:            ret = tof.init(&Wire1);             break;
       //case SensorID::BATT_VOLTAGE:       break;
@@ -1260,6 +1256,8 @@ void setup() {
   spi0.init();
   i2c0.init();
   i2c1.init();
+
+  baro.assignBusInstance(&i2c1);
 
   // GPS
   Serial1.setRX(GPS_TX_PIN);
@@ -1451,9 +1449,12 @@ void loop() {
   // stopwatch_sensor_uv.markStart();
   // if (0 < uv.poll()) {             read_uv_sensor();                    }
   // stopwatch_sensor_uv.markStop();
-  // stopwatch_sensor_lux.markStart();
-  // if (0 < tsl2561.poll()) {        read_visible_sensor();               }
-  // stopwatch_sensor_lux.markStop();
+
+  stopwatch_sensor_lux.markStart();
+  if (0 < tsl2561.poll()) {
+    read_visible_sensor();
+    stopwatch_sensor_lux.markStop();
+  }
 
   if (grideye.enabled()) {
     stopwatch_sensor_grideye.markStart();
@@ -1497,7 +1498,6 @@ void loop() {
   // For tracking framerate, convert from period in micros to hz...
   graph_array_frame_rate.feedFilter(1000000.0 / 1+stopwatch_display.meanTime());
   //delay(80);
-
 
   if ((Serial) && (output.length() > 0)) {
     Serial.write(output.string(), output.length());

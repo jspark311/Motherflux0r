@@ -1,12 +1,7 @@
 #include <CppPotpourri.h>
 #include <SensorFilter.h>
-#include "VEML6075.h"
 #include "ICM20948.h"
-#include "BME280.h"
-#include "AMG88xx.h"
 #include "DRV425.h"
-#include "TSL2561.h"
-#include "TMP102.h"
 #include "uApp.h"
 #include "Motherflux0r.h"
 

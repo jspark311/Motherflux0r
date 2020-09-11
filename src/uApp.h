@@ -134,8 +134,8 @@ class uApp {
 
 
   private:
-    uint32_t      _flags     = 0;
-    uint32_t      _last_draw = 0;
+    uint32_t _flags     = 0;
+    uint32_t _last_draw = 0;
 };
 
 
