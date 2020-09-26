@@ -18,6 +18,9 @@ static volatile uint32_t tick_count = 0;   // The timebase for the rest of the p
 * These are not exposed in the header file.
 *******************************************************************************/
 
+uint32_t randomUInt32() {
+  return ((uint32_t) random(2147483647)) | ((uint32_t) random(2147483647)) << 1;
+}
 
 /*******************************************************************************
 * Time and date                                                                *

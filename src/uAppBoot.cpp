@@ -287,24 +287,24 @@ void uAppBoot::_redraw_window() {
 //  }
 //  percent_setup += 0.08;
 
-  if (!_lux_init_complete) {
-    if (!_lux_init_called) {
-      init_step_str = (char*) "Lux  ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-      tsl2561.assignBusInstance(&i2c1);
-      _lux_init_called = true; //(0 == tsl2561.init(&Wire1));
-      tsl2561.init();
-    }
-    if (tsl2561.initialized()) {
-      _lux_init_complete = true;
-      tsl2561.integrationTime(TSLIntegrationTime::MS_101);
-    }
-    return;
-  }
-  percent_setup += 0.08;
+  //if (!_lux_init_complete) {
+  //  if (!_lux_init_called) {
+  //    init_step_str = (char*) "Lux  ";
+  //    draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  //    FB->setTextColor(WHITE);
+  //    FB->setCursor(4, 14);
+  //    FB->writeString(init_step_str);
+  //    tsl2561.assignBusInstance(&i2c1);
+  //    _lux_init_called = true; //(0 == tsl2561.init(&Wire1));
+  //    tsl2561.init();
+  //  }
+  //  if (tsl2561.initialized()) {
+  //    _lux_init_complete = true;
+  //    tsl2561.integrationTime(TSLIntegrationTime::MS_101);
+  //  }
+  //  return;
+  //}
+  //percent_setup += 0.08;
 
   //if (!_baro_init_complete) {
   //  _baro_init_complete = baro.initialized();

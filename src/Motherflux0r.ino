@@ -1440,7 +1440,7 @@ void loop() {
   // /* Poll each sensor class. */
   // if (magneto.power()) {
      stopwatch_sensor_mag.markStart();
-     magneto.poll();
+     //magneto.poll();
      stopwatch_sensor_mag.markStop();
   // }
   // stopwatch_sensor_baro.markStart();
@@ -1450,11 +1450,11 @@ void loop() {
   // if (0 < uv.poll()) {             read_uv_sensor();                    }
   // stopwatch_sensor_uv.markStop();
 
-  stopwatch_sensor_lux.markStart();
-  if (0 < tsl2561.poll()) {
-    read_visible_sensor();
-    stopwatch_sensor_lux.markStop();
-  }
+  //stopwatch_sensor_lux.markStart();
+  //if (0 < tsl2561.poll()) {
+  //  read_visible_sensor();
+  //  stopwatch_sensor_lux.markStop();
+  //}
 
   if (grideye.enabled()) {
     stopwatch_sensor_grideye.markStart();

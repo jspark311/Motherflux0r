@@ -68,8 +68,8 @@ int8_t uApp::refresh() {
       case AppLifecycle::PREINIT:
         drawn_app_ptr = active_app_ptr;
         _buttons_current = _buttons_pending;  // TODO: Not sure if this is universally desirable.
-		redraw_app_window();
         ret = _lc_on_preinit();
+        display.commitFrameBuffer();
         break;
       case AppLifecycle::ACTIVE:
         if (_uapp_flag(UAPP_FLAG_IS_ACTIVE)) {
