@@ -10,7 +10,6 @@
 #include "uApp.h"
 #include "ICM20948.h"
 #include "DRV425.h"
-#include "VL53L0X.h"
 
 extern SSD13xx display;
 extern SX8634* touch;
@@ -206,7 +205,7 @@ void uAppBoot::_redraw_window() {
       FB->setTextColor(WHITE);
       FB->setCursor(14, 0);
       FB->setTextSize(1);
-      FB->writeString("Motherflux0r\n");
+      FB->writeString("Motherflux0r");
       FB->setTextSize(0);
       draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, true, false, percent_setup);
     }
@@ -216,7 +215,7 @@ void uAppBoot::_redraw_window() {
 
   if (!_touch_init_complete) {
     if (!_touch_init_called) {
-      init_step_str = (char*) "Touchpad        ";
+      init_step_str = (char*) "Touchpad      ";
       draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
       FB->setTextColor(WHITE);
       FB->setCursor(4, 14);
@@ -234,7 +233,7 @@ void uAppBoot::_redraw_window() {
 
   if (!_usb_init_complete) {
     if (!_usb_init_called) {
-      init_step_str = (char*) "USB        ";
+      init_step_str = (char*) "USB      ";
       draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
       FB->setTextColor(WHITE);
       FB->setCursor(4, 14);
@@ -260,7 +259,7 @@ void uAppBoot::_redraw_window() {
   if (!_grideye_init_complete) {
     _grideye_init_complete = grideye.initialized();
     if (!_grideye_init_called) {
-      init_step_str = (char*) "GridEye         ";
+      init_step_str = (char*) "GridEye     ";
       draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
       FB->setTextColor(WHITE);
       FB->setCursor(4, 14);
@@ -272,54 +271,54 @@ void uAppBoot::_redraw_window() {
   }
   percent_setup += 0.08;
 
-//  if (!_uv_init_complete) {
-//    if (!_uv_init_called) {
-//      init_step_str = (char*) "UVI      ";
-//      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-//      FB->setTextColor(WHITE);
-//      FB->setCursor(4, 14);
-//      FB->writeString(init_step_str);
-//      _uv_init_called = true; //(VEML6075_ERROR_SUCCESS == uv.init(&Wire1));
-//      uv.init(&Wire1);
-//    }
-//    _uv_init_complete = uv.initialized();
-//    return;
-//  }
-//  percent_setup += 0.08;
+  if (!_uv_init_complete) {
+    if (!_uv_init_called) {
+      init_step_str = (char*) "UVI      ";
+      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
+      FB->setTextColor(WHITE);
+      FB->setCursor(4, 14);
+      FB->writeString(init_step_str);
+      uv.assignBusInstance(&i2c1);
+      _uv_init_called = (0 == uv.init());
+    }
+    _uv_init_complete = uv.initialized();
+    return;
+  }
+  percent_setup += 0.08;
 
-  //if (!_lux_init_complete) {
-  //  if (!_lux_init_called) {
-  //    init_step_str = (char*) "Lux  ";
-  //    draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  //    FB->setTextColor(WHITE);
-  //    FB->setCursor(4, 14);
-  //    FB->writeString(init_step_str);
-  //    tsl2561.assignBusInstance(&i2c1);
-  //    _lux_init_called = true; //(0 == tsl2561.init(&Wire1));
-  //    tsl2561.init();
-  //  }
-  //  if (tsl2561.initialized()) {
-  //    _lux_init_complete = true;
-  //    tsl2561.integrationTime(TSLIntegrationTime::MS_101);
-  //  }
-  //  return;
-  //}
-  //percent_setup += 0.08;
+  if (!_lux_init_complete) {
+    if (!_lux_init_called) {
+      init_step_str = (char*) "Lux  ";
+      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
+      FB->setTextColor(WHITE);
+      FB->setCursor(4, 14);
+      FB->writeString(init_step_str);
+      tsl2561.assignBusInstance(&i2c1);
+      _lux_init_called = (0 == tsl2561.init());
+    }
+    if (tsl2561.initialized()) {
+      _lux_init_complete = true;
+      tsl2561.integrationTime(TSLIntegrationTime::MS_101);
+    }
+    return;
+  }
+  percent_setup += 0.08;
 
-  //if (!_baro_init_complete) {
-  //  _baro_init_complete = baro.initialized();
-  //  if (!_baro_init_called) {
-  //    init_step_str = (char*) "Baro    ";
-  //    draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  //    FB->setTextColor(WHITE);
-  //    FB->setCursor(4, 14);
-  //    FB->writeString(init_step_str);
-  //    _baro_init_called = true;
-  //    _baro_init_complete = (0 != baro.init(&Wire1));  // Abort init wait if it failed.
-  //  }
-  //  return;
-  //}
-  //percent_setup += 0.08;
+  if (!_baro_init_complete) {
+    _baro_init_complete = baro.initialized();
+    if (!_baro_init_called) {
+      init_step_str = (char*) "Baro    ";
+      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
+      FB->setTextColor(WHITE);
+      FB->setCursor(4, 14);
+      FB->writeString(init_step_str);
+      baro.assignBusInstance(&i2c1);
+      _baro_init_called = true;
+      _baro_init_complete = (0 != baro.init());  // Abort init wait if it failed.
+    }
+    return;
+  }
+  percent_setup += 0.08;
 
   //if (!_mag_init_complete) {
   //  if (!_mag_init_called) {
@@ -368,7 +367,7 @@ void uAppBoot::_redraw_window() {
       pinkNoise.amplitude(volume_pink_noise);
       ampL.gain(volume_left_output);
       ampR.gain(volume_right_output);
-      init_step_str = (char*) "Audio           ";
+      init_step_str = (char*) "Audio         ";
       draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
       FB->setTextColor(WHITE);
       FB->setCursor(4, 14);
@@ -424,22 +423,23 @@ void uAppBoot::_redraw_window() {
 //  }
 //  percent_setup += 0.08;
 
-//  if (!_tof_init_complete) {
-//    if (!_tof_init_called) {
-//      init_step_str = (char*) "ToF         ";
-//      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-//      FB->setTextColor(WHITE);
-//      FB->setCursor(4, 14);
-//      FB->writeString(init_step_str);
-//      tof.setTimeout(500);
-//      _tof_init_called = (tof.init(&Wire1));
-//      _tof_init_complete = _tof_init_called;
-//    }
-//    if (_tof_init_complete) {
-//      tof.startContinuous(100);
-//    }
-//    return;
-//  }
+  //if (!_tof_init_complete) {
+  //  if (!_tof_init_called) {
+  //    init_step_str = (char*) "ToF      ";
+  //    draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
+  //    FB->setTextColor(WHITE);
+  //    FB->setCursor(4, 14);
+  //    FB->writeString(init_step_str);
+  //    tof.assignBusInstance(&i2c1);
+  //    tof.setTimeout(500);
+  //    _tof_init_called = (0 == tof.init());
+  //    _tof_init_complete = _tof_init_called;
+  //  }
+  //  if (_tof_init_complete) {
+  //    tof.startContinuous(100);
+  //  }
+  //  return;
+  //}
   draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, 1.0);
   _boot_complete_wait = true;
   return;

@@ -3,7 +3,6 @@
 #include <TinyGPS.h>
 #include "ICM20948.h"
 #include "DRV425.h"
-#include "VL53L0X.h"
 #include "uApp.h"
 #include "Motherflux0r.h"
 
@@ -244,12 +243,12 @@ void uAppTricorder::_redraw_window() {
       float dew_point = baro.DewPoint(baro.temp(), baro.hum());
       float sea_level = baro.EquivalentSeaLevelPressure(altitude, baro.temp(), baro.pres());
       draw_graph_obj(
-        0, 10, 96, 37, 0x03E0,
+        0, 10, 96, 36, 0x03E0,
         true, _cluttered_display(), _render_text_value(),
         &graph_array_pressure
       );
       FB->setTextSize(0);
-      FB->setCursor(0, 48);
+      FB->setCursor(0, 47);
       FB->setTextColor(WHITE, BLACK);
       FB->writeString("Alt: ");
       FB->setTextColor(GREEN, BLACK);
@@ -268,10 +267,11 @@ void uAppTricorder::_redraw_window() {
     // Baro
     if (graph_array_air_temp.dirty()) {
       draw_graph_obj(
-        0, 10, 96, 54, 0x83D0, 0x3EE3,
+        0, 10, 96, 37, 0x83D0, 0x3EE3,
         true, _cluttered_display(), _render_text_value(),
         &graph_array_air_temp, &graph_array_humidity
       );
+
     }
   }
   else if (_slider_current <= 22) {

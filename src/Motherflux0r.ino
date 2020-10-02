@@ -26,7 +26,6 @@
 #include <ManuvrDrivers.h>
 #include "ICM20948.h"
 #include "DRV425.h"
-#include "VL53L0X.h"
 
 #include "CommPeer.h"
 
@@ -820,12 +819,12 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
     int arg0 = args->position_as_int(0);
     switch ((SensorID) arg0) {
       case SensorID::MAGNETOMETER:   magneto.printDebug(text_return);  break;
-      //case SensorID::BARO:           baro.printDebug(text_return);          break;
-      case SensorID::LIGHT:            i2c1.printDebug(text_return);   break;
-      //case SensorID::UV:             uv.printDebug(text_return);            break;
-      case SensorID::THERMOPILE:     grideye.printDebug(text_return);       break;
-      case SensorID::LUX:            tsl2561.printDebug(text_return);       break;
-      case SensorID::BATT_VOLTAGE:   grideye.poll();    break;
+      case SensorID::BARO:           baro.printDebug(text_return);     break;
+      case SensorID::LIGHT:          i2c1.printDebug(text_return);     break;
+      case SensorID::UV:             uv.printDebug(text_return);       break;
+      case SensorID::THERMOPILE:     grideye.printDebug(text_return);  break;
+      case SensorID::LUX:            tsl2561.printDebug(text_return);  break;
+      case SensorID::BATT_VOLTAGE:   grideye.poll();               break;
       //case SensorID::IMU:                break;
       //case SensorID::MIC:                break;
       //case SensorID::GPS:                break;
@@ -1257,8 +1256,6 @@ void setup() {
   i2c0.init();
   i2c1.init();
 
-  baro.assignBusInstance(&i2c1);
-
   // GPS
   Serial1.setRX(GPS_TX_PIN);
   Serial1.setTX(GPS_RX_PIN);
@@ -1438,23 +1435,24 @@ void loop() {
   timeoutCheckVibLED();
 
   // /* Poll each sensor class. */
-  // if (magneto.power()) {
+  if (magneto.power()) {
      stopwatch_sensor_mag.markStart();
-     //magneto.poll();
+     magneto.poll();
      stopwatch_sensor_mag.markStop();
-  // }
-  // stopwatch_sensor_baro.markStart();
-  // if (0 < baro.poll()) {           read_baro_sensor();                  }
-  // stopwatch_sensor_baro.markStop();
-  // stopwatch_sensor_uv.markStart();
-  // if (0 < uv.poll()) {             read_uv_sensor();                    }
-  // stopwatch_sensor_uv.markStop();
+  }
+  stopwatch_sensor_baro.markStart();
+  if (0 < baro.poll()) {           read_baro_sensor();                  }
+  stopwatch_sensor_baro.markStop();
 
-  //stopwatch_sensor_lux.markStart();
-  //if (0 < tsl2561.poll()) {
-  //  read_visible_sensor();
-  //  stopwatch_sensor_lux.markStop();
-  //}
+  stopwatch_sensor_uv.markStart();
+  if (0 < uv.poll()) {             read_uv_sensor();                    }
+  stopwatch_sensor_uv.markStop();
+
+  stopwatch_sensor_lux.markStart();
+  if (0 < tsl2561.poll()) {
+    read_visible_sensor();
+    stopwatch_sensor_lux.markStop();
+  }
 
   if (grideye.enabled()) {
     stopwatch_sensor_grideye.markStart();
@@ -1463,13 +1461,12 @@ void loop() {
     stopwatch_sensor_grideye.markStop();
   }
 
-  // if (tof_update_next <= millis_now) {
-  //   stopwatch_sensor_tof.markStart();
-  //   //read_time_of_flight_sensor();
-  //   stopwatch_sensor_tof.markStop();
-  //   tof_update_next = millis_now + 100;
-  // }
-
+  //if (tof_update_next <= millis_now) {
+  //  stopwatch_sensor_tof.markStart();
+  //  read_time_of_flight_sensor();
+  //  stopwatch_sensor_tof.markStop();
+  //  tof_update_next = millis_now + 100;
+  //}
 
   // stopwatch_sensor_gps.markStart();
   // const int GPS_LEN = 160;
@@ -1482,7 +1479,6 @@ void loop() {
   //   gps.feed(gps_buf, gps_bytes_read);
   //   stopwatch_sensor_gps.markStop();
   // }
-
 
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
