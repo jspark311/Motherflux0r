@@ -1,6 +1,5 @@
 #include <CppPotpourri.h>
 #include <SensorFilter.h>
-#include <SX8634.h>
 #include "uApp.h"
 #include "Motherflux0r.h"
 

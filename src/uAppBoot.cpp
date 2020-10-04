@@ -1,6 +1,5 @@
 #include <CppPotpourri.h>
 #include <SensorFilter.h>
-#include <SX8634.h>
 #include <SPIAdapter.h>
 #include <I2CAdapter.h>
 
@@ -220,9 +219,10 @@ void uAppBoot::_redraw_window() {
       FB->setTextColor(WHITE);
       FB->setCursor(4, 14);
       FB->writeString(init_step_str);
-      _touch_init_called = (0 == touch->init(&Wire));
+      touch->init();
+      _touch_init_called = true;
     }
-    _touch_init_complete = touch->deviceFound();
+    _touch_init_complete = touch->devFound();
     if (_touch_init_complete) {
       touch->poll();
       touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
@@ -320,27 +320,27 @@ void uAppBoot::_redraw_window() {
   }
   percent_setup += 0.08;
 
-  //if (!_mag_init_complete) {
-  //  if (!_mag_init_called) {
-  //    init_step_str = (char*) "Magnetometer    ";
-  //    draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  //    FB->setTextColor(WHITE);
-  //    FB->setCursor(4, 14);
-  //    FB->writeString(init_step_str);
-  //    magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
-  //    _mag_init_called = (0 == magneto.init(&i2c1, &spi0));
-  //  }
-  //  _mag_init_complete = grideye.initialized();
-  //  if (_mag_init_complete) {
-  //    // TODO: This is just to prod the compass into returning a complete
-  //    //   dataset. It's bogus until there is an IMU.
-  //    Vector3f gravity(0.0, 0.0, 1.0);
-  //    Vector3f gravity_err(0.002, 0.002, 0.002);
-  //    compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
-  //  }
-  //  return;
-  //}
-  //percent_setup += 0.08;
+  if (!_mag_init_complete) {
+    if (!_mag_init_called) {
+      init_step_str = (char*) "Magnetometer    ";
+      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
+      FB->setTextColor(WHITE);
+      FB->setCursor(4, 14);
+      FB->writeString(init_step_str);
+      magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
+      _mag_init_called = (0 == magneto.init(&i2c1, &spi0));
+    }
+    _mag_init_complete = grideye.initialized();
+    if (_mag_init_complete) {
+      // TODO: This is just to prod the compass into returning a complete
+      //   dataset. It's bogus until there is an IMU.
+      Vector3f gravity(0.0, 0.0, 1.0);
+      Vector3f gravity_err(0.002, 0.002, 0.002);
+      compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
+    }
+    return;
+  }
+  percent_setup += 0.08;
 
   if (!_audio_init_complete) {
     if (!_audio_init_called) {

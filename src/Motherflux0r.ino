@@ -20,7 +20,6 @@
 #include <Wire.h>
 #include <SD.h>
 #include <EEPROM.h>
-#include <SX8634.h>
 #include <TimeLib.h>
 
 #include <ManuvrDrivers.h>
@@ -1317,10 +1316,13 @@ void setup() {
   StringBuilder ptc("Motherflux0r ");
   ptc.concat(TEST_PROG_VERSION);
   ptc.concat("\t Build date " __DATE__ " " __TIME__ "\n");
-
   console.printToLog(&ptc);
 
   touch = new SX8634(&_touch_opts);
+  touch->assignBusInstance(&i2c0);
+  touch->setButtonFxn(cb_button);
+  touch->setSliderFxn(cb_slider);
+  touch->setLongpressFxn(cb_longpress);
 
   config_time = millis();
   //display.setTextColor(GREEN);
@@ -1337,10 +1339,6 @@ void setup() {
   wakelock_gps     = nullptr;
 
   //wakelock_mag->referenceCounted(false);
-
-  touch->setButtonFxn(cb_button);
-  touch->setSliderFxn(cb_slider);
-  touch->setLongpressFxn(cb_longpress);
 }
 
 

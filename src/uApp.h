@@ -59,12 +59,10 @@ class uApp {
   public:
     int8_t refresh();  // TODO: Might-should be static?
 
-    inline void deliverSliderValue(uint16_t val) {  _slider_pending  = val;   };
-    inline void deliverButtonValue(uint16_t val) {  _buttons_pending  = val;  };
-
+    inline void deliverSliderValue(uint16_t val) {    _slider_pending   = val;  };
+    inline void deliverButtonValue(uint16_t val) {    _buttons_pending  = val;  };
     inline void printStopwatch(StringBuilder* out) {  _stopwatch.printDebug(_UA_NAME, out);   };
     inline void resetStopwatch() {                    _stopwatch.reset();                     };
-
     inline bool isActive() {     return _uapp_flag(UAPP_FLAG_IS_ACTIVE);  };
     inline const char* getAppIDString() {   return _UA_NAME;    };
 

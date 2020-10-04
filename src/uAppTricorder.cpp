@@ -277,7 +277,7 @@ void uAppTricorder::_redraw_window() {
   else if (_slider_current <= 22) {
     if (graph_array_time_of_flight.dirty()) {
       draw_graph_obj(
-        0, 10, 96, 54, 0x8235,
+        0, 10, 96, 53, 0x8235,
         true, _cluttered_display(), _render_text_value(),
         &graph_array_time_of_flight
       );
@@ -287,7 +287,7 @@ void uAppTricorder::_redraw_window() {
     // Light
     graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
     draw_graph_obj(
-      0, 10, 96, 54, 0xF710, 0xF140, 0xF81F,
+      0, 10, 96, 53, 0xF710, 0xF140, 0xF81F,
       true, _cluttered_display(), _render_text_value(),
       &graph_array_ana_light, &graph_array_visible, &graph_array_uvi
     );
@@ -295,7 +295,7 @@ void uAppTricorder::_redraw_window() {
   else if (_slider_current <= 37) {
     if (graph_array_uva.dirty()) {
       draw_graph_obj(
-        0, 10, 96, 54, 0x781F, 0xF80F,
+        0, 10, 96, 53, 0x781F, 0xF80F,
         true, _cluttered_display(), _render_text_value(),
         &graph_array_uva, &graph_array_uvb
       );
@@ -332,7 +332,7 @@ void uAppTricorder::_redraw_window() {
       tmp_val_str.concatf("%.3f uT", mag_vect_ptr->length());
       FB->writeString(&tmp_val_str);
       draw_graph_obj(
-        46, 10, 50, 55, 0x071F,
+        46, 10, 50, 53, 0x071F,
         true, false, _render_text_value(),
         &graph_array_mag_confidence
       );
