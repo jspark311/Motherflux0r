@@ -220,14 +220,8 @@ uint32_t tof_update_next   = 0;      //
 
 /* Console junk... */
 ParsingConsole console(128);
-static const TCode arg_list_0[]       = {TCode::NONE};
-static const TCode arg_list_1_str[]   = {TCode::STR,    TCode::NONE};
-static const TCode arg_list_1_uint[]  = {TCode::UINT32, TCode::NONE};
-static const TCode arg_list_1_float[] = {TCode::FLOAT,  TCode::NONE};
-static const TCode arg_list_2_uint[]  = {TCode::UINT32, TCode::UINT32, TCode::NONE};
-static const TCode arg_list_3_uint[]  = {TCode::UINT32, TCode::UINT32, TCode::UINT32,  TCode::NONE};
-static const TCode arg_list_4_uuff[]  = {TCode::UINT32, TCode::UINT32, TCode::FLOAT,   TCode::FLOAT, TCode::NONE};
-static const TCode arg_list_4_float[] = {TCode::FLOAT,  TCode::FLOAT,  TCode::FLOAT,   TCode::FLOAT, TCode::NONE};
+static const TCode arg_list_4_uuff[]  = {TCode::UINT32, TCode::UINT32, TCode::FLOAT, TCode::FLOAT, TCode::NONE};
+static const TCode arg_list_4_float[] = {TCode::FLOAT,  TCode::FLOAT,  TCode::FLOAT, TCode::FLOAT, TCode::NONE};
 
 /* Application tracking and interrupts... */
 extern uAppBoot app_boot;
@@ -1010,8 +1004,9 @@ int callback_meta_filter_set_strat(StringBuilder* text_return, StringBuilder* ar
 int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) {
   int ret = -3;
   if (0 < args->count()) {
+    int arg0 = args->position_as_int(0);
     ret = 0;
-    switch (args->position_as_int(0)) {
+    switch (arg0) {
       case 0:
         switch (args->position_as_int(1)) {
           default:
@@ -1101,10 +1096,13 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
       case 17:
       case 18:
         {
-          uint8_t eidx = (args->position_as_int(0) - 11);
+          uint8_t eidx = ((uint8_t) arg0 - 11);
           DRV425State state = (DRV425State) eidx;
           text_return->concatf("magneto.setDesiredState(%s) returns %d\n", DRV425::drvStateStr(state), magneto.setDesiredState(state));
         }
+        break;
+      case 19:
+        text_return->concatf("Magnetometer calibrate() returns %d\n", magneto.calibrate());
         break;
       default:
         ret = -3;
@@ -1283,34 +1281,35 @@ void setup() {
   graph_array_mag_confidence.init();
   graph_array_time_of_flight.init();
 
-  console.defineCommand("help",        '?', arg_list_1_str, "Prints help to console.", "", 0, callback_help);
-  console.defineCommand("history",     arg_list_0, "Print command history.", "", 0, callback_print_history);
-  console.defineCommand("reboot",      arg_list_0, "Reboot the controller.", "", 0, callback_reboot);
-  console.defineCommand("touchreset",  arg_list_0, "Reset SX8634", "", 0, callback_touch_reset);
-  console.defineCommand("touchinfo",   arg_list_0, "SX8634 info", "", 0, callback_touch_info);
-  console.defineCommand("touchmode",   arg_list_1_uint, "Get/set SX8634 mode", "", 0, callback_touch_mode);
-  console.defineCommand("led",         arg_list_3_uint, "LED Test", "", 1, callback_led_test);
-  console.defineCommand("vib",         'v', arg_list_2_uint, "Vibrator test", "", 0, callback_vibrator_test);
-  console.defineCommand("disp",        'd', arg_list_1_uint, "Display test", "", 1, callback_display_test);
+  console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
+  console.defineCommand("history",     ParsingConsole::tcodes_0, "Print command history.", "", 0, callback_print_history);
+  console.defineCommand("reboot",      ParsingConsole::tcodes_0, "Reboot the controller.", "", 0, callback_reboot);
+  console.defineCommand("touchreset",  ParsingConsole::tcodes_0, "Reset SX8634", "", 0, callback_touch_reset);
+  console.defineCommand("touchinfo",   ParsingConsole::tcodes_0, "SX8634 info", "", 0, callback_touch_info);
+  console.defineCommand("touchmode",   ParsingConsole::tcodes_uint_1, "Get/set SX8634 mode", "", 0, callback_touch_mode);
+  console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);
+  console.defineCommand("vib",         'v', ParsingConsole::tcodes_uint_2, "Vibrator test", "", 0, callback_vibrator_test);
+  console.defineCommand("disp",        'd', ParsingConsole::tcodes_uint_1, "Display test", "", 1, callback_display_test);
   console.defineCommand("aout",        arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
   console.defineCommand("fft",         arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
   console.defineCommand("synth",       arg_list_4_uuff, "Synth parameters.", "", 2, callback_synth_set);
-  console.defineCommand("si",          's', arg_list_1_uint, "Sensor information.", "", 0, callback_sensor_info);
-  console.defineCommand("sfi",         arg_list_1_uint, "Sensor filter info.", "", 0, callback_sensor_filter_info);
-  console.defineCommand("mfi",         arg_list_1_uint, "Meta filter info.", "", 1, callback_meta_filter_info);
-  console.defineCommand("mag",         'm', arg_list_2_uint, "Magnetometer functions.", "", 0, callback_magnetometer_fxns);
-  console.defineCommand("sinit",       arg_list_2_uint, "Sensor initialize.", "", 0, callback_sensor_init);
-  console.defineCommand("se",          arg_list_2_uint, "Sensor enable.", "", 0, callback_sensor_enable);
-  console.defineCommand("sfs",         arg_list_3_uint, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
-  console.defineCommand("mfs",         arg_list_3_uint, "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
-  console.defineCommand("app",         'a', arg_list_1_uint, "Select active application.", "", 0, callback_active_app);
-  console.defineCommand("sprof",       arg_list_1_uint, "Dump sensor profiler.", "", 0, callback_print_sensor_profiler);
-  console.defineCommand("aprof",       arg_list_1_uint, "Dump application profiler.", "", 0, callback_print_app_profiler);
-  console.defineCommand("cbor",        arg_list_1_uint, "CBOR test battery.", "", 0, callback_cbor_tests);
-  console.defineCommand("vol",         arg_list_1_float, "Audio volume.", "", 0, callback_audio_volume);
+  console.defineCommand("si",          's', ParsingConsole::tcodes_uint_1, "Sensor information.", "", 0, callback_sensor_info);
+  console.defineCommand("sfi",         ParsingConsole::tcodes_uint_1, "Sensor filter info.", "", 0, callback_sensor_filter_info);
+  console.defineCommand("mfi",         ParsingConsole::tcodes_uint_1, "Meta filter info.", "", 1, callback_meta_filter_info);
+  console.defineCommand("mag",         'm', ParsingConsole::tcodes_uint_2, "Magnetometer functions.", "", 0, callback_magnetometer_fxns);
+  console.defineCommand("sinit",       ParsingConsole::tcodes_uint_2, "Sensor initialize.", "", 0, callback_sensor_init);
+  console.defineCommand("se",          ParsingConsole::tcodes_uint_2, "Sensor enable.", "", 0, callback_sensor_enable);
+  console.defineCommand("sfs",         ParsingConsole::tcodes_uint_3, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
+  console.defineCommand("mfs",         ParsingConsole::tcodes_uint_3, "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
+  console.defineCommand("app",         'a', ParsingConsole::tcodes_uint_1, "Select active application.", "", 0, callback_active_app);
+  console.defineCommand("sprof",       ParsingConsole::tcodes_uint_1, "Dump sensor profiler.", "", 0, callback_print_sensor_profiler);
+  console.defineCommand("aprof",       ParsingConsole::tcodes_uint_1, "Dump application profiler.", "", 0, callback_print_app_profiler);
+  console.defineCommand("cbor",        ParsingConsole::tcodes_uint_1, "CBOR test battery.", "", 0, callback_cbor_tests);
+  console.defineCommand("vol",         ParsingConsole::tcodes_float_1, "Audio volume.", "", 0, callback_audio_volume);
   console.setTXTerminator(LineTerm::CRLF);
   console.setRXTerminator(LineTerm::CR);
   console.localEcho(true);
+  console.printHelpOnFail(true);
   console.init();
 
   StringBuilder ptc("Motherflux0r ");
@@ -1338,7 +1337,7 @@ void setup() {
   wakelock_baro    = nullptr;
   wakelock_gps     = nullptr;
 
-  //wakelock_mag->referenceCounted(false);
+  wakelock_mag->referenceCounted(false);
 }
 
 
@@ -1385,6 +1384,7 @@ void loop() {
 
   if (Serial) {
     const uint8_t RX_BUF_LEN = 32;
+    StringBuilder console_input;
     uint8_t ser_buffer[RX_BUF_LEN];
     uint8_t rx_len = 0;
     memset(ser_buffer, 0, RX_BUF_LEN);
@@ -1392,20 +1392,10 @@ void loop() {
       ser_buffer[rx_len++] = Serial.read();
     }
     if (rx_len > 0) {
-      switch (console.feed(ser_buffer, rx_len)) {
-        case -1:   // console buffered the data, but took no other action.
-        default:
-          ledOn(LED_B_PIN, 5, 500);
-          break;
-        case 0:   // A full line came in.
-          last_interaction  = millis();
-          ledOn(LED_R_PIN, 5, 500);
-          break;
-        case 1:   // A callback was called.
-          last_interaction  = millis();
-          ledOn(LED_G_PIN, 5, 500);
-          break;
-      }
+      last_interaction = millis();
+      console_input.concat(ser_buffer, rx_len);
+      console.provideBuffer(&console_input);
+      ledOn(LED_B_PIN, 5, 500);
     }
     console.fetchLog(&output);
   }

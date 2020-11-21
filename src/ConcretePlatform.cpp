@@ -188,8 +188,8 @@ bool getTimeAndDate(uint16_t* y, uint8_t* m, uint8_t* d, uint8_t* h, uint8_t* mi
 /*
 * Returns an integer representing the current datetime.
 */
-uint32_t epochTime() {
-  uint32_t ret = 0;
+uint64_t epochTime() {
+  uint64_t ret = 0;
   // TODO
   return ret;
 }
