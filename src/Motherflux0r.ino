@@ -23,6 +23,7 @@
 #include <TimeLib.h>
 
 #include <ManuvrDrivers.h>
+#include <ManuvrArduino.h>
 #include "ICM20948.h"
 #include "DRV425.h"
 
@@ -328,6 +329,7 @@ int8_t read_thermopile_sensor() {
 */
 int8_t read_magnetometer_sensor() {
   int8_t ret = -1;
+  stopwatch_sensor_mag.markStart();
   int8_t poll_ret = magneto.poll();
   switch (poll_ret) {
     case -5: // if not initialized and enabled.
@@ -627,7 +629,13 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
     case 1:    text_return->concatf("display.reset() returns %d\n", display.reset());        break;
     case 2:    text_return->concatf("display.init() returns %d\n", display.init());          break;
     case 3:    text_return->concatf("commitFrameBuffer() returns %d\n", display.commitFrameBuffer());   break;
-    case 4:    break;
+    case 4:
+      #ifdef SPI_HAS_TRANSFER_ASYNC
+        text_return->concat("SPI_HAS_TRANSFER_ASYNC is set.\n");
+      #else
+        text_return->concat("SPI_HAS_TRANSFER_ASYNC is NOT set.\n");
+      #endif
+      break;
     case 5:    break;
     case 6:    break;
     case 7:    break;
@@ -636,31 +644,26 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       draw_progress_bar_vertical(0, 0, 12, 63, CYAN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_vertical(0, 0, 12, 63, CYAN, false, false, (i * 0.01));
-        delay(40);
       }
 
       draw_progress_bar_vertical(14, 0, 7, 63, BLUE, true, false, 1.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_vertical(14, 0, 7, 63, BLUE, false, false, 1.0 - (i * 0.01));
-        delay(40);
       }
 
       draw_progress_bar_vertical(23, 0, 7, 31, YELLOW, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_vertical(23, 0, 7, 31, YELLOW, false, false, (i * 0.01));
-        delay(40);
       }
 
       draw_progress_bar_vertical(23, 33, 7, 31, RED, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_vertical(23, 33, 7, 31, RED, false, false, (i * 0.01));
-        delay(40);
       }
 
       draw_progress_bar_vertical(32, 0, 30, 63, GREEN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_vertical(32, 0, 30, 63, GREEN, false, true, (i * 0.01));
-        delay(40);
       }
       break;
 
@@ -669,31 +672,26 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       draw_progress_bar_horizontal(0, 14, 95, 7, CYAN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_horizontal(0, 14, 95, 7, CYAN, false, false, (i * 0.01));
-        delay(40);
       }
 
       draw_progress_bar_horizontal(0, 0, 95, 12, BLUE, true, false, 1.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_horizontal(0, 0, 95, 12, BLUE, false, false, 1.0-(i * 0.01));
-        delay(40);
       }
 
       draw_progress_bar_horizontal(0, 23, 46, 7, YELLOW, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_horizontal(0, 23, 46, 7, YELLOW, false, false, (i * 0.01));
-        delay(40);
       }
 
       draw_progress_bar_horizontal(48, 23, 46, 7, RED, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_horizontal(48, 23, 46, 7, RED, false, false, (i * 0.01));
-        delay(40);
       }
 
       draw_progress_bar_horizontal(0, 34, 95, 14, GREEN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
         draw_progress_bar_horizontal(0, 34, 95, 14, GREEN, false, true, (i * 0.01));
-        delay(40);
       }
       break;
     case 10:    // Vector display test
@@ -1338,6 +1336,7 @@ void setup() {
   wakelock_gps     = nullptr;
 
   wakelock_mag->referenceCounted(false);
+  magneto.init(&i2c1, &spi0);
 }
 
 
@@ -1423,11 +1422,8 @@ void loop() {
   timeoutCheckVibLED();
 
   // /* Poll each sensor class. */
-  if (magneto.power()) {
-     stopwatch_sensor_mag.markStart();
-     magneto.poll();
-     stopwatch_sensor_mag.markStop();
-  }
+  if (magneto.power()) {           read_magnetometer_sensor();          }
+
   stopwatch_sensor_baro.markStart();
   if (0 < baro.poll()) {           read_baro_sensor();                  }
   stopwatch_sensor_baro.markStop();
@@ -1445,7 +1441,7 @@ void loop() {
   if (grideye.enabled()) {
     stopwatch_sensor_grideye.markStart();
     grideye.poll();
-    if (0 < grideye.frameReady()) {      read_thermopile_sensor();           }
+    if (0 < grideye.frameReady()) {      read_thermopile_sensor();      }
     stopwatch_sensor_grideye.markStop();
   }
 
@@ -1481,7 +1477,6 @@ void loop() {
   stopwatch_display.markStop();
   // For tracking framerate, convert from period in micros to hz...
   graph_array_frame_rate.feedFilter(1000000.0 / 1+stopwatch_display.meanTime());
-  //delay(80);
 
   if ((Serial) && (output.length() > 0)) {
     Serial.write(output.string(), output.length());

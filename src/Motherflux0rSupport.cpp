@@ -523,7 +523,8 @@ void draw_progress_bar_vertical(
     // If we have space to do so, and the application requested it, draw the
     //   progress value in the middle of the bar.
     int txt_x = x+2;
-    int txt_y = (y+3+h)-pix_height;
+    // If there is not space under the line, draw above it.
+    int txt_y = (9 < pix_height) ? ((y+2+h)-pix_height) : ((y+h)-(pix_height+8));
     StringBuilder temp_str;
     temp_str.concatf("%d%%", (int) (percent*100));
     display.setTextSize(0);

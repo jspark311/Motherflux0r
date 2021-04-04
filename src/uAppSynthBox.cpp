@@ -303,7 +303,7 @@ void uAppSynthBox::_redraw_window() {
         if (fft_bars_shown[i] > 0) fft_bars_shown[i] = fft_bars_shown[i] - SHOWN_DECAY;
         uint y_decay = (FB->y()-12) - fft_bars_shown[i];
         uint h_decay = y_decay - h_real;
-        FB->drawFastVLine(i, y_decay, h_decay, GREEN);
+        FB->drawFastVLine(i, y_decay, h_decay, RED);
         FB->drawFastVLine(i, y_real, h_real, WHITE);
       }
     }

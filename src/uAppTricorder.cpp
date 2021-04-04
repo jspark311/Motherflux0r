@@ -367,7 +367,7 @@ void uAppTricorder::_redraw_window() {
         uint y = (i >> 3) * PIXEL_SIZE;
         float pix_deviation = abs(MIDPOINT_T - therm_pixels[i]);
         uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (therm_field_max - MIDPOINT_T));
-        uint16_t color = (therm_pixels[i] <= MIDPOINT_T) ? pix_intensity : (pix_intensity << 11);
+        uint16_t color = (therm_pixels[i] <= MIDPOINT_T) ? (pix_intensity << 8) : (pix_intensity << 3);
         FB->fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
       }
       FB->setTextSize(0);
