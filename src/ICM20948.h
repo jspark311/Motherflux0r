@@ -8,7 +8,8 @@ A C++ interface to the ICM-20948
 #include "util/ICM_20948_C.h" // The C backbone
 
 #include <Arduino.h>
-#include <Wire.h>
+  #include <i2c_driver.h>
+  #include <i2c_driver_wire.h>
 #include <SPI.h>
 
 // SPI defines
@@ -19,14 +20,14 @@ A C++ interface to the ICM-20948
 #define ICM_20948_ARD_UNUSED_PIN 0xFF
 
 
-// Forward declarations of TwoWire and Wire for board/variant combinations that don't have a default 'SPI'
-class TwoWire;
-extern TwoWire Wire;
-
-// Forward declarations of SPIClass and SPI for board/variant combinations that don't have a default 'SPI'
-class SPIClass;
-extern SPIClass SPI;
-
+// // Forward declarations of TwoWire and Wire for board/variant combinations that don't have a default 'SPI'
+// class TwoWire;
+// extern TwoWire Wire;
+//
+// // Forward declarations of SPIClass and SPI for board/variant combinations that don't have a default 'SPI'
+// class SPIClass;
+// extern SPIClass SPI;
+//
 
 // Base
 class ICM_20948 {
