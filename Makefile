@@ -367,11 +367,11 @@ $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf:
 	@echo
 	@echo $(MSG_FLASH) $@
 	$(OBJCOPY) -O $(FORMAT) -j .eeprom --set-section-flags=.eeprom=alloc,load --no-change-warnings --change-section-lma .eeprom=0 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).eep
-	$(OBJCOPY) -O $(FORMAT) -R .eeprom -R .fuse -R .lock -R .signature $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
-	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
+	$(OBJCOPY) -O $(FORMAT) -R .eeprom $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
+	$(SZ) -A $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 program: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
-	$(TEENSY_LOADER_PATH) -mmcu=mk20dx128 -w -v $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
+	$(TEENSY_LOADER_PATH) -mmcu=TEENSY40 -w -v $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 
 clean:
 	rm -f *.d *.o *.su *~ $(OBJS)
