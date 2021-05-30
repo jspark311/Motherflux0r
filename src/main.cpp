@@ -189,7 +189,9 @@ SensorFilter<float> graph_array_ana_light(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0);
-SensorFilter<float> graph_array_mag_confidence(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_mag_strength_x(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_mag_strength_y(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_mag_strength_z(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_time_of_flight(FilteringStrategy::RAW, 96, 0);
 
 /* Profiling data */
@@ -452,11 +454,15 @@ int8_t callback_3axis(SpatialSense s, Vector3f* dat, Vector3f* err, uint32_t seq
     case SpatialSense::BEARING:
       // TODO: Move calculation into Compass class.
       // TODO: Should be a confidence value.
-      graph_array_mag_confidence.feedFilter(compass.getError()->length());
+      //graph_array_mag_confidence.feedFilter(compass.getError()->length());
       ret = -1;
       break;
     case SpatialSense::MAG:
-      ret = -1;
+      ret = 0;
+      Vector3f* mag_fv = mag_filter.getData();
+      graph_array_mag_strength_x.feedFilter(mag_fv->x);
+      graph_array_mag_strength_y.feedFilter(mag_fv->y);
+      graph_array_mag_strength_z.feedFilter(mag_fv->z);
       break;
     case SpatialSense::UNITLESS:
     case SpatialSense::ACC:
@@ -1280,7 +1286,10 @@ void setup() {
   graph_array_therm_frame.init();
   graph_array_cpu_time.init();
   graph_array_frame_rate.init();
-  graph_array_mag_confidence.init();
+  graph_array_mag_strength_x.init();
+  graph_array_mag_strength_y.init();
+  graph_array_mag_strength_z.init();
+  //graph_array_mag_confidence.init();
   graph_array_time_of_flight.init();
 
   console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);

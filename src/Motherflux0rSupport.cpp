@@ -543,7 +543,6 @@ void draw_compass(
 ) {
   int origin_x = x + (w >> 1);
   int origin_y = y + (h >> 1);
-  //display.setAddrWindow(x, y, w, h);
   int maximal_extent = (strict_min((int16_t) w, (int16_t) h) >> 1) - 1;
   const int NEEDLE_WIDTH = maximal_extent >> 3;
   display.fillCircle(origin_x, origin_y, maximal_extent, BLACK);
@@ -561,11 +560,10 @@ void draw_compass(
   int needle_y1 = displacement_tri_y + origin_y;
   int needle_x2 = (displacement_tri_x * -1) + origin_x;
   int needle_y2 = (displacement_tri_y * -1) + origin_y;
-  //display.drawLine(origin_x, origin_y, needle_tip_s_x, needle_tip_s_y, WHITE);
-  //display.drawLine(origin_x, origin_y, needle_tip_n_x, needle_tip_n_y, RED);
-  display.fillTriangle(needle_tip_s_x, needle_tip_s_y, needle_x1, needle_y1, needle_x2, needle_y2, WHITE);
-  display.fillTriangle(needle_tip_n_x, needle_tip_n_y, needle_x1, needle_y1, needle_x2, needle_y2, RED);
-  //display.endWrite();
+  display.drawLine(origin_x, origin_y, needle_tip_s_x, needle_tip_s_y, WHITE);
+  display.drawLine(origin_x, origin_y, needle_tip_n_x, needle_tip_n_y, RED);
+  //display.fillTriangle(needle_tip_s_x, needle_tip_s_y, needle_x1, needle_y1, needle_x2, needle_y2, WHITE);
+  //display.fillTriangle(needle_tip_n_x, needle_tip_n_y, needle_x1, needle_y1, needle_x2, needle_y2, RED);
 }
 
 

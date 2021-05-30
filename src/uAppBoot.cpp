@@ -330,7 +330,6 @@ void uAppBoot::_redraw_window() {
       mag_filter.init();
       //magneto.power(true);
       magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
-      //magneto.setDesiredState(MCP356xState::READING);
       _mag_init_called = (0 == magneto.init(&i2c1, &spi0));
     }
     _mag_init_complete = magneto.configured();

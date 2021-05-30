@@ -39,9 +39,11 @@ extern SensorFilter<float> graph_array_ana_light;
 extern SensorFilter<float> graph_array_visible;
 extern SensorFilter<float> graph_array_therm_mean;
 extern SensorFilter<float> graph_array_therm_frame;
-extern SensorFilter<float> graph_array_mag_confidence;
+//extern SensorFilter<float> graph_array_mag_confidence;
+extern SensorFilter<float> graph_array_mag_strength_x;
+extern SensorFilter<float> graph_array_mag_strength_y;
+extern SensorFilter<float> graph_array_mag_strength_z;
 extern SensorFilter<float> graph_array_time_of_flight;
-
 
 // Magnetic pipeline
 extern TripleAxisTerminus     mag_vect;   // The magnetic field vector.
@@ -191,9 +193,6 @@ int8_t uAppTricorder::_process_user_input() {
     }
     else if (_slider_pending <= 52) {
       FB->fill(BLACK);
-      FB->setCursor(0, 0);
-      FB->setTextColor(0x071F, BLACK);
-      FB->writeString("Magnetometer  ");
     }
     else {
       //FB->fillRect(0, 11, FB->width()-1, FB->y()-12, BLACK);
@@ -326,15 +325,20 @@ void uAppTricorder::_redraw_window() {
       FB->setTextColor(WHITE, BLACK);
       compass.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
       compass.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
-      draw_compass(0, 10, 45, 45, false, _render_text_value(), bearing_mag, bearing_north);
+      draw_compass(0, 10, 34, 34, false, _render_text_value(), bearing_mag, bearing_north);
+      FB->setCursor(0, 0);
+      tmp_val_str.clear();
+      tmp_val_str.concatf("%.3f uT   ", mag_vect_ptr->length());
+      FB->writeString(&tmp_val_str);
       FB->setCursor(0, 56);
-      //tmp_val_str.clear();
-      tmp_val_str.concatf("%.3f uT", mag_vect_ptr->length());
+      tmp_val_str.clear();
+      tmp_val_str.concatf("%.1ff  ", bearing_mag);
       FB->writeString(&tmp_val_str);
       draw_graph_obj(
-        46, 10, 49, 53, 0x071F,
+        36, 10, 59, 53,
+        0x80F9, 0xF207, 0x031F,
         true, false, _render_text_value(),
-        &graph_array_mag_confidence
+        &graph_array_mag_strength_x, &graph_array_mag_strength_y, &graph_array_mag_strength_z
       );
     }
   }
