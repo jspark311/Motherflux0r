@@ -81,7 +81,6 @@ SOURCES_S    = lib/Audio/memcpy_audio.S
 SOURCES_S   += /opt/Arduino/hardware/teensy/avr/cores/teensy4/memcpy-armv7m.S
 SOURCES_S   += /opt/Arduino/hardware/teensy/avr/cores/teensy4/memset.S
 
-
 SOURCES_C    = src/ICM_20948_C.c
 SOURCES_C   += lib/Audio/data_waveforms.c
 SOURCES_C   += lib/Audio/data_ulaw.c
@@ -170,52 +169,55 @@ SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/usb_flightsim.cpp
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/usb_inst.cpp
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/yield.cpp
 
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/AbstractPlatform.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/ParsingConsole.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/GPSWrapper.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/I2CDevice.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/I2CBusOp.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/BusQueue.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/CppPotpourri.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/I2CAdapter.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/Quaternion.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/SPIAdapter.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/SPIBusOp.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/SensorDatum.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/SensorFilter.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/SensorManager.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/SensorWrapper.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/StopWatch.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/Storage.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/StringBuilder.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/TripleAxisCompass.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/TripleAxisPipe.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/UARTAdapter.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/WakeLock.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/uuid.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/Image/Image.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/CppPotpourri/src/cbor-cpp/cbor.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/ADG2128/ADG2128.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/AMG88xx/AMG88xx.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/BME280/BME280.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/BQ24155/BQ24155.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/DS1881/DS1881.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/I2CEEPROM/I2CEEPROM.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/LSM9DS1/LSM9DS1.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/LTC294x/LTC294x.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/MCP356x/MCP356x.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/MCP4728/MCP4728.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/SSD13xx/SSD1306.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/SSD13xx/SSD1309.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/SSD13xx/SSD1331.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/SX1276/SX1276.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/SX1503/SX1503.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/SX8634/SX8634.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/ShiftRegister/ShiftRegisterOut.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/TMP102/TMP102.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/TSL2561/TSL2561.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/VEML6075/VEML6075.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrDrivers/src/VL53L0X/VL53L0X.cpp
+SOURCES_CPP += lib/CppPotpourri/src/AbstractPlatform.cpp
+SOURCES_CPP += lib/CppPotpourri/src/ParsingConsole.cpp
+SOURCES_CPP += lib/CppPotpourri/src/GPSWrapper.cpp
+SOURCES_CPP += lib/CppPotpourri/src/I2CDevice.cpp
+SOURCES_CPP += lib/CppPotpourri/src/I2CBusOp.cpp
+SOURCES_CPP += lib/CppPotpourri/src/BusQueue.cpp
+SOURCES_CPP += lib/CppPotpourri/src/CppPotpourri.cpp
+SOURCES_CPP += lib/CppPotpourri/src/I2CAdapter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Quaternion.cpp
+SOURCES_CPP += lib/CppPotpourri/src/SPIAdapter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/SPIBusOp.cpp
+SOURCES_CPP += lib/CppPotpourri/src/SensorDatum.cpp
+SOURCES_CPP += lib/CppPotpourri/src/SensorFilter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/SensorManager.cpp
+SOURCES_CPP += lib/CppPotpourri/src/SensorWrapper.cpp
+SOURCES_CPP += lib/CppPotpourri/src/StopWatch.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Storage.cpp
+SOURCES_CPP += lib/CppPotpourri/src/StringBuilder.cpp
+SOURCES_CPP += lib/CppPotpourri/src/TripleAxisCompass.cpp
+SOURCES_CPP += lib/CppPotpourri/src/TripleAxisPipe.cpp
+SOURCES_CPP += lib/CppPotpourri/src/UARTAdapter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/WakeLock.cpp
+SOURCES_CPP += lib/CppPotpourri/src/uuid.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Image/Image.cpp
+SOURCES_CPP += lib/CppPotpourri/src/cbor-cpp/cbor.cpp
+
+SOURCES_CPP += lib/ManuvrDrivers/src/ADG2128/ADG2128.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/AMG88xx/AMG88xx.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/BME280/BME280.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/BQ24155/BQ24155.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/DS1881/DS1881.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/I2CEEPROM/I2CEEPROM.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/LSM9DS1/LSM9DS1.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/LTC294x/LTC294x.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/MCP356x/MCP356x.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/MCP356x/MCP356x_Util.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/MCP356x/MCP356x_Regs.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/MCP4728/MCP4728.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SSD13xx/SSD1306.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SSD13xx/SSD1309.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SSD13xx/SSD1331.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SX1276/SX1276.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SX1503/SX1503.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SX8634/SX8634.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/ShiftRegister/ShiftRegisterOut.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/TMP102/TMP102.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/TSL2561/TSL2561.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/VEML6075/VEML6075.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/VL53L0X/VL53L0X.cpp
 
 SOURCES_CPP += lib/Audio/analyze_rms.cpp
 SOURCES_CPP += lib/Audio/analyze_fft256.cpp
@@ -305,26 +307,22 @@ SOURCES_CPP += $(TEENSY_PATH)/libraries/SerialFlash/SerialFlashDirectory.cpp
 SOURCES_CPP += $(TEENSY_PATH)/libraries/EEPROM/EEPROM.cpp
 SOURCES_CPP += $(TEENSY_PATH)/libraries/Time/DateStrings.cpp
 SOURCES_CPP += $(TEENSY_PATH)/libraries/Time/Time.cpp
+SOURCES_CPP += $(TEENSY_PATH)/libraries/TinyGPS/TinyGPS.cpp
 #SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/File.cpp
 #SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/SD.cpp
 #SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/utility/Sd2Card.cpp
 #SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/utility/SdFile.cpp
 #SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/utility/SdVolume.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrArduino/src/Teensy3/TeensyStorage.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrArduino/src/Teensy3/I2CAdapter.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrArduino/src/Teensy3/ConcretePlatform.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrArduino/src/Teensy3/SPIAdapter.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrArduino/src/Teensy4/ConcretePlatform.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrArduino/src/Teensy4/I2CAdapter.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/ManuvrArduino/src/Teensy4/SPIAdapter.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/teensy4_i2c/src/i2c_register_slave.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/teensy4_i2c/src/i2c_driver_wire.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/teensy4_i2c/src/imx_rt1060/imx_rt1060_i2c_driver.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/teensy4_i2c/src/tests/ina260_reliability.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/teensy4_i2c/src/tests/loopback_reliability.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/teensy4_i2c/src/tests/raw_loopback.cpp
-SOURCES_CPP += /home/ian/sketchbook/libraries/teensy4_i2c/src/tests/raspberry_pi_reliability.cpp
-SOURCES_CPP += $(TEENSY_PATH)/libraries/TinyGPS/TinyGPS.cpp
+SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/ConcretePlatform.cpp
+SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/I2CAdapter.cpp
+SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/SPIAdapter.cpp
+SOURCES_CPP += lib/teensy4_i2c/src/i2c_register_slave.cpp
+SOURCES_CPP += lib/teensy4_i2c/src/i2c_driver_wire.cpp
+SOURCES_CPP += lib/teensy4_i2c/src/imx_rt1060/imx_rt1060_i2c_driver.cpp
+SOURCES_CPP += lib/teensy4_i2c/src/tests/ina260_reliability.cpp
+SOURCES_CPP += lib/teensy4_i2c/src/tests/loopback_reliability.cpp
+SOURCES_CPP += lib/teensy4_i2c/src/tests/raw_loopback.cpp
+SOURCES_CPP += lib/teensy4_i2c/src/tests/raspberry_pi_reliability.cpp
 
 
 
@@ -370,8 +368,8 @@ $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf:
 	$(OBJCOPY) -O $(FORMAT) -R .eeprom $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(SZ) -A $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
-program: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
-	$(TEENSY_LOADER_PATH) -mmcu=TEENSY40 -w -v $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
+flash: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
+	$(TEENSY_LOADER_PATH) -mmcu=TEENSY40 -s -w -v $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 
 clean:
 	rm -f *.d *.o *.su *~ $(OBJS)

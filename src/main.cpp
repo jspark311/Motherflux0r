@@ -1008,15 +1008,15 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
           case 1:   magneto.printPipeline(text_return);        break;
           case 2:   compass.printPipe(text_return, 0, 7);      break;
           case 3:   compass.printBearing(HeadingType::MAGNETIC_NORTH, text_return);  break;
-          case 4:   magneto.printChannelValues(text_return);   break;
-          case 5:   magneto.printRegs(text_return);            break;
-          case 6:   magneto.printPins(text_return);            break;
-          case 7:   magneto.printData(text_return);            break;
-          case 8:   magneto.printTimings(text_return);         break;
+          case 4:   magneto.adc.printChannelValues(text_return);  break;
+          case 5:   magneto.adc.printRegs(text_return);        break;
+          case 6:   magneto.adc.printPins(text_return);        break;
+          case 7:   magneto.adc.printData(text_return);        break;
+          case 8:   magneto.adc.printTimings(text_return);     break;
           case 9:
-            text_return->concatf("ADC Temperature: %u.\n", (uint8_t) magneto.getTemperature());
+            text_return->concatf("ADC Temperature: %u.\n", (uint8_t) magneto.adc.getTemperature());
             break;
-          case 10:  magneto.printChannelValues(text_return);   break;
+          case 10:  magneto.adc.printChannelValues(text_return);   break;
         }
         break;
 
@@ -1029,16 +1029,16 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
 
       case 2:
         if (1 < args->count()) {
-          ret = magneto.setGain((MCP356xGain) args->position_as_int(1));
+          ret = magneto.adc.setGain((MCP356xGain) args->position_as_int(1));
         }
-        text_return->concatf("Gain is now %u.\n", 1 << ((uint8_t) magneto.getGain()));
+        text_return->concatf("Gain is now %u.\n", 1 << ((uint8_t) magneto.adc.getGain()));
         break;
 
       case 3:
         if (1 < args->count()) {
-          ret = magneto.setOversamplingRatio((MCP356xOversamplingRatio) args->position_as_int(1));
+          ret = magneto.adc.setOversamplingRatio((MCP356xOversamplingRatio) args->position_as_int(1));
         }
-        text_return->concatf("Oversampling ratio is now %u.\n", (uint8_t) magneto.getOversamplingRatio());
+        text_return->concatf("Oversampling ratio is now %u.\n", (uint8_t) magneto.adc.getOversamplingRatio());
         break;
 
       case 4:
@@ -1056,7 +1056,7 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
         }
         break;
       case 6:   ret = magneto.reset();               break;
-      case 7:   ret = magneto.refresh();             break;
+      case 7:   ret = magneto.adc.refresh();             break;
       case 8:
         if (1 < args->count()) {
           uint32_t arg1 = args->position_as_int(1);
@@ -1093,14 +1093,14 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
           uint8_t eidx = ((uint8_t) arg0 - 11);
           MCP356xState state = (MCP356xState) eidx;
           text_return->concatf("magneto.setDesiredState(%s)\n", MCP356x::stateStr(state));
-          magneto.setDesiredState(state);
+          magneto.adc.setDesiredState(state);
         }
         break;
       case 19:
         text_return->concatf("Magnetometer calibrate() returns %d\n", magneto.calibrate());
         break;
       case 20:
-        text_return->concatf("Magnetometer read() returns %d\n", magneto.read());
+        text_return->concatf("Magnetometer read() returns %d\n", magneto.adc.read());
         break;
       case 21:
         text_return->concatf("Magnetometer adc_reconf() returns %d\n", magneto.adc_reconf());
@@ -1341,8 +1341,6 @@ void setup() {
   wakelock_gps     = nullptr;
 
   wakelock_mag->referenceCounted(false);
-  magneto.init(&i2c1, &spi0);
-
 }
 
 
@@ -1427,9 +1425,9 @@ void loop() {
   uint32_t millis_now = millis();
   timeoutCheckVibLED();
 
-  // /* Poll each sensor class. */
+  /* Poll each sensor class. */
   if (magneto.power()) {           read_magnetometer_sensor();          }
-  magneto.fetchLog(&output);
+  magneto.adc.fetchLog(&output);
 
   stopwatch_sensor_baro.markStart();
   if (0 < baro.poll()) {           read_baro_sensor();                  }

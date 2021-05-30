@@ -306,10 +306,10 @@ void uAppTricorder::_redraw_window() {
     FB->setCursor(0, 11);
     FB->setTextColor(YELLOW, BLACK);
     FB->writeString("IMU");
-    StringBuilder temp0;
-    temp0.concatf("uT<%.2f, %.2f, %.2f>", imu.accX(), imu.accY(), imu.accZ());
-    FB->setTextColor(WHITE, BLACK);
-    FB->writeString(&temp0);
+    //StringBuilder temp0;
+    //temp0.concatf("uT<%.2f, %.2f, %.2f>", imu.accX(), imu.accY(), imu.accZ());
+    //FB->setTextColor(WHITE, BLACK);
+    //FB->writeString(&temp0);
     //imu.gyrX();
     //imu.gyrY();
     //imu.gyrZ();
@@ -320,19 +320,19 @@ void uAppTricorder::_redraw_window() {
   }
   else if (_slider_current <= 52) {
     if (compass.dataReady()) {
-      FB->setTextColor(WHITE, BLACK);
-      Vector3f* mag_vect_ptr = mag_vect.getData();
       float bearing_north = 0.0;
       float bearing_mag = 0.0;
+      Vector3f* mag_vect_ptr = mag_vect.getData();
+      FB->setTextColor(WHITE, BLACK);
       compass.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
       compass.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
       draw_compass(0, 10, 45, 45, false, _render_text_value(), bearing_mag, bearing_north);
-      FB->setCursor(0, 57);
-      tmp_val_str.clear();
+      FB->setCursor(0, 56);
+      //tmp_val_str.clear();
       tmp_val_str.concatf("%.3f uT", mag_vect_ptr->length());
       FB->writeString(&tmp_val_str);
       draw_graph_obj(
-        46, 10, 50, 53, 0x071F,
+        46, 10, 49, 53, 0x071F,
         true, false, _render_text_value(),
         &graph_array_mag_confidence
       );

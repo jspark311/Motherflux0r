@@ -330,10 +330,10 @@ void uAppBoot::_redraw_window() {
       mag_filter.init();
       //magneto.power(true);
       magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
-      magneto.setDesiredState(MCP356xState::READING);
+      //magneto.setDesiredState(MCP356xState::READING);
       _mag_init_called = (0 == magneto.init(&i2c1, &spi0));
     }
-    _mag_init_complete = magneto.adcConfigured();
+    _mag_init_complete = magneto.configured();
     if (_mag_init_complete) {
       // TODO: This is just to prod the compass into returning a complete
       //   dataset. It's bogus until there is an IMU.
