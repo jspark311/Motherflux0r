@@ -202,7 +202,6 @@ ICM_20948_SPI imu;
 TSL2561 tsl2561(0x49, TSL2561_IRQ_PIN);
 BME280I2C baro(baro_settings);
 VL53L0X tof;
-//TinyGPS gps;
 GPSWrapper gps;
 
 /* Immediate data... */

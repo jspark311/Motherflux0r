@@ -70,7 +70,6 @@ INCLUDES    += -I$(TEENSY_PATH)/libraries/SPI
 INCLUDES    += -I$(TEENSY_PATH)/libraries/SerialFlash
 INCLUDES    += -I$(TEENSY_PATH)/libraries/EEPROM
 INCLUDES    += -I$(TEENSY_PATH)/libraries/Time
-INCLUDES    += -I$(TEENSY_PATH)/libraries/TinyGPS
 
 
 
@@ -308,7 +307,6 @@ SOURCES_CPP += $(TEENSY_PATH)/libraries/SerialFlash/SerialFlashDirectory.cpp
 SOURCES_CPP += $(TEENSY_PATH)/libraries/EEPROM/EEPROM.cpp
 SOURCES_CPP += $(TEENSY_PATH)/libraries/Time/DateStrings.cpp
 SOURCES_CPP += $(TEENSY_PATH)/libraries/Time/Time.cpp
-SOURCES_CPP += $(TEENSY_PATH)/libraries/TinyGPS/TinyGPS.cpp
 #SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/File.cpp
 #SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/SD.cpp
 #SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/utility/Sd2Card.cpp

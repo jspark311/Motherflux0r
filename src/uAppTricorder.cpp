@@ -1,6 +1,6 @@
 #include <CppPotpourri.h>
 #include <SensorFilter.h>
-#include <TinyGPS.h>
+#include <GPSWrapper.h>
 #include "ICM20948.h"
 #include "DRV425.h"
 #include "uApp.h"
@@ -17,7 +17,7 @@ extern ICM_20948_SPI imu;
 extern TSL2561 tsl2561;
 extern BME280I2C baro;
 extern VL53L0X tof;
-extern TinyGPS gps;
+extern GPSWrapper gps;
 
 extern WakeLock* wakelock_tof;
 extern WakeLock* wakelock_mag;
