@@ -10,7 +10,7 @@
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
 
-#define TEST_PROG_VERSION           "1.6"
+#define TEST_PROG_VERSION           "1.7"
 #define TOUCH_DWELL_LONG_PRESS       1000  // Milliseconds for "long-press".
 #define E_VAL                      1.0184
 
@@ -35,14 +35,14 @@
 #define LED_G_PIN           15
 #define SCL1_PIN            16   // Sensor service bus.
 #define SDA1_PIN            17   // Sensor service bus.
-#define SDA0_PIN            18
-#define SCL0_PIN            19
+#define SDA0_PIN            18   // Touch controller and PMU bus.
+#define SCL0_PIN            19   // Touch controller and PMU bus.
 #define DAC_LCK_PIN         20   // XMT is tied high.
 #define DAC_BCK_PIN         21   // FLT, FMT are tied low.
 #define ANA_LIGHT_PIN       22   // PIN_A8
 #define DAC_SCL_PIN         23
-#define COMM_RX_PIN         24
-#define COMM_TX_PIN         25
+#define COMM_RX_PIN         24   // UART dedicated to the wireless comms.
+#define COMM_TX_PIN         25   // UART dedicated to the wireless comms.
 #define DISPLAY_DC_PIN      26
 #define TOF_IRQ_PIN         27   // A16
 #define TOUCH_RESET_PIN     28

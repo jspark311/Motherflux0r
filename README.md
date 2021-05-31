@@ -33,7 +33,15 @@ I still have pins and flash space left on the Teensy4. And that means I'm not do
 
 ----------------------
 
+## Teensy4 support
+
+This project depends on [ManuvrPlatforms](https://github.com/jspark311/ManuvrPlatforms) to provide the fill-in for AbstractPlatform as appropriate for the Teensy4. It must be pulled into the `lib` folder.
+
+----------------------
+
 ## Driver refactoring
+
+This project depends on [ManuvrDrivers](https://github.com/jspark311/ManuvrDrivers) to support most of the hardware. It must be pulled into the `lib` folder.
 
 I reworked drivers for the following sensors to fix architectural or legibility flaws. For most of these, the re-work was so extensive that it almost qualifies as a full rewrite. They are not async yet, but the way is paved for that conversion. I might do a write up on them at a later date. Until then, my notes are in the header files.
 

@@ -116,7 +116,6 @@ SOURCES_C   += lib/Audio/utility/sqrt_integer.c
 
 SOURCES_CPP  = src/main.cpp
 SOURCES_CPP += src/bitmaps.cpp
-SOURCES_CPP += src/DigitabulumPMU-r2.cpp
 SOURCES_CPP += src/DRV425.cpp
 SOURCES_CPP += src/ICM20948.cpp
 SOURCES_CPP += src/Motherflux0rSupport.cpp
@@ -190,6 +189,7 @@ SOURCES_CPP += lib/CppPotpourri/src/StringBuilder.cpp
 SOURCES_CPP += lib/CppPotpourri/src/TripleAxisCompass.cpp
 SOURCES_CPP += lib/CppPotpourri/src/TripleAxisPipe.cpp
 SOURCES_CPP += lib/CppPotpourri/src/UARTAdapter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Battery.cpp
 SOURCES_CPP += lib/CppPotpourri/src/WakeLock.cpp
 SOURCES_CPP += lib/CppPotpourri/src/uuid.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Image/Image.cpp
@@ -218,6 +218,7 @@ SOURCES_CPP += lib/ManuvrDrivers/src/TMP102/TMP102.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/TSL2561/TSL2561.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/VEML6075/VEML6075.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/VL53L0X/VL53L0X.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/Composites/ManuvrPMU/ManuvrPMU-r2.cpp
 
 SOURCES_CPP += lib/Audio/analyze_rms.cpp
 SOURCES_CPP += lib/Audio/analyze_fft256.cpp
@@ -330,6 +331,7 @@ SOURCES_CPP += lib/teensy4_i2c/src/tests/raspberry_pi_reliability.cpp
 # exports, consolidation....
 ###########################################################################
 OBJS  = $(SOURCES_C:.c=.o) $(SOURCES_CPP:.cpp=.o) $(SOURCES_S:.S=.o)
+DEP_FILES = $(SOURCES_C:.c=.d) $(SOURCES_CPP:.cpp=.d) $(SOURCES_S:.S=.d)
 
 # Merge our choices and export them to the downstream Makefiles...
 CFLAGS += $(OPTIMIZATION) $(INCLUDES)
@@ -372,7 +374,7 @@ flash: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 	$(TEENSY_LOADER_PATH) -mmcu=TEENSY40 -s -w -v $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 
 clean:
-	rm -f *.d *.o *.su *~ $(OBJS)
+	rm -f *.d *.o *.su *~ $(OBJS) $(DEP_FILES)
 
 fullclean: clean
 	rm -rf $(OUTPUT_PATH)

@@ -22,9 +22,10 @@
 
 #include <ManuvrDrivers.h>
 #include <ManuvrArduino.h>
+#include <Composites/ManuvrPMU/ManuvrPMU-r2.h>
+
 #include "ICM20948.h"
 #include "DRV425.h"
-
 #include "CommPeer.h"
 
 
@@ -135,6 +136,40 @@ const SSD13xxOpts disp_opts(
 /* Driver classes */
 SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 8);
 SSD13xx display(&disp_opts);
+
+
+/*******************************************************************************
+* PMU
+*******************************************************************************/
+const LTC294xOpts gas_gauge_opts(
+  255,     // Alert pin
+  LTC294X_OPT_ADC_AUTO | LTC294X_OPT_INTEG_SENSE
+);
+
+const ManuvrPMUOpts powerplant_opts(
+  255,  // 2v5 select pin does not apply on this hardware.
+  255,  // Aux regulator enable pin is handled by the touch board.
+  DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
+);
+
+const BQ24155Opts charger_opts(
+  68,  // Sense resistor is 68 mOhm.
+  255, // STAT is handled by the touch board.
+  255, // ISEL is nailed high.
+  BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
+  BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
+);
+
+const BatteryOpts battery_opts (
+  BatteryChemistry::LIPO,
+  3000,    // Battery capacity (in mAh)
+  3.45f,   // Battery dead (in volts)
+  3.70f,   // Battery weak (in volts)
+  4.15f,   // Battery float (in volts)
+  4.2f     // Battery max (in volts)
+);
+
+ManuvrPMU pmu(&charger_opts, &gas_gauge_opts, &powerplant_opts, &battery_opts);
 
 
 /*******************************************************************************
@@ -254,6 +289,14 @@ static bool     imu_irq_fired       = false;
 *******************************************************************************/
 void imu_isr_fxn() {         imu_irq_fired = true;        }
 
+
+/*******************************************************************************
+* Callbacks for hardware services
+*******************************************************************************/
+
+int8_t battery_state_callback(ChargeState e) {
+  return 0;
+}
 
 
 /*******************************************************************************
@@ -1335,6 +1378,10 @@ void setup() {
   touch->setSliderFxn(cb_slider);
   touch->setLongpressFxn(cb_longpress);
 
+  pmu.configureConsole(&console);
+  pmu.attachCallback(battery_state_callback);
+  pmu.init(&i2c0);
+
   config_time = millis();
   //display.setTextColor(GREEN);
   //display.writeString((config_time - boot_time), DEC);
@@ -1351,6 +1398,7 @@ void setup() {
 
   wakelock_mag->referenceCounted(false);
 }
+
 
 
 
@@ -1484,6 +1532,8 @@ void loop() {
       uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
+
+  pmu.fetchLog(&output);
 
   millis_now = millis();
   stopwatch_display.markStart();
