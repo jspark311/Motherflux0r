@@ -17,15 +17,15 @@
 /*******************************************************************************
 * Pin definitions and hardware constants.
 *******************************************************************************/
-#define GPS_TX_PIN           0   // Teensy RX
-#define GPS_RX_PIN           1   // Teensy TX
+#define COMM_TX_PIN          0   // MCU RX
+#define COMM_RX_PIN          1   // MCU TX
 #define DRV425_GPIO_IRQ_PIN  2
 #define DRV425_ADC_IRQ_PIN   3
 #define DRV425_CS_PIN        4
 #define VIBRATOR_PIN         5
 #define TOUCH_IRQ_PIN        6
 #define DAC_DIN_PIN          7
-#define PSU_SX_IRQ_PIN     255   // 8 Presently unused.
+#define RADIO_ENABLE_PIN     8   // Sets the aux regulator running.
 #define TSL2561_IRQ_PIN    255 // 9
 #define DISPLAY_CS_PIN      10
 #define SPIMOSI_PIN         11
@@ -41,8 +41,8 @@
 #define DAC_BCK_PIN         21   // FLT, FMT are tied low.
 #define ANA_LIGHT_PIN       22   // PIN_A8
 #define DAC_SCL_PIN         23
-#define COMM_RX_PIN         24   // UART dedicated to the wireless comms.
-#define COMM_TX_PIN         25   // UART dedicated to the wireless comms.
+#define GPS_RX_PIN          24   // MCU output
+#define GPS_TX_PIN          25   // MCU input
 #define DISPLAY_DC_PIN      26
 #define TOF_IRQ_PIN         27   // A16
 #define TOUCH_RESET_PIN     28
@@ -52,7 +52,9 @@
 #define DISPLAY_RST_PIN     32
 #define LED_B_PIN           33
 
-#define SerialGPS Serial1
+#define SerialGPS      Serial6
+#define SerialWireless Serial1
+
 
 /* Common 16-bit colors */
 #define	BLACK           0x0000

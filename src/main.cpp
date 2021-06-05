@@ -148,13 +148,13 @@ const LTC294xOpts gas_gauge_opts(
 
 const ManuvrPMUOpts powerplant_opts(
   255,  // 2v5 select pin does not apply on this hardware.
-  255,  // Aux regulator enable pin is handled by the touch board.
+  RADIO_ENABLE_PIN,  // Aux regulator enable pin is handled by the touch board.
   DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
 );
 
 const BQ24155Opts charger_opts(
   68,  // Sense resistor is 68 mOhm.
-  255, // STAT is handled by the touch board.
+  255, // STAT is unconnected.
   255, // ISEL is nailed high.
   BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
   BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
@@ -202,7 +202,9 @@ ICM_20948_SPI imu;
 TSL2561 tsl2561(0x49, TSL2561_IRQ_PIN);
 BME280I2C baro(baro_settings);
 VL53L0X tof;
+
 GPSWrapper gps;
+LocationFrame current_location;
 
 /* Immediate data... */
 static Vector3f64 grav;       // Gravity vector from the IMU.
@@ -287,15 +289,6 @@ static bool     imu_irq_fired       = false;
 * ISRs
 *******************************************************************************/
 void imu_isr_fxn() {         imu_irq_fired = true;        }
-
-
-/*******************************************************************************
-* Callbacks for hardware services
-*******************************************************************************/
-
-int8_t battery_state_callback(ChargeState e) {
-  return 0;
-}
 
 
 /*******************************************************************************
@@ -399,9 +392,43 @@ int8_t read_time_of_flight_sensor() {
 
 
 /*******************************************************************************
-* GPS
+* Battery state callback
 *******************************************************************************/
 
+int8_t battery_state_callback(ChargeState e) {
+  return 0;
+}
+
+
+/*******************************************************************************
+* Location callback
+*******************************************************************************/
+
+int8_t location_callback(LocationFrame* loc) {
+  //gps.fetchLog(log);
+  current_location.copyFrame(loc);
+  uint64_t ts = loc->timestamp;
+  //if (!rtcAccurate() & (0 != ts)) {
+  //  // If the clock might be stale, set it from the GPS fix.
+  //  // TODO: This is not correct.
+  //  uint16_t y = ts / 31556926;
+  //  ts -= (y * 31556926);
+  //  uint8_t m  = ts / 2629744;
+  //  ts -= (m * 2629744);
+  //  uint8_t d  = ts / 86400;
+  //  ts -= (d * 86400);
+  //  uint8_t h  = ts / 3600;
+  //  ts -= (h * 3600);
+  //  uint8_t mi = ts / 60;
+  //  ts -= (mi * 60);
+  //  uint8_t s  = ts;
+  //  //setTimeAndDate(y + 1970, m+1, d+1, h, mi, s);
+  //}
+  //else {
+  //  // The RTC seems to think it is accurate... Check to be sure...
+  //}
+  return 0;
+}
 
 
 /*******************************************************************************
@@ -1283,12 +1310,13 @@ void setup() {
 
   pinMode(IMU_IRQ_PIN,    GPIOMode::INPUT_PULLUP);
   pinMode(DRV425_CS_PIN,  GPIOMode::INPUT); // Wrong
-  pinMode(PSU_SX_IRQ_PIN, GPIOMode::INPUT);
   pinMode(ANA_LIGHT_PIN,  GPIOMode::INPUT);
   pinMode(TOF_IRQ_PIN,    GPIOMode::INPUT);
   pinMode(LED_R_PIN,      GPIOMode::INPUT);
   pinMode(LED_G_PIN,      GPIOMode::INPUT);
   pinMode(LED_B_PIN,      GPIOMode::INPUT);
+  pinMode(RADIO_ENABLE_PIN, GPIOMode::OUTPUT);
+  setPin(RADIO_ENABLE_PIN, true);
 
   AudioMemory(32);
   analogWriteResolution(12);
@@ -1304,13 +1332,13 @@ void setup() {
   i2c1.init();
 
   // GPS
-  Serial1.setRX(GPS_TX_PIN);
-  Serial1.setTX(GPS_RX_PIN);
-  Serial1.begin(9600);
+  SerialGPS.setRX(GPS_TX_PIN);
+  SerialGPS.setTX(GPS_RX_PIN);
+  SerialGPS.begin(9600);      // GPS
 
-  Serial6.setRX(COMM_TX_PIN);
-  Serial6.setTX(COMM_RX_PIN);
-  Serial6.begin(115200);    // Comm
+  SerialWireless.setRX(COMM_TX_PIN);
+  SerialWireless.setTX(COMM_RX_PIN);
+  SerialWireless.begin(115200);    // Comm
 
   //SD.begin(BUILTIN_SDCARD);
 
@@ -1379,7 +1407,10 @@ void setup() {
 
   pmu.configureConsole(&console);
   pmu.attachCallback(battery_state_callback);
-  pmu.init(&i2c0);
+  //pmu.init(&i2c0);
+
+  gps.init();
+  gps.setCallback(location_callback);
 
   config_time = millis();
   //display.setTextColor(GREEN);
@@ -1437,15 +1468,23 @@ void i2c1_spin() {
 }
 
 
+/*
+* Drain any of the UARTs that have data.
+*/
+void poll_uarts() {
+}
+
+
 void loop() {
   stopwatch_main_loop_time.markStart();
   StringBuilder output;
 
+  const uint8_t RX_BUF_LEN = 64;
+  uint8_t ser_buffer[RX_BUF_LEN];
+  uint8_t rx_len = 0;
+
   if (Serial) {
-    const uint8_t RX_BUF_LEN = 32;
     StringBuilder console_input;
-    uint8_t ser_buffer[RX_BUF_LEN];
-    uint8_t rx_len = 0;
     memset(ser_buffer, 0, RX_BUF_LEN);
     while ((RX_BUF_LEN > rx_len) && (0 < Serial.available())) {
       ser_buffer[rx_len++] = Serial.read();
@@ -1458,6 +1497,30 @@ void loop() {
     }
     console.fetchLog(&output);
   }
+
+  if (SerialGPS.available() > 1) {
+    StringBuilder gps_input;
+    rx_len = 0;
+    memset(ser_buffer, 0, RX_BUF_LEN);
+    while ((RX_BUF_LEN > rx_len) && (0 < SerialGPS.available())) {
+      ser_buffer[rx_len++] = SerialGPS.read();
+    }
+    if (rx_len > 0) {
+      gps_input.concat(ser_buffer, rx_len);
+      //gps.provideBuffer(&gps_input);
+    }
+  }
+
+  if (SerialWireless.available()) {
+    rx_len = 0;
+    memset(ser_buffer, 0, RX_BUF_LEN);
+    while ((RX_BUF_LEN > rx_len) && (0 < SerialWireless.available())) {
+      ser_buffer[rx_len++] = SerialWireless.read();
+    }
+    if (rx_len > 0) {
+    }
+  }
+
 
   spi_spin();
   i2c0_spin();
@@ -1513,18 +1576,6 @@ void loop() {
   //  tof_update_next = millis_now + 100;
   //}
 
-  // stopwatch_sensor_gps.markStart();
-  // const int GPS_LEN = 160;
-  // if (SerialGPS.available()) {
-  //   uint8_t gps_buf[GPS_LEN];
-  //   int gps_bytes_read = 0;
-  //   while (SerialGPS.available() && (gps_bytes_read < GPS_LEN)) {
-  //     gps_buf[gps_bytes_read++] = SerialGPS.read();
-  //   }
-  //   gps.feed(gps_buf, gps_bytes_read);
-  //   stopwatch_sensor_gps.markStop();
-  // }
-
   if ((last_interaction + 100000) <= millis_now) {
     // After 100 seconds, time-out the display.
     if (&app_standby != uApp::appActive()) {
@@ -1543,6 +1594,7 @@ void loop() {
 
   if ((Serial) && (output.length() > 0)) {
     Serial.write(output.string(), output.length());
+    SerialGPS.write(output.string(), output.length());
   }
   stopwatch_main_loop_time.markStop();
   graph_array_cpu_time.feedFilter(stopwatch_main_loop_time.meanTime()/1000.0);

@@ -18,6 +18,7 @@ extern TSL2561 tsl2561;
 extern BME280I2C baro;
 extern VL53L0X tof;
 extern GPSWrapper gps;
+extern LocationFrame current_location;
 
 extern WakeLock* wakelock_tof;
 extern WakeLock* wakelock_mag;

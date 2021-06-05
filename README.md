@@ -2,7 +2,7 @@
 
 A giant mash up of sensors using a Teensy4
 
-Checking things in piece-by-piece. Not likely to ever be directly buildable without proprietary code, but pieces of it are still useful.
+Checking things in piece-by-piece. This project is not likely to ever be directly buildable without proprietary code, but pieces of it are still useful.
 
 ### Supported sensors...
 

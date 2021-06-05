@@ -1,76 +1,7 @@
 ###########################################################################
-# Makefile for Motherflux0r
-# Author: J. Ian Lindsay
-# Date:   2021.05.16
 #
 ###########################################################################
-FIRMWARE_NAME      = Motherflux0r
-
-MCU                = cortex-m7
-CPU_SPEED          = 600000000
-OPTIMIZATION       = -O2 -g
-C_STANDARD         = gnu99
-CPP_STANDARD       = gnu++14
-
-
-###########################################################################
-# Environmental awareness...
-###########################################################################
-WHO_I_AM       = $(shell whoami)
-ARDUINO_PATH   = /opt/Arduino
-export TEENSY_PATH    = $(ARDUINO_PATH)/hardware/teensy/avr
-
-# This is where we will store compiled libs and the final output.
-export BUILD_ROOT   = $(shell pwd)
-export OUTPUT_PATH  = $(BUILD_ROOT)/build
-
-TOOLCHAIN          = $(ARDUINO_PATH)/hardware/tools/arm
-TEENSY_LOADER_PATH = $(BUILD_ROOT)/tools/teensy_loader_cli/teensy_loader_cli
-FORMAT             = ihex
-
-export CC      = $(TOOLCHAIN)/bin/arm-none-eabi-gcc
-export CXX     = $(TOOLCHAIN)/bin/arm-none-eabi-g++
-export AR      = $(TOOLCHAIN)/bin/arm-none-eabi-ar
-export AS      = $(TOOLCHAIN)/bin/arm-none-eabi-as
-export OBJCOPY = $(TOOLCHAIN)/bin/arm-none-eabi-objcopy
-export SZ      = $(TOOLCHAIN)/bin/arm-none-eabi-size
-export MAKE    = $(shell which make)
-
-
-###########################################################################
-# Source files, includes, and linker directives...
-###########################################################################
-CXXFLAGS     = -felide-constructors -fno-exceptions -fno-rtti -MMD
-CXXFLAGS    += -fpermissive -fno-threadsafe-statics
-
-CFLAGS       = -Wall -nostdlib
-CFLAGS      += -DF_CPU=$(CPU_SPEED)
-CFLAGS      += -mcpu=$(MCU) -mthumb -D__IMXRT1062__
-CFLAGS      += -ffunction-sections -fdata-sections
-CFLAGS      += -Wno-error=narrowing
-CFLAGS      += -mlittle-endian
-CFLAGS      += -mfloat-abi=hard -mfpu=fpv5-d16
-CFLAGS      += -DARDUINO=10813 -DTEENSYDUINO=153 -DARDUINO_TEENSY40
-CFLAGS      += -DUSB_VID=null -DUSB_PID=null -DUSB_SERIAL -DLAYOUT_US_ENGLISH
-
-LIBS         = -larm_cortexM7lfsp_math -lm -lstdc++
-LD_FILE      = $(TEENSY_PATH)/cores/teensy4/imxrt1062.ld
-
-INCLUDES     = -iquote. -iquotesrc/
-INCLUDES    += -I$(BUILD_ROOT)/src/
-INCLUDES    += -I$(BUILD_ROOT)/lib/CppPotpourri/src
-INCLUDES    += -I$(BUILD_ROOT)/lib/ManuvrDrivers/src
-INCLUDES    += -I$(BUILD_ROOT)/lib/ManuvrArduino/src
-INCLUDES    += -I$(BUILD_ROOT)/lib/teensy4_i2c/src
-INCLUDES    += -I$(TEENSY_PATH)/libraries
-INCLUDES    += -I$(TEENSY_PATH)/cores/teensy4
-INCLUDES    += -Ilib/Audio -Ilib/Audio/utility
-INCLUDES    += -I$(TEENSY_PATH)/libraries/SD
-INCLUDES    += -I$(TEENSY_PATH)/libraries/SPI
-INCLUDES    += -I$(TEENSY_PATH)/libraries/SerialFlash
-INCLUDES    += -I$(TEENSY_PATH)/libraries/EEPROM
-INCLUDES    += -I$(TEENSY_PATH)/libraries/Time
-
+LIBRARY_NAME       = motherflux0r_support
 
 
 ###########################################################################
@@ -112,26 +43,6 @@ SOURCES_C   += $(TEENSY_PATH)/cores/teensy4/usb_serial2.c
 SOURCES_C   += $(TEENSY_PATH)/cores/teensy4/usb_serial3.c
 SOURCES_C   += $(TEENSY_PATH)/cores/teensy4/usb_touch.c
 SOURCES_C   += lib/Audio/utility/sqrt_integer.c
-
-SOURCES_CPP  = src/main.cpp
-SOURCES_CPP += src/bitmaps.cpp
-SOURCES_CPP += src/DRV425.cpp
-SOURCES_CPP += src/ICM20948.cpp
-SOURCES_CPP += src/Motherflux0rSupport.cpp
-SOURCES_CPP += src/uAppBoot.cpp
-SOURCES_CPP += src/uAppComms.cpp
-SOURCES_CPP += src/uAppConfigurator.cpp
-SOURCES_CPP += src/uApp.cpp
-SOURCES_CPP += src/uAppDataMgmt.cpp
-SOURCES_CPP += src/uAppMeta.cpp
-SOURCES_CPP += src/uAppRoot.cpp
-SOURCES_CPP += src/uAppStandby.cpp
-SOURCES_CPP += src/uAppSynthBox.cpp
-SOURCES_CPP += src/uAppTouchTest.cpp
-SOURCES_CPP += src/uAppTricorder.cpp
-SOURCES_CPP += src/Storage/CalConfRecord.cpp
-SOURCES_CPP += src/Storage/ConfRecord.cpp
-SOURCES_CPP += src/Storage/UsrConfRecord.cpp
 
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/HardwareSerial2.cpp
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/AudioStream.cpp
@@ -197,17 +108,26 @@ SOURCES_CPP += lib/CppPotpourri/src/uuid.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Image/Image.cpp
 SOURCES_CPP += lib/CppPotpourri/src/cbor-cpp/cbor.cpp
 
+SOURCES_CPP += lib/ManuvrDrivers/src/ADG2128/ADG2128.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/AMG88xx/AMG88xx.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/BME280/BME280.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/BQ24155/BQ24155.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/DS1881/DS1881.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/I2CEEPROM/I2CEEPROM.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/LSM9DS1/LSM9DS1.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/LTC294x/LTC294x.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/MCP356x/MCP356x.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/MCP356x/MCP356x_Util.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/MCP356x/MCP356x_Regs.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/MCP4728/MCP4728.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SSD13xx/SSD1306.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SSD13xx/SSD1309.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/SSD13xx/SSD1331.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SX1276/SX1276.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/SX1503/SX1503.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/SX8634/SX8634.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/ShiftRegister/ShiftRegisterOut.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/TMP102/TMP102.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/TSL2561/TSL2561.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/VEML6075/VEML6075.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/VL53L0X/VL53L0X.cpp
@@ -325,20 +245,14 @@ SOURCES_CPP += lib/teensy4_i2c/src/tests/raspberry_pi_reliability.cpp
 OBJS  = $(SOURCES_C:.c=.o) $(SOURCES_CPP:.cpp=.o) $(SOURCES_S:.S=.o)
 DEP_FILES = $(SOURCES_C:.c=.d) $(SOURCES_CPP:.cpp=.d) $(SOURCES_S:.S=.d)
 
-# Merge our choices and export them to the downstream Makefiles...
-CFLAGS += $(OPTIMIZATION) $(INCLUDES)
-
-export CFLAGS
-export CXXFLAGS  += $(CFLAGS)
-
 
 ###########################################################################
 # Rules for building the firmware follow...
 ###########################################################################
 
-.PHONY:  lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
+.PHONY:  $(OUTPUT_PATH)/$(LIBRARY_NAME).a
 
-all:  lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
+all:  $(OUTPUT_PATH)/$(LIBRARY_NAME).a
 
 %.o : %.cpp
 	$(CXX) -std=$(CPP_STANDARD) $(OPTIMIZATION) $(CXXFLAGS) -c -o $@ $^
@@ -350,24 +264,8 @@ all:  lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 	$(CC) -std=$(C_STANDARD) $(OPTIMIZATION) -x assembler-with-cpp $(CFLAGS) -c -o $@ $^
 
 
-lib: $(OBJS)
-	mkdir -p $(OUTPUT_PATH)
-	#$(MAKE) -C lib
-
-$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf:
-	$(CC) $(OPTIMIZATION) -Wl,--gc-sections,--relax -T$(LD_FILE) -mcpu=$(MCU) -mthumb -mcpu=cortex-m7 -mfloat-abi=hard -mfpu=fpv5-d16 -o $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OBJS) -L$(OUTPUT_PATH) $(LIBS)
-	@echo
-	@echo $(MSG_FLASH) $@
-	$(OBJCOPY) -O $(FORMAT) -j .eeprom --set-section-flags=.eeprom=alloc,load --no-change-warnings --change-section-lma .eeprom=0 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).eep
-	$(OBJCOPY) -O $(FORMAT) -R .eeprom $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
-	$(SZ) -A $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
-
-flash: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
-	$(TEENSY_LOADER_PATH) -mmcu=TEENSY40 -s -w -v $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
+$(OUTPUT_PATH)/$(LIBRARY_NAME).a: $(OBJS)
+	$(AR) rcs $(OUTPUT_PATH)/$(LIBRARY_NAME).a $(OBJS)
 
 clean:
 	rm -f *.d *.o *.su *~ $(OBJS) $(DEP_FILES)
-
-fullclean: clean
-	rm -rf $(OUTPUT_PATH)
-	#$(MAKE) clean -C lib
