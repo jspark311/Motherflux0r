@@ -1717,7 +1717,7 @@ void loop() {
       uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
-  //pmu.poll();
+  pmu.poll();
   pmu.fetchLog(&output);
 
   millis_now = millis();
