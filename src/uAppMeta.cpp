@@ -13,6 +13,8 @@ extern SensorFilter<float> graph_array_cpu_time;
 extern StopWatch stopwatch_main_loop_time;
 //extern StopWatch stopwatch_main_loop_time;
 
+extern ManuvrPMU pmu;
+
 extern uint32_t boot_time;
 uint32_t disp_update_rate = 0;
 
@@ -85,6 +87,7 @@ int8_t uAppMeta::_process_user_input() {
   int8_t ret = 1;
 
   if (_slider_current != _slider_pending) {
+    FB->fill(BLACK);
     if (_slider_pending <= 7) {
       // Basic firmware stuff
       FB->setCursor(0, 11);
@@ -224,6 +227,15 @@ void uAppMeta::_redraw_window() {
     }
   }
   else if (_slider_current <= 37) {
+    StringBuilder disp_str;
+    disp_str.concatf("Battery: %.2fV  ", 0.0);
+    FB->setCursor(0, 0);
+    FB->setTextSize(0);
+    FB->setTextColor(WHITE, BLACK);
+    FB->writeString(&disp_str);
+    FB->writeString(pmu.getChargeStateString());
+    disp_str.clear();
+    FB->setCursor(0, 10);
   }
   else if (_slider_current <= 45) {
   }

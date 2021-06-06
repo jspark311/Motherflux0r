@@ -118,6 +118,7 @@ SOURCES_CPP += src/bitmaps.cpp
 SOURCES_CPP += src/DRV425.cpp
 SOURCES_CPP += src/ICM20948.cpp
 SOURCES_CPP += src/Motherflux0rSupport.cpp
+SOURCES_CPP += src/SensorGlue.cpp
 SOURCES_CPP += src/uAppBoot.cpp
 SOURCES_CPP += src/uAppComms.cpp
 SOURCES_CPP += src/uAppConfigurator.cpp

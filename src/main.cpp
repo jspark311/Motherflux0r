@@ -24,9 +24,8 @@
 #include <ManuvrArduino.h>
 #include <Composites/ManuvrPMU/ManuvrPMU-r2.h>
 
-#include "ICM20948.h"
-#include "DRV425.h"
-#include "CommPeer.h"
+#include "SensorGlue.h"
+
 
 
 /* Forward declarations for 3-axis callbacks. */
@@ -79,6 +78,9 @@ float mix_noise_to_fft    = 1.0;
 float mix_synth_to_line   = 0.0;
 float mix_queue_to_line   = 0.0;
 float mix_noise_to_line   = 1.0;
+
+UsrConfRecord user_conf;
+CalConfRecord cal_conf;
 
 
 /*******************************************************************************
@@ -152,24 +154,25 @@ const ManuvrPMUOpts powerplant_opts(
   DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
 );
 
-const BQ24155Opts charger_opts(
-  68,  // Sense resistor is 68 mOhm.
-  255, // STAT is unconnected.
-  255, // ISEL is nailed high.
-  BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
-  BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
-);
-
 const BatteryOpts battery_opts (
   BatteryChemistry::LIPO,
   3000,    // Battery capacity (in mAh)
   3.45f,   // Battery dead (in volts)
-  3.70f,   // Battery weak (in volts)
+  3.60f,   // Battery weak (in volts)
   4.15f,   // Battery float (in volts)
   4.2f     // Battery max (in volts)
 );
 
-ManuvrPMU pmu(&charger_opts, &gas_gauge_opts, &powerplant_opts, &battery_opts);
+const BQ24155Opts charger_opts(
+  &battery_opts,
+  68,  // Sense resistor is 68 mOhm.
+  BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
+  255, // STAT is unconnected.
+  255, // ISEL is nailed high.
+  BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
+);
+
+ManuvrPMU pmu(&charger_opts, &gas_gauge_opts, &powerplant_opts);
 
 
 /*******************************************************************************
@@ -213,22 +216,6 @@ static Vector3f64 gyr_vect;   // Gyroscopic vector from the IMU.
 static Vector3f64 mag_vect0;  // Magnetism vector from the IMU.
 static Vector3f64 mag_vect1;  // Magnetism vector from the DRV425 complex.
 
-/* Data buffers for sensors. */
-SensorFilter<float> graph_array_pressure(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_humidity(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_air_temp(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_psu_temp(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_uva(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_uvb(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_uvi(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_ana_light(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0);
-SensorFilter<float> graph_array_mag_strength_x(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_mag_strength_y(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_mag_strength_z(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_time_of_flight(FilteringStrategy::RAW, 96, 0);
 
 /* Profiling data */
 StopWatch stopwatch_main_loop_time;
@@ -407,7 +394,7 @@ int8_t battery_state_callback(ChargeState e) {
 int8_t location_callback(LocationFrame* loc) {
   //gps.fetchLog(log);
   current_location.copyFrame(loc);
-  uint64_t ts = loc->timestamp;
+  //uint64_t ts = loc->timestamp;
   //if (!rtcAccurate() & (0 != ts)) {
   //  // If the clock might be stale, set it from the GPS fix.
   //  // TODO: This is not correct.
@@ -577,6 +564,160 @@ static void cb_longpress(int button, uint32_t duration) {
 * Console callbacks
 *******************************************************************************/
 
+int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
+  char* conf_group_str = args->position_trimmed(0);
+  char* key            = args->position_trimmed(1);
+  char* val            = args->position_trimmed(2);
+  char* rec_type_str   = (char*) "UNKNOWN";
+  ConfRecord* conf_rec = nullptr;
+  text_return->concat("\n");
+
+  if (0 == StringBuilder::strcasecmp(conf_group_str, "usr")) {
+    rec_type_str = (char*) "Usr";
+    conf_rec = &user_conf;
+    switch (args->count()) {
+      case 3:
+        text_return->concatf(
+          "Setting key %s to %s returns %d.\n",
+          key, val, conf_rec->setConf((const char*) key, val)
+        );
+        break;
+      default:
+        conf_rec->printConf(text_return, (1 < args->count()) ? key : nullptr);
+        break;
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(conf_group_str, "cal")) {
+    rec_type_str = (char*) "Cal";
+    conf_rec = &cal_conf;
+    switch (args->count()) {
+      case 3:
+        text_return->concatf(
+          "Setting key %s to %s returns %d.\n",
+          key, val, conf_rec->setConf(key, val)
+        );
+        break;
+      default:
+        conf_rec->printConf(text_return, (1 < args->count()) ? key : nullptr);
+        break;
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(conf_group_str, "pack")) {
+    // Tool for serializing conf into buffers. Should support CBOR and BINARY,
+    //   for interchange and local storage, respectively.
+    StringBuilder ser_out;
+    TCode fmt = TCode::BINARY;
+    int8_t ret = 0;
+    if (3 == args->count()) {
+      if (0 == StringBuilder::strcasecmp(val, "cbor")) {
+        fmt = TCode::CBOR;
+      }
+      else if (0 == StringBuilder::strcasecmp(val, "bin")) {
+        fmt = TCode::BINARY;
+      }
+      else {
+        ret = -1;
+      }
+      if (0 == ret) {
+        if (0 == StringBuilder::strcasecmp(key, "usr")) {
+          ret = user_conf.serialize(&ser_out, fmt);
+          rec_type_str = (char*) "Usr";
+        }
+        else if (0 == StringBuilder::strcasecmp(key, "cal")) {
+          ret = cal_conf.serialize(&ser_out, fmt);
+          rec_type_str = (char*) "Cal";
+        }
+
+        if (0 != ret) {
+          text_return->concatf("Conf serializer returned %d.\n", ret);
+        }
+      }
+    }
+
+    if (0 < ser_out.length()) {
+      text_return->concatf("\n---< %s Conf >-------------------------------\n", rec_type_str);
+      StringBuilder::printBuffer(text_return, ser_out.string(), ser_out.length(), "\t");
+    }
+    else {
+      text_return->concat("Usage: pack [agency|usr|cal] [cbor|bin]\n");
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(conf_group_str, "save")) {
+    if (2 == args->count()) {
+      ConfRecord* crec = nullptr;
+      if (0 == StringBuilder::strcasecmp(key, "usr")) {
+        crec = (ConfRecord*) &user_conf;
+      }
+      else if (0 == StringBuilder::strcasecmp(key, "cal")) {
+        crec = (ConfRecord*) &cal_conf;
+      }
+
+      if (nullptr != crec) {
+        text_return->concatf("Saving %s returned %d.\n", key, crec->save(key));
+      }
+    }
+    else {
+      text_return->concat("Usage: save [usr|cal]\n");
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(conf_group_str, "load")) {
+    if (2 == args->count()) {
+      ConfRecord* crec = nullptr;
+      if (0 == StringBuilder::strcasecmp(key, "usr")) {
+        crec = (ConfRecord*) &user_conf;
+      }
+      else if (0 == StringBuilder::strcasecmp(key, "cal")) {
+        crec = (ConfRecord*) &cal_conf;
+      }
+
+      if (nullptr != crec) {
+        text_return->concatf("Loading %s returned %d.\n", key, crec->load(key));
+      }
+    }
+    else {
+      text_return->concat("Usage: load [usr|cal]\n");
+    }
+  }
+  else {
+    text_return->concat("First argument must be the conf group (usr, cal) or a subcommand (pack, save, load).\n");
+  }
+  return 0;
+}
+
+
+int callback_i2c_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = 0;
+  int arg0 = args->position_as_int(0);
+  int arg1 = args->position_as_int(1);
+  int arg2 = args->position_as_int(2);
+  I2CAdapter* bus = nullptr;
+  switch (arg0) {
+    case 0:    bus = &i2c0;  break;
+    case 1:    bus = &i2c1;  break;
+    default:
+      text_return->concatf("Unsupported bus: %d\n", arg0);
+      ret = -1;
+      break;
+  }
+  if (nullptr != bus) {
+    switch (arg1) {
+      case 0:
+        bus->printDebug(text_return);
+        bus->printPingMap(text_return);
+        break;
+      case 1:
+        bus->ping_slave_addr((args->count() > 2) ? arg2 : 1);
+        text_return->concatf("i2c%d.ping_slave_addr(0x%02x) started.\n", arg0, arg2);
+        break;
+      default:
+        ret = -1;
+        break;
+    }
+  }
+  return ret;
+}
+
+
 int callback_help(StringBuilder* text_return, StringBuilder* args) {
   if (0 < args->count()) {
     console.printHelp(text_return, args->position_trimmed(0));
@@ -587,10 +728,12 @@ int callback_help(StringBuilder* text_return, StringBuilder* args) {
   return 0;
 }
 
+
 int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
   console.printHistory(text_return);
   return 0;
 }
+
 
 int callback_reboot(StringBuilder* text_return, StringBuilder* args) {
   text_return->concat("Unimplemented\n");
@@ -1343,24 +1486,12 @@ void setup() {
   //SD.begin(BUILTIN_SDCARD);
 
   /* Allocate memory for the filters. */
-  graph_array_pressure.init();
-  graph_array_humidity.init();
-  graph_array_air_temp.init();
-  graph_array_psu_temp.init();
-  graph_array_uva.init();
-  graph_array_uvb.init();
-  graph_array_uvi.init();
-  graph_array_ana_light.init();
-  graph_array_visible.init();
-  graph_array_therm_mean.init();
-  graph_array_therm_frame.init();
+  if (0 != init_sensor_memory()) {
+    Serial.write("Failed to allocate memory for sensors.\n");
+  }
+
   graph_array_cpu_time.init();
   graph_array_frame_rate.init();
-  graph_array_mag_strength_x.init();
-  graph_array_mag_strength_y.init();
-  graph_array_mag_strength_z.init();
-  //graph_array_mag_confidence.init();
-  graph_array_time_of_flight.init();
 
   console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
   console.defineCommand("history",     ParsingConsole::tcodes_0, "Print command history.", "", 0, callback_print_history);
@@ -1388,6 +1519,10 @@ void setup() {
   console.defineCommand("aprof",       ParsingConsole::tcodes_uint_1, "Dump application profiler.", "", 0, callback_print_app_profiler);
   console.defineCommand("cbor",        ParsingConsole::tcodes_uint_1, "CBOR test battery.", "", 0, callback_cbor_tests);
   console.defineCommand("vol",         ParsingConsole::tcodes_float_1, "Audio volume.", "", 0, callback_audio_volume);
+  console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
+  console.defineCommand("app",         'a', ParsingConsole::tcodes_uint_1, "Select active application.", "", 0, callback_active_app);
+  console.defineCommand("conf",        'c',  ParsingConsole::tcodes_str_3, "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
+
   console.setTXTerminator(LineTerm::CRLF);
   console.setRXTerminator(LineTerm::CR);
   console.localEcho(true);
@@ -1407,7 +1542,7 @@ void setup() {
 
   pmu.configureConsole(&console);
   pmu.attachCallback(battery_state_callback);
-  //pmu.init(&i2c0);
+  pmu.init(&i2c0);
 
   gps.init();
   gps.setCallback(location_callback);
@@ -1582,7 +1717,7 @@ void loop() {
       uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
-
+  //pmu.poll();
   pmu.fetchLog(&output);
 
   millis_now = millis();

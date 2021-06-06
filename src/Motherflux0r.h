@@ -6,6 +6,10 @@
 #include <Image/Image.h>
 #include <TripleAxisCompass.h>
 #include <ManuvrDrivers.h>
+#include <Composites/ManuvrPMU/ManuvrPMU-r2.h>
+
+#include "Storage/DataRecords.h"
+#include "CommPeer.h"
 
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
@@ -56,7 +60,9 @@
 #define SerialWireless Serial1
 
 
-/* Common 16-bit colors */
+/*******************************************************************************
+* Application color scheme (16-bit)
+*******************************************************************************/
 #define	BLACK           0x0000
 #define	BLUE            0x1F00
 #define	RED             0x00F8
@@ -65,6 +71,12 @@
 #define MAGENTA         0x1FF8
 #define YELLOW          0xE0FF
 #define WHITE           0xFFFF
+
+// For sanity, we use a common color scheme for 3-space axes.
+#define COLOR_X_AXIS    0x80F9
+#define COLOR_Y_AXIS    0xF207
+#define COLOR_Z_AXIS    0x031F
+
 
 
 /*******************************************************************************

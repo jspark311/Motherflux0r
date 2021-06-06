@@ -1,24 +1,12 @@
 #include <CppPotpourri.h>
 #include <SensorFilter.h>
 #include <GPSWrapper.h>
-#include "ICM20948.h"
-#include "DRV425.h"
+#include "SensorGlue.h"
 #include "uApp.h"
 #include "Motherflux0r.h"
 
 extern SSD13xx display;
 
-/* Sensor representations... */
-extern DRV425 magneto;
-extern TMP102 tmp102;
-extern GridEYE grideye;
-extern VEML6075 uv;
-extern ICM_20948_SPI imu;
-extern TSL2561 tsl2561;
-extern BME280I2C baro;
-extern VL53L0X tof;
-extern GPSWrapper gps;
-extern LocationFrame current_location;
 
 extern WakeLock* wakelock_tof;
 extern WakeLock* wakelock_mag;
@@ -28,33 +16,6 @@ extern WakeLock* wakelock_grideye;
 extern WakeLock* wakelock_uv;
 extern WakeLock* wakelock_baro;
 extern WakeLock* wakelock_gps;
-
-extern SensorFilter<float> graph_array_pressure;
-extern SensorFilter<float> graph_array_humidity;
-extern SensorFilter<float> graph_array_air_temp;
-extern SensorFilter<float> graph_array_psu_temp;
-extern SensorFilter<float> graph_array_uva;
-extern SensorFilter<float> graph_array_uvb;
-extern SensorFilter<float> graph_array_uvi;
-extern SensorFilter<float> graph_array_ana_light;
-extern SensorFilter<float> graph_array_visible;
-extern SensorFilter<float> graph_array_therm_mean;
-extern SensorFilter<float> graph_array_therm_frame;
-//extern SensorFilter<float> graph_array_mag_confidence;
-extern SensorFilter<float> graph_array_mag_strength_x;
-extern SensorFilter<float> graph_array_mag_strength_y;
-extern SensorFilter<float> graph_array_mag_strength_z;
-extern SensorFilter<float> graph_array_time_of_flight;
-
-// Magnetic pipeline
-extern TripleAxisTerminus     mag_vect;   // The magnetic field vector.
-extern TripleAxisCompass      compass;    // Tilt-compensated compass.
-extern TripleAxisSingleFilter mag_filter; // Input-side filter.
-extern TripleAxisConvention   mag_conv;   // Gnomon conversion stage.
-
-// Inertial pipeline
-extern TripleAxisTerminus     down;       // Gnomon conversion stage.
-extern TripleAxisConvention   tilt_conv;  // Gnomon conversion stage.
 
 
 void redraw_tricorder_window();
@@ -319,25 +280,37 @@ void uAppTricorder::_redraw_window() {
     //imu.temp();
   }
   else if (_slider_current <= 52) {
-    if (compass.dataReady()) {
-      float bearing_north = 0.0;
-      float bearing_mag = 0.0;
+    const uint8_t TOP_MARGIN     = 10;
+    const uint8_t ELEMENT_MARGIN = 1;
+    const uint8_t COMPASS_SIZE   = 34;
+    const uint8_t GRAPH_HEIGHT   = 53;
+    const uint8_t GRAPH_WIDTH    = _cluttered_display() ? (96-(COMPASS_SIZE+ELEMENT_MARGIN)) : 96;
+    const uint8_t GRAPH_H_OFFSET = 96 - GRAPH_WIDTH;
+
+    if (_cluttered_display()) {
+      if (compass.dataReady()) {
+        float bearing_north = 0.0;
+        float bearing_mag = 0.0;
+        compass.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
+        compass.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
+        draw_compass(0, TOP_MARGIN, COMPASS_SIZE, COMPASS_SIZE, false, _render_text_value(), bearing_mag, bearing_north);
+        FB->setTextColor(WHITE, BLACK);
+        FB->setCursor(0, 56);
+        tmp_val_str.clear();
+        tmp_val_str.concatf("%.1ff  ", bearing_mag);
+        FB->writeString(&tmp_val_str);
+      }
+    }
+    if (graph_array_mag_strength_z.dirty()) {
       Vector3f* mag_vect_ptr = mag_vect.getData();
       FB->setTextColor(WHITE, BLACK);
-      compass.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
-      compass.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
-      draw_compass(0, 10, 34, 34, false, _render_text_value(), bearing_mag, bearing_north);
       FB->setCursor(0, 0);
       tmp_val_str.clear();
       tmp_val_str.concatf("%.3f uT   ", mag_vect_ptr->length());
       FB->writeString(&tmp_val_str);
-      FB->setCursor(0, 56);
-      tmp_val_str.clear();
-      tmp_val_str.concatf("%.1ff  ", bearing_mag);
-      FB->writeString(&tmp_val_str);
       draw_graph_obj(
-        36, 10, 59, 53,
-        0x80F9, 0xF207, 0x031F,
+        GRAPH_H_OFFSET, TOP_MARGIN, GRAPH_WIDTH, GRAPH_HEIGHT,
+        COLOR_X_AXIS, COLOR_Y_AXIS, COLOR_Z_AXIS,
         true, false, _render_text_value(),
         &graph_array_mag_strength_x, &graph_array_mag_strength_y, &graph_array_mag_strength_z
       );
