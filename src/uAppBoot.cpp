@@ -16,26 +16,7 @@ extern SPIAdapter spi0;
 extern I2CAdapter i2c0;
 extern I2CAdapter i2c1;
 
-// Magnetic pipeline
-extern TripleAxisTerminus     mag_vect;
-extern TripleAxisCompass      compass;
-extern TripleAxisFork         mag_fork;
-extern TripleAxisSingleFilter mag_filter;
-extern TripleAxisConvention   mag_conv;
-
-// Inertial pipeline
-extern TripleAxisTerminus     down;
-extern TripleAxisFork         imu_fork;
-extern TripleAxisConvention   tilt_conv;
-
-/* Sensor representations... */
-extern DRV425 magneto;
-extern GridEYE grideye;
-extern VEML6075 uv;
-extern ICM_20948_SPI imu;
-extern TSL2561 tsl2561;
-extern BME280I2C baro;
-extern VL53L0X tof;
+extern ManuvrPMU pmu;
 
 /* Audio objects... */
 extern float volume_left_output;
@@ -60,36 +41,54 @@ extern AudioAmplifier           ampR;
 extern AudioAmplifier           ampL;
 extern AudioAnalyzeFFT256       fft256_1;
 
-extern SensorFilter<float> graph_array_ana_light;
+#define UAPP_BOOT_FLAG_INIT_DISPLAY         0x00000001
+#define UAPP_BOOT_FLAG_INIT_LUX             0x00000002
+#define UAPP_BOOT_FLAG_INIT_MAG_GPIO        0x00000004
+#define UAPP_BOOT_FLAG_INIT_BARO            0x00000008
+#define UAPP_BOOT_FLAG_INIT_GRIDEYE         0x00000010
+#define UAPP_BOOT_FLAG_INIT_AUDIO           0x00000020
+#define UAPP_BOOT_FLAG_INIT_TOF             0x00000040
+#define UAPP_BOOT_FLAG_INIT_UV              0x00000080
+#define UAPP_BOOT_FLAG_INIT_TOUCH           0x00000100
+#define UAPP_BOOT_FLAG_INIT_IMU             0x00000200
+#define UAPP_BOOT_FLAG_INIT_USB             0x00000400
+#define UAPP_BOOT_FLAG_INIT_PMU_CHARGER     0x00000800
+#define UAPP_BOOT_FLAG_INIT_PMU_GUAGE       0x00001000
+#define UAPP_BOOT_FLAG_INIT_GPS             0x00002000
+#define UAPP_BOOT_FLAG_INIT_MAG_ADC         0x00004000
+#define UAPP_BOOT_FLAG_INIT_STORAGE         0x00008000
+#define UAPP_BOOT_FLAG_INIT_CONF_LOADED     0x00010000
 
+#define UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE   0x80000000
 
-bool   _display_init_called   = false;
-bool   _display_init_complete = false;
-bool   _lux_init_called       = false;
-bool   _lux_init_complete     = false;
-bool   _mag_init_called       = false;
-bool   _mag_init_complete     = false;
-bool   _audio_init_called     = false;
-bool   _audio_init_complete   = false;
-bool   _usb_init_called       = false;
-bool   _usb_init_complete     = false;
-bool   _imu_init_called       = false;
-bool   _imu_init_complete     = false;
-bool   _tof_init_called       = false;
-bool   _tof_init_complete     = false;
-bool   _baro_init_called      = false;
-bool   _baro_init_complete    = false;
-bool   _uv_init_called        = false;
-bool   _uv_init_complete      = false;
-bool   _touch_init_called     = false;
-bool   _touch_init_complete   = false;
-bool   _grideye_init_called   = false;
-bool   _grideye_init_complete = false;
+typedef struct {
+  const char* const str;
+  const uint32_t flag_mask;
+} UAppInitPoint;
 
-bool   _boot_complete_wait    = false;
+// Items on the init list should be in order of desired initialization.
+const UAppInitPoint INIT_LIST[] = {
+  {"Display",          UAPP_BOOT_FLAG_INIT_DISPLAY       },
+  {"Touchpad",         UAPP_BOOT_FLAG_INIT_MAG_GPIO      },
+  {"Barometer",        UAPP_BOOT_FLAG_INIT_BARO          },
+  {"USB",              UAPP_BOOT_FLAG_INIT_LUX           },
+  {"GridEye",          UAPP_BOOT_FLAG_INIT_GRIDEYE       },
+  {"Audio",            UAPP_BOOT_FLAG_INIT_AUDIO         },
+  {"ToF",              UAPP_BOOT_FLAG_INIT_TOF           },
+  {"UVI",              UAPP_BOOT_FLAG_INIT_UV            },
+  {"Touchpad",         UAPP_BOOT_FLAG_INIT_TOUCH         },
+  {"Inertial",         UAPP_BOOT_FLAG_INIT_IMU           },
+  {"USB",              UAPP_BOOT_FLAG_INIT_USB           },
+  {"PMU Charger",      UAPP_BOOT_FLAG_INIT_PMU_CHARGER   },
+  {"PMU Guage",        UAPP_BOOT_FLAG_INIT_PMU_GUAGE     },
+  {"GPS",              UAPP_BOOT_FLAG_INIT_GPS           },
+  {"Magnetometer ADC", UAPP_BOOT_FLAG_INIT_MAG_ADC       },
+  {"NV Storage",       UAPP_BOOT_FLAG_INIT_STORAGE       },
+  {"Conf Load",        UAPP_BOOT_FLAG_INIT_CONF_LOADED   },
+  {"Boot Complete",    UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE }
+};
 
 uint16_t serial_timeout = 0;
-
 
 
 
@@ -116,7 +115,6 @@ int8_t uAppBoot::_lc_on_preinit() {
     graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
   }
   display.init(&spi0);
-  _display_init_called = true;
   return ret;
 }
 
@@ -170,8 +168,8 @@ int8_t uAppBoot::_process_user_input() {
     _slider_current = _slider_pending;
   }
   if (_buttons_current != _buttons_pending) {
-    if (_boot_complete_wait) {
-      // Interpret a cancel press as a return to APP_SELECT.
+    if (_init_done_flags.value(UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE)) {
+      // Interpret a button press as exiting APP_BOOT.
       uApp::setAppActive(AppID::APP_SELECT);
       ret = -1;
     }
@@ -186,205 +184,229 @@ int8_t uAppBoot::_process_user_input() {
 * Draws the app.
 */
 void uAppBoot::_redraw_window() {
-  float percent_setup = 0.0;
-  char* init_step_str = (char*) "";
-  int cursor_height   = 26;
-  if (_boot_complete_wait) {
-    FB->setCursor(4, 14);
-    FB->writeString("Boot complete");
-    touch->setMode(SX8634OpMode::ACTIVE);
-    return;
-  }
+  const uint8_t INIT_LIST_LEN = sizeof(INIT_LIST) / sizeof(UAppInitPoint);
+  const float   INIT_LIST_PERCENT = 100.0 / (float) INIT_LIST_LEN;
+  bool     continue_looping = display.enabled();   // Don't loop if no display.
+  uint8_t  i = 0;
 
-  if (!_display_init_complete) {
-    _display_init_complete = display.enabled();
-    if (_display_init_complete) {
-      FB->fill(BLACK);
-      FB->setTextColor(WHITE);
-      FB->setCursor(14, 0);
-      FB->setTextSize(1);
-      FB->writeString("Motherflux0r");
-      FB->setTextSize(0);
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, true, false, percent_setup);
-    }
-    return;
-  }
-  percent_setup += 0.08;
-
-  if (!_touch_init_complete) {
-    if (!_touch_init_called) {
-      init_step_str = (char*) "Touchpad      ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-      touch->init();
-      _touch_init_called = true;
-    }
-    _touch_init_complete = touch->devFound();
-    if (_touch_init_complete) {
-      touch->poll();
-      touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
-    }
-    return;
-  }
-  percent_setup += 0.08;
-
-  if (!_usb_init_complete) {
-    if (!_usb_init_called) {
-      init_step_str = (char*) "USB      ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-      _usb_init_called = true;
-    }
-    if (!Serial && (100 > serial_timeout)) {
-      serial_timeout++;
-    }
-    else {
-      if (Serial) {
-        while (Serial.available()) {
-          Serial.read();
-        }
-        //FB->writeString("Serial\n");
+  while (continue_looping & (i < INIT_LIST_LEN)) {
+    draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, (0 == i), false, (INIT_LIST_PERCENT*(i+1)));
+    if (!_init_sent_flags.value(INIT_LIST[i].flag_mask)) {
+      // This item has not seen an init call succeed.
+      bool ret_local = false;
+      const uint UNFILLED_STR_LEN = strlen(INIT_LIST[i].str);
+      char filled_list_str[17] = {0, };
+      for (uint8_t stri = 0; stri < sizeof(filled_list_str); stri++) {
+        filled_list_str[stri] = (stri < UNFILLED_STR_LEN) ? *(INIT_LIST[i].str + stri) : ' ';
       }
-      _usb_init_complete = true;
+      FB->setTextColor(WHITE, BLACK);
+      FB->setCursor(0, 24);
+      FB->writeString(INIT_LIST[i].str);
+      switch (INIT_LIST[i].flag_mask) {
+        case UAPP_BOOT_FLAG_INIT_DISPLAY:
+          FB->fill(BLACK);
+          FB->setCursor(14, 0);
+          FB->setTextSize(1);
+          FB->writeString("Motherflux0r");
+          FB->setTextSize(0);
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_LUX:
+          tsl2561.assignBusInstance(&i2c1);
+          ret_local = (0 == tsl2561.init());
+          break;
+        case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
+          mag_filter.init();
+          magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
+          ret_local = (0 == magneto.init(&i2c1, &spi0));
+          break;
+        case UAPP_BOOT_FLAG_INIT_BARO:
+          baro.assignBusInstance(&i2c1);
+          ret_local = (0 == baro.init());
+          break;
+        case UAPP_BOOT_FLAG_INIT_GRIDEYE:
+          ret_local = (0 == grideye.init(&i2c1));
+          break;
+        case UAPP_BOOT_FLAG_INIT_AUDIO:
+          sineL.amplitude(1.0);
+          sineL.frequency(440);
+          sineL.phase(0);
+          sineR.amplitude(0.8);
+          sineR.frequency(660);
+          sineR.phase(0);
+          mixerFFT.gain(0, mix_queueL_to_fft);
+          mixerFFT.gain(1, mix_queueR_to_fft);
+          mixerFFT.gain(2, mix_noise_to_fft);
+          mixerFFT.gain(3, 0.0);
+          mixerL.gain(0, mix_queue_to_line);
+          mixerL.gain(1, mix_noise_to_line);
+          mixerL.gain(2, mix_synth_to_line);
+          mixerL.gain(3, 0.0);
+          mixerR.gain(0, mix_queue_to_line);
+          mixerR.gain(1, mix_noise_to_line);
+          mixerR.gain(2, mix_synth_to_line);
+          mixerR.gain(3, 0.0);
+          pinkNoise.amplitude(volume_pink_noise);
+          ampL.gain(volume_left_output);
+          ampR.gain(volume_right_output);
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_TOF:
+          // tof.assignBusInstance(&i2c1);
+          // tof.setTimeout(500);
+          // ret_local = (0 == tof.init());
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_UV:
+          uv.assignBusInstance(&i2c1);
+          ret_local = (0 == uv.init());
+          break;
+        case UAPP_BOOT_FLAG_INIT_TOUCH:
+          touch->assignBusInstance(&i2c0);
+          ret_local = (0 == touch->reset());
+          break;
+        case UAPP_BOOT_FLAG_INIT_IMU:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_USB:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_PMU_CHARGER:
+          ret_local = (0 == pmu.init(&i2c0));
+          break;
+        case UAPP_BOOT_FLAG_INIT_PMU_GUAGE:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_GPS:
+          ret_local = (0 == gps.init());
+          break;
+        case UAPP_BOOT_FLAG_INIT_MAG_ADC:
+          if (_init_done_flags.value(UAPP_BOOT_FLAG_INIT_MAG_GPIO)) {
+            ret_local = magneto.power();
+          }
+          break;
+        case UAPP_BOOT_FLAG_INIT_STORAGE:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_CONF_LOADED:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE:
+          ret_local = true;
+          break;
+        default:  return;  // TODO: Failure
+      }
+      if (ret_local) {
+        // If calling the init sequence succeeded, mark it as having been done.
+        _init_sent_flags.set(INIT_LIST[i].flag_mask);
+        continue_looping = false;
+      }
     }
-    return;
-  }
-  percent_setup += 0.08;
 
-  if (!_grideye_init_complete) {
-    _grideye_init_complete = grideye.initialized();
-    if (!_grideye_init_called) {
-      init_step_str = (char*) "GridEye     ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-      _grideye_init_called = true;
-      _grideye_init_complete = (0 != grideye.init(&i2c1));  // Abort init wait if it failed.
+    else if (!_init_done_flags.value(INIT_LIST[i].flag_mask)) {
+      // This item has not seen an init succeed.
+      bool ret_local = false;
+      switch (INIT_LIST[i].flag_mask) {
+        case UAPP_BOOT_FLAG_INIT_DISPLAY:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_LUX:
+          ret_local = tsl2561.initialized();
+          if (ret_local) {
+            tsl2561.integrationTime(TSLIntegrationTime::MS_101);
+          }
+          break;
+        case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
+          ret_local = magneto.gpio.initialized();
+          if (ret_local) {
+            // TODO: This is just to prod the compass into returning a complete
+            //   dataset. It's bogus until there is an IMU.
+            Vector3f gravity(0.0, 0.0, 1.0);
+            Vector3f gravity_err(0.002, 0.002, 0.002);
+            compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
+            magneto.power(true);
+          }
+          break;
+        case UAPP_BOOT_FLAG_INIT_BARO:
+          ret_local = baro.initialized();
+          break;
+        case UAPP_BOOT_FLAG_INIT_GRIDEYE:
+          ret_local = grideye.initialized();
+          break;
+        case UAPP_BOOT_FLAG_INIT_AUDIO:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_TOF:
+          ret_local = true;
+          if (ret_local) {
+            // tof.startContinuous(100);
+          }
+          break;
+        case UAPP_BOOT_FLAG_INIT_UV:
+          ret_local = uv.initialized();
+          break;
+        case UAPP_BOOT_FLAG_INIT_TOUCH:
+          ret_local = touch->devFound();
+          if (ret_local) {
+            touch->poll();
+            touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
+          }
+          break;
+        case UAPP_BOOT_FLAG_INIT_IMU:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_USB:
+          if (!Serial && (100 > serial_timeout)) {
+            serial_timeout++;
+          }
+          else {
+            if (Serial) {
+              // Drain any leading characters.
+              while (Serial.available()) {  Serial.read();   }
+            }
+            ret_local = true;
+          }
+          break;
+        case UAPP_BOOT_FLAG_INIT_PMU_CHARGER:
+          ret_local = pmu.bq24155.initComplete();
+          break;
+        case UAPP_BOOT_FLAG_INIT_PMU_GUAGE:
+          ret_local = pmu.ltc294x.initComplete();
+          break;
+        case UAPP_BOOT_FLAG_INIT_GPS:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_MAG_ADC:
+          ret_local = magneto.configured();
+          break;
+        case UAPP_BOOT_FLAG_INIT_STORAGE:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_CONF_LOADED:
+          ret_local = true;
+          break;
+        case UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE:
+          ret_local = touch->deviceReady();
+          if (ret_local) {
+            touch->setMode(SX8634OpMode::ACTIVE);
+          }
+          break;
+        default:  return;  // TODO: Failure
+      }
+      if (ret_local) {
+        // If init succeeded, mark it as complete.
+        _init_done_flags.set(INIT_LIST[i].flag_mask);
+        continue_looping = false;
+      }
     }
-    return;
+    i++;
   }
-  percent_setup += 0.08;
-
-  if (!_uv_init_complete) {
-    if (!_uv_init_called) {
-      init_step_str = (char*) "UVI      ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-      uv.assignBusInstance(&i2c1);
-      _uv_init_called = (0 == uv.init());
-    }
-    _uv_init_complete = uv.initialized();
-    return;
-  }
-  percent_setup += 0.08;
-
-  if (!_lux_init_complete) {
-    if (!_lux_init_called) {
-      init_step_str = (char*) "Lux  ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-      tsl2561.assignBusInstance(&i2c1);
-      _lux_init_called = (0 == tsl2561.init());
-    }
-    if (tsl2561.initialized()) {
-      _lux_init_complete = true;
-      tsl2561.integrationTime(TSLIntegrationTime::MS_101);
-    }
-    return;
-  }
-  percent_setup += 0.08;
-
-  if (!_baro_init_complete) {
-    _baro_init_complete = baro.initialized();
-    if (!_baro_init_called) {
-      init_step_str = (char*) "Baro    ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-      baro.assignBusInstance(&i2c1);
-      _baro_init_called = true;
-      _baro_init_complete = (0 != baro.init());  // Abort init wait if it failed.
-    }
-    return;
-  }
-  percent_setup += 0.08;
-
-  if (!_mag_init_complete) {
-    if (!_mag_init_called) {
-      init_step_str = (char*) "Magnetometer    ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-      mag_filter.init();
-      //magneto.power(true);
-      magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
-      _mag_init_called = (0 == magneto.init(&i2c1, &spi0));
-    }
-    _mag_init_complete = magneto.configured();
-    if (_mag_init_complete) {
-      // TODO: This is just to prod the compass into returning a complete
-      //   dataset. It's bogus until there is an IMU.
-      Vector3f gravity(0.0, 0.0, 1.0);
-      Vector3f gravity_err(0.002, 0.002, 0.002);
-      compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
-    }
-    return;
-  }
-  percent_setup += 0.08;
-
-  if (!_audio_init_complete) {
-    if (!_audio_init_called) {
-      _audio_init_called = true;
-      _audio_init_complete = true;
-      sineL.amplitude(1.0);
-      sineL.frequency(440);
-      sineL.phase(0);
-      sineR.amplitude(0.8);
-      sineR.frequency(660);
-      sineR.phase(0);
-      mixerFFT.gain(0, mix_queueL_to_fft);
-      mixerFFT.gain(1, mix_queueR_to_fft);
-      mixerFFT.gain(2, mix_noise_to_fft);
-      mixerFFT.gain(3, 0.0);
-      mixerL.gain(0, mix_queue_to_line);
-      mixerL.gain(1, mix_noise_to_line);
-      mixerL.gain(2, mix_synth_to_line);
-      mixerL.gain(3, 0.0);
-      mixerR.gain(0, mix_queue_to_line);
-      mixerR.gain(1, mix_noise_to_line);
-      mixerR.gain(2, mix_synth_to_line);
-      mixerR.gain(3, 0.0);
-      pinkNoise.amplitude(volume_pink_noise);
-      ampL.gain(volume_left_output);
-      ampR.gain(volume_right_output);
-      init_step_str = (char*) "Audio         ";
-      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-      FB->setTextColor(WHITE);
-      FB->setCursor(4, 14);
-      FB->writeString(init_step_str);
-    }
-    return;
-  }
-  percent_setup += 0.08;
+  return;
+}
 
 //  if (!_imu_init_complete) {
 //    if (!_imu_init_called) {
 //      init_step_str = (char*) "Inertial        ";
-//      draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-//      FB->setTextColor(WHITE);
-//      FB->setCursor(4, 14);
-//      FB->writeString(init_step_str);
 //      _imu_init_called = (ICM_20948_Stat_Ok == imu.begin(IMU_CS_PIN, SPI, 6000000));
 //    }
 //    _imu_init_complete = (ICM_20948_Stat_Ok == imu.checkID());
@@ -422,26 +444,3 @@ void uAppBoot::_redraw_window() {
 //    }
 //    return;
 //  }
-//  percent_setup += 0.08;
-
-  //if (!_tof_init_complete) {
-  //  if (!_tof_init_called) {
-  //    init_step_str = (char*) "ToF      ";
-  //    draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, percent_setup);
-  //    FB->setTextColor(WHITE);
-  //    FB->setCursor(4, 14);
-  //    FB->writeString(init_step_str);
-  //    tof.assignBusInstance(&i2c1);
-  //    tof.setTimeout(500);
-  //    _tof_init_called = (0 == tof.init());
-  //    _tof_init_complete = _tof_init_called;
-  //  }
-  //  if (_tof_init_complete) {
-  //    tof.startContinuous(100);
-  //  }
-  //  return;
-  //}
-  draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, false, false, 1.0);
-  _boot_complete_wait = true;
-  return;
-}

@@ -153,6 +153,11 @@ class uAppBoot : public uApp {
     int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
+
+  private:
+    uint32_t _last_init_sent = 0;
+    FlagContainer32  _init_sent_flags;
+    FlagContainer32  _init_done_flags;
 };
 
 

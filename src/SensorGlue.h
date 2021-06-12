@@ -38,11 +38,13 @@ extern SensorFilter<float> graph_array_time_of_flight;
 /* Magnetic pipeline */
 extern TripleAxisTerminus     mag_vect;   // The magnetic field vector.
 extern TripleAxisCompass      compass;    // Tilt-compensated compass.
+extern TripleAxisFork         mag_fork;
 extern TripleAxisSingleFilter mag_filter; // Input-side filter.
 extern TripleAxisConvention   mag_conv;   // Gnomon conversion stage.
 
 /* Inertial pipeline */
 extern TripleAxisTerminus     down;       // Gnomon conversion stage.
+extern TripleAxisFork         imu_fork;
 extern TripleAxisConvention   tilt_conv;  // Gnomon conversion stage.
 
 

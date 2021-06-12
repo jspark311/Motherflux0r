@@ -1398,15 +1398,12 @@ void setup() {
 
   pmu.configureConsole(&console);
   pmu.attachCallback(battery_state_callback);
-  pmu.init(&i2c0);
 
   touch = new SX8634(&_touch_opts);
-  touch->assignBusInstance(&i2c0);
   touch->setButtonFxn(cb_button);
   touch->setSliderFxn(cb_slider);
   touch->setLongpressFxn(cb_longpress);
 
-  gps.init();
   gps.setCallback(location_callback);
 
   config_time = millis();
