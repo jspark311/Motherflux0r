@@ -7,8 +7,7 @@
 
 #include "Motherflux0r.h"
 #include "uApp.h"
-#include "ICM20948.h"
-#include "DRV425.h"
+#include "SensorGlue.h"
 
 extern SSD13xx display;
 extern SX8634* touch;

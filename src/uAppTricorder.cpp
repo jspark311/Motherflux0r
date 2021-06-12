@@ -103,19 +103,24 @@ int8_t uAppTricorder::_process_user_input() {
       FB->fill(BLACK);
       FB->setTextSize(0);
       FB->setCursor(0, 0);
-      FB->setTextColor(0x03E0, BLACK);
-      FB->writeString("Pressure (Pa)");
+      if (_render_lock_range()) {
+        FB->setTextColor(0x03E0, BLACK);
+        FB->writeString("Pressure (Pa)");
+      }
+      else {
+        FB->setTextColor(0x3EE3, BLACK);
+        FB->writeString("RelH%");
+        FB->setTextColor(WHITE, BLACK);
+        FB->writeString(" / ");
+        FB->setTextColor(0x83D0, BLACK);
+        FB->writeString("Temp  ");
+      }
     }
     else if (_slider_pending <= 15) {
       FB->fill(BLACK);
       FB->setTextSize(0);
       FB->setCursor(0, 0);
-      FB->setTextColor(0x3EE3, BLACK);
-      FB->writeString("RelH%");
-      FB->setTextColor(WHITE, BLACK);
-      FB->writeString(" / ");
-      FB->setTextColor(0x83D0, BLACK);
-      FB->writeString("Temp  ");
+      FB->writeString("Unimplemented");
     }
     else if (_slider_pending <= 22) {
       FB->fill(BLACK);
@@ -128,27 +133,32 @@ int8_t uAppTricorder::_process_user_input() {
       FB->fill(BLACK);
       FB->setTextSize(0);
       FB->setCursor(0, 0);
-      FB->setTextColor(0xF710, BLACK);
-      FB->writeString("ANA");
-      FB->setTextColor(WHITE, BLACK);
-      FB->writeString(" / ");
-      FB->setTextColor(0xF140, BLACK);
-      FB->writeString("Lux");
-      FB->setTextColor(WHITE, BLACK);
-      FB->writeString(" / ");
-      FB->setTextColor(0xF81F, BLACK);
-      FB->writeString("UVI");
+      if (_render_lock_range()) {
+        FB->setTextColor(YELLOW, BLACK);
+        FB->writeString("ANA");
+        FB->setTextColor(WHITE, BLACK);
+        FB->writeString(" / ");
+        FB->setTextColor(0xF140, BLACK);
+        FB->writeString("Lux");
+        FB->setTextColor(WHITE, BLACK);
+        FB->writeString(" / ");
+        FB->setTextColor(MAGENTA, BLACK);
+        FB->writeString("UVI");
+      }
+      else {
+        FB->setTextColor(0x791F, BLACK);
+        FB->writeString("UVa");
+        FB->setTextColor(WHITE, BLACK);
+        FB->writeString(" / ");
+        FB->setTextColor(0xF80F, BLACK);
+        FB->writeString("UVb       ");
+      }
     }
     else if (_slider_pending <= 37) {
       FB->fill(BLACK);
       FB->setTextSize(0);
       FB->setCursor(0, 0);
-      FB->setTextColor(0x781F, BLACK);
-      FB->writeString("UVa");
-      FB->setTextColor(WHITE, BLACK);
-      FB->writeString(" / ");
-      FB->setTextColor(0xF80F, BLACK);
-      FB->writeString("UVb       ");
+      FB->writeString("Unimplemented");
     }
     else if (_slider_pending <= 45) {
       redraw_app_window();
@@ -199,41 +209,43 @@ void uAppTricorder::_redraw_window() {
   StringBuilder tmp_val_str;
   if (_slider_current <= 7) {
     // Baro
-    if (graph_array_humidity.dirty()) {
-      float altitude  = baro.Altitude(baro.pres());
-      float dew_point = baro.DewPoint(baro.temp(), baro.hum());
-      float sea_level = baro.EquivalentSeaLevelPressure(altitude, baro.temp(), baro.pres());
-      draw_graph_obj(
-        0, 10, 96, 36, 0x03E0,
-        true, _cluttered_display(), _render_text_value(),
-        &graph_array_pressure
-      );
-      FB->setTextSize(0);
-      FB->setCursor(0, 47);
-      FB->setTextColor(WHITE, BLACK);
-      FB->writeString("Alt: ");
-      FB->setTextColor(GREEN, BLACK);
-      tmp_val_str.clear();
-      tmp_val_str.concatf("%.3f ft", altitude);
-      FB->writeString(&tmp_val_str);
-      FB->setTextColor(WHITE, BLACK);
-      FB->writeString("Dew Point: ");
-      FB->setTextColor(0x03E0, BLACK);
-      tmp_val_str.clear();
-      tmp_val_str.concatf("%.2fC", dew_point);
-      FB->writeString(&tmp_val_str);
+    if (_render_lock_range()) {
+      if (graph_array_humidity.dirty()) {
+        float altitude  = baro.Altitude(baro.pres());
+        float dew_point = baro.DewPoint(baro.temp(), baro.hum());
+        float sea_level = baro.EquivalentSeaLevelPressure(altitude, baro.temp(), baro.pres());
+        draw_graph_obj(
+          0, 10, 96, 36, 0x03E0,
+          true, _cluttered_display(), _render_text_value(),
+          &graph_array_pressure
+        );
+        FB->setTextSize(0);
+        FB->setCursor(0, 47);
+        FB->setTextColor(WHITE, BLACK);
+        FB->writeString("Alt: ");
+        FB->setTextColor(GREEN, BLACK);
+        tmp_val_str.clear();
+        tmp_val_str.concatf("%.3f ft", altitude);
+        FB->writeString(&tmp_val_str);
+        FB->setTextColor(WHITE, BLACK);
+        FB->writeString("Dew Point: ");
+        FB->setTextColor(0x03E0, BLACK);
+        tmp_val_str.clear();
+        tmp_val_str.concatf("%.2fC", dew_point);
+        FB->writeString(&tmp_val_str);
+      }
+    }
+    else {
+      if (graph_array_air_temp.dirty()) {
+        draw_graph_obj(
+          0, 10, 96, 37, 0x83D0, 0x3EE3,
+          true, _cluttered_display(), _render_text_value(),
+          &graph_array_air_temp, &graph_array_humidity
+        );
+      }
     }
   }
   else if (_slider_current <= 15) {
-    // Baro
-    if (graph_array_air_temp.dirty()) {
-      draw_graph_obj(
-        0, 10, 96, 37, 0x83D0, 0x3EE3,
-        true, _cluttered_display(), _render_text_value(),
-        &graph_array_air_temp, &graph_array_humidity
-      );
-
-    }
   }
   else if (_slider_current <= 22) {
     if (graph_array_time_of_flight.dirty()) {
@@ -246,21 +258,25 @@ void uAppTricorder::_redraw_window() {
   }
   else if (_slider_current <= 30) {
     // Light
-    graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
-    draw_graph_obj(
-      0, 10, 96, 53, 0xF710, 0xF140, 0xF81F,
-      true, _cluttered_display(), _render_text_value(),
-      &graph_array_ana_light, &graph_array_visible, &graph_array_uvi
-    );
-  }
-  else if (_slider_current <= 37) {
-    if (graph_array_uva.dirty()) {
+    if (_render_lock_range()) {
+      graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
       draw_graph_obj(
-        0, 10, 96, 53, 0x781F, 0xF80F,
+        0, 10, 96, 53, YELLOW, 0xF140, MAGENTA,
         true, _cluttered_display(), _render_text_value(),
-        &graph_array_uva, &graph_array_uvb
+        &graph_array_ana_light, &graph_array_visible, &graph_array_uvi
       );
     }
+    else {
+      if (graph_array_uva.dirty()) {
+        draw_graph_obj(
+          0, 10, 96, 53, 0x791F, 0xF80F,
+          true, _cluttered_display(), _render_text_value(),
+          &graph_array_uva, &graph_array_uvb
+        );
+      }
+    }
+  }
+  else if (_slider_current <= 37) {
   }
   else if (_slider_current <= 45) {
     // IMU
@@ -280,6 +296,7 @@ void uAppTricorder::_redraw_window() {
     //imu.temp();
   }
   else if (_slider_current <= 52) {
+    // Magnetometer
     const uint8_t TOP_MARGIN     = 10;
     const uint8_t ELEMENT_MARGIN = 1;
     const uint8_t COMPASS_SIZE   = 34;
@@ -316,7 +333,8 @@ void uAppTricorder::_redraw_window() {
       );
     }
   }
-  else {    // Thermopile
+  else {
+    // Thermopile
     if (graph_array_therm_mean.dirty()) {
       const uint8_t PIXEL_SIZE  = 4;
       const uint8_t TEXT_OFFSET = (PIXEL_SIZE*8)+5;
@@ -345,7 +363,7 @@ void uAppTricorder::_redraw_window() {
         uint y = (i >> 3) * PIXEL_SIZE;
         float pix_deviation = abs(MIDPOINT_T - therm_pixels[i]);
         uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (therm_field_max - MIDPOINT_T));
-        uint16_t color = (therm_pixels[i] <= MIDPOINT_T) ? (pix_intensity << 8) : (pix_intensity << 3);
+        uint16_t color = ((uint16_t) pix_intensity) << (therm_pixels[i] <= MIDPOINT_T) ? 8 : 4;
         FB->fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
       }
       FB->setTextSize(0);

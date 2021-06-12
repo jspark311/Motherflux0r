@@ -736,7 +736,7 @@ int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
 
 
 int callback_reboot(StringBuilder* text_return, StringBuilder* args) {
-  text_return->concat("Unimplemented\n");
+  platform.firmware_reset(0);
   return 0;
 }
 
@@ -1213,145 +1213,6 @@ int callback_meta_filter_set_strat(StringBuilder* text_return, StringBuilder* ar
 }
 
 
-int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) {
-  int ret = -3;
-  if (0 < args->count()) {
-    int arg0 = args->position_as_int(0);
-    ret = 0;
-    switch (arg0) {
-      case 0:
-        switch (args->position_as_int(1)) {
-          default:
-          case 0:   magneto.printDebug(text_return);           break;
-          case 1:   magneto.printPipeline(text_return);        break;
-          case 2:   compass.printPipe(text_return, 0, 7);      break;
-          case 3:   compass.printBearing(HeadingType::MAGNETIC_NORTH, text_return);  break;
-          case 4:   magneto.adc.printChannelValues(text_return);  break;
-          case 5:   magneto.adc.printRegs(text_return);        break;
-          case 6:   magneto.adc.printPins(text_return);        break;
-          case 7:   magneto.adc.printData(text_return);        break;
-          case 8:   magneto.adc.printTimings(text_return);     break;
-          case 9:
-            text_return->concatf("ADC Temperature: %u.\n", (uint8_t) magneto.adc.getTemperature());
-            break;
-          case 10:  magneto.adc.printChannelValues(text_return);   break;
-        }
-        break;
-
-      case 1:
-        stopwatch_sensor_mag.markStart();
-        ret = magneto.poll();
-        stopwatch_sensor_mag.markStop();
-        text_return->concatf("Polling the magnetometer returns %d.\n", ret);
-        break;
-
-      case 2:
-        if (1 < args->count()) {
-          ret = magneto.adc.setGain((MCP356xGain) args->position_as_int(1));
-        }
-        text_return->concatf("Gain is now %u.\n", 1 << ((uint8_t) magneto.adc.getGain()));
-        break;
-
-      case 3:
-        if (1 < args->count()) {
-          ret = magneto.adc.setOversamplingRatio((MCP356xOversamplingRatio) args->position_as_int(1));
-        }
-        text_return->concatf("Oversampling ratio is now %u.\n", (uint8_t) magneto.adc.getOversamplingRatio());
-        break;
-
-      case 4:
-        if (1 < args->count()) {
-          mag_conv.setAfferentGnomon((GnomonType) args->position_as_int(1));
-        }
-        mag_conv.printPipe(text_return, 0, 0);
-        break;
-
-      case 5:
-        if (1 < args->count()) {
-          bool en = (0 != args->position_as_int(1));
-          magneto.setBandwidth(en ? DRV425Bandwidth::BW0 : DRV425Bandwidth::BW1);
-          text_return->concatf("Magnetometer bandwidth is %s\n", en ? "BW0" : "BW1");
-        }
-        break;
-      case 6:   ret = magneto.reset();               break;
-      case 7:   ret = magneto.adc.refresh();             break;
-      case 8:
-        if (1 < args->count()) {
-          uint32_t arg1 = args->position_as_int(1);
-          if (0 != arg1) {
-            ret = mag_filter.setParam0(strict_min(arg1, 512));
-          }
-        }
-        text_return->concatf("Magnetometer filter size is now %u.\n", mag_filter.getParam0());
-        break;
-      case 9:
-        if (1 < args->count()) {
-          if (0 != args->position_as_int(1)) {
-            magneto.getWakeLock()->acquire();
-          }
-          else {
-            magneto.getWakeLock()->release();
-          }
-        }
-        text_return->concatf("Mag WAKELOCK held: %c.\n", magneto.getWakeLock()->isHeld() ? 'y':'n');
-        break;
-      case 10:
-        text_return->concatf("Magnetometer init() returns %d\n", magneto.init(&i2c1, &spi0));
-        break;
-
-      case 11:
-      case 12:
-      case 13:
-      case 14:
-      case 15:
-      case 16:
-      case 17:
-      case 18:
-        {
-          uint8_t eidx = ((uint8_t) arg0 - 11);
-          MCP356xState state = (MCP356xState) eidx;
-          text_return->concatf("magneto.setDesiredState(%s)\n", MCP356x::stateStr(state));
-          magneto.adc.setDesiredState(state);
-        }
-        break;
-      case 19:
-        text_return->concatf("Magnetometer calibrate() returns %d\n", magneto.calibrate());
-        break;
-      case 20:
-        text_return->concatf("Magnetometer read() returns %d\n", magneto.adc.read());
-        break;
-      case 21:
-        text_return->concatf("Magnetometer adc_reconf() returns %d\n", magneto.adc_reconf());
-        break;
-      default:
-        ret = -3;
-        break;
-    }
-  }
-  if (-3 == ret) {
-    text_return->concat("---< Magnetometer functions >--------------------------\n");
-    text_return->concat("0:  Info\n");
-    text_return->concat("1:  Poll\n");
-    text_return->concat("2:  Gain\n");
-    text_return->concat("3:  Oversampling ratio\n");
-    text_return->concat("4:  Gnomons\n");
-    text_return->concat("5:  Bandwidth\n");
-    text_return->concat("6:  Reset\n");
-    text_return->concat("7:  Refresh\n");
-    text_return->concat("8:  Filter depth\n");
-    text_return->concat("9:  WakeLock\n");
-    text_return->concat("10: Init\n");
-  }
-  else if (0 != ret) {
-    text_return->concatf("Function returned %d\n", ret);
-  }
-  else {
-    text_return->concat("Success\n");
-  }
-  return ret;
-}
-
-
 int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
   int ret = -1;
   if (1 == args->count()) {
@@ -1509,7 +1370,6 @@ void setup() {
   console.defineCommand("si",          's', ParsingConsole::tcodes_uint_1, "Sensor information.", "", 0, callback_sensor_info);
   console.defineCommand("sfi",         ParsingConsole::tcodes_uint_1, "Sensor filter info.", "", 0, callback_sensor_filter_info);
   console.defineCommand("mfi",         ParsingConsole::tcodes_uint_1, "Meta filter info.", "", 1, callback_meta_filter_info);
-  console.defineCommand("mag",         'm', ParsingConsole::tcodes_uint_2, "Magnetometer functions.", "", 0, callback_magnetometer_fxns);
   console.defineCommand("sinit",       ParsingConsole::tcodes_uint_2, "Sensor initialize.", "", 0, callback_sensor_init);
   console.defineCommand("se",          ParsingConsole::tcodes_uint_2, "Sensor enable.", "", 0, callback_sensor_enable);
   console.defineCommand("sfs",         ParsingConsole::tcodes_uint_3, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
@@ -1534,15 +1394,17 @@ void setup() {
   ptc.concat("\t Build date " __DATE__ " " __TIME__ "\n");
   console.printToLog(&ptc);
 
+  magneto.configureConsole(&console);
+
+  pmu.configureConsole(&console);
+  pmu.attachCallback(battery_state_callback);
+  pmu.init(&i2c0);
+
   touch = new SX8634(&_touch_opts);
   touch->assignBusInstance(&i2c0);
   touch->setButtonFxn(cb_button);
   touch->setSliderFxn(cb_slider);
   touch->setLongpressFxn(cb_longpress);
-
-  pmu.configureConsole(&console);
-  pmu.attachCallback(battery_state_callback);
-  pmu.init(&i2c0);
 
   gps.init();
   gps.setCallback(location_callback);
@@ -1583,25 +1445,6 @@ void spi_spin() {
     //Serial.println("spi_spin() 1");
   }
 }
-
-void i2c0_spin() {
-  int8_t polling_ret = i2c0.poll();
-  while (0 < polling_ret) {
-    polling_ret = i2c0.poll();
-    //Serial.print("i2c0_spin() ");
-    //Serial.println(polling_ret);
-  }
-}
-
-void i2c1_spin() {
-  int8_t polling_ret = i2c1.poll();
-  while (0 < polling_ret) {
-    polling_ret = i2c1.poll();
-    //Serial.print("i2c1_spin() ");
-    //Serial.println(polling_ret);
-  }
-}
-
 
 /*
 * Drain any of the UARTs that have data.
@@ -1658,8 +1501,8 @@ void loop() {
 
 
   spi_spin();
-  i2c0_spin();
-  i2c1_spin();
+  i2c0.poll();
+  i2c1.poll();
 
   stopwatch_touch_poll.markStart();
   int8_t t_res = touch->poll();
@@ -1683,19 +1526,19 @@ void loop() {
   if (magneto.power()) {           read_magnetometer_sensor();          }
   magneto.adc.fetchLog(&output);
 
-  stopwatch_sensor_baro.markStart();
-  if (0 < baro.poll()) {           read_baro_sensor();                  }
-  stopwatch_sensor_baro.markStop();
+  //stopwatch_sensor_baro.markStart();
+  //if (0 < baro.poll()) {           read_baro_sensor();                  }
+  //stopwatch_sensor_baro.markStop();
 
-  stopwatch_sensor_uv.markStart();
-  if (0 < uv.poll()) {             read_uv_sensor();                    }
-  stopwatch_sensor_uv.markStop();
+  //stopwatch_sensor_uv.markStart();
+  //if (0 < uv.poll()) {             read_uv_sensor();                    }
+  //stopwatch_sensor_uv.markStop();
 
-  stopwatch_sensor_lux.markStart();
-  if (0 < tsl2561.poll()) {
-    read_visible_sensor();
-    stopwatch_sensor_lux.markStop();
-  }
+  //stopwatch_sensor_lux.markStart();
+  //if (0 < tsl2561.poll()) {
+  //  read_visible_sensor();
+  //  stopwatch_sensor_lux.markStop();
+  //}
 
   if (grideye.enabled()) {
     stopwatch_sensor_grideye.markStart();
