@@ -1523,7 +1523,7 @@ void loop() {
   timeoutCheckVibLED();
 
   /* Poll each sensor class. */
-  if (magneto.power()) {           read_magnetometer_sensor();          }
+  read_magnetometer_sensor();
   magneto.adc.fetchLog(&output);
 
   //stopwatch_sensor_baro.markStart();
