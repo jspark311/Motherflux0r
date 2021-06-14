@@ -735,12 +735,6 @@ int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_reboot(StringBuilder* text_return, StringBuilder* args) {
-  platform.firmware_reset(0);
-  return 0;
-}
-
-
 int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* args) {
   if (args->count() > 0) {
     stopwatch_sensor_baro.reset();
@@ -795,42 +789,26 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
 }
 
 
-int callback_touch_info(StringBuilder* text_return, StringBuilder* args) {
-  touch->printDebug(text_return);
-  return 0;
-}
-
-
-int callback_touch_reset(StringBuilder* text_return, StringBuilder* args) {
-  text_return->concat("SX8634 reset ");
-  text_return->concat((0 == touch->reset()) ? "succeded" : "failed");
-  return 0;
-}
-
-
-int callback_touch_mode(StringBuilder* text_return, StringBuilder* args) {
-  if (args->count() > 0) {
-    int mode_int = args->position_as_int(0);
-    switch (mode_int) {
-      case 0:
-      case 1:
-      case 2:
-      case 3:
-        if (0 == touch->setMode((SX8634OpMode) mode_int)) {
-          text_return->concatf("SX8634 mode set to %s.\n", SX8634::getModeStr((SX8634OpMode) mode_int));
-        }
-        else {
-          text_return->concat("SX8634 mode set failed.\n");
-        }
-        break;
-      default:
-        return -1;
+int callback_touch_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = -1;
+  char* cmd = args->position_trimmed(0);
+  if (0 < args->count()) {
+    ret = 0;
+    if (0 == StringBuilder::strcasecmp(cmd, "info")) {
+      touch->printDebug(text_return);
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
+      text_return->concatf("SX8634 reset() returns %d.\n", touch->reset());
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "mode")) {
+      if (1 < args->count()) {
+        int mode_int = args->position_as_int(1);
+        text_return->concatf("SX8634 setMode(%s) returns %d.\n", SX8634::getModeStr((SX8634OpMode) mode_int), touch->setMode((SX8634OpMode) mode_int));
+      }
+      text_return->concatf("SX8634 mode set to %s.\n", SX8634::getModeStr(touch->operationalMode()));
     }
   }
-  else {
-    text_return->concatf("SX8634 mode set to %s.\n", SX8634::getModeStr(touch->operationalMode()));
-  }
-  return 0;
+  return ret;
 }
 
 
@@ -1029,7 +1007,7 @@ int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
       case SensorID::UV:             uv.printDebug(text_return);       break;
       case SensorID::THERMOPILE:     grideye.printDebug(text_return);  break;
       case SensorID::LUX:            tsl2561.printDebug(text_return);  break;
-      case SensorID::BATT_VOLTAGE:   grideye.poll();               break;
+      case SensorID::BATT_VOLTAGE:   grideye.printFrame(text_return);  break;
       //case SensorID::IMU:                break;
       //case SensorID::MIC:                break;
       //case SensorID::GPS:                break;
@@ -1357,10 +1335,7 @@ void setup() {
   console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
   console.defineCommand("history",     ParsingConsole::tcodes_0, "Print command history.", "", 0, callback_print_history);
   platform.configureConsole(&console);
-  console.defineCommand("reboot",      ParsingConsole::tcodes_0, "Reboot the controller.", "", 0, callback_reboot);
-  console.defineCommand("touchreset",  ParsingConsole::tcodes_0, "Reset SX8634", "", 0, callback_touch_reset);
-  console.defineCommand("touchinfo",   ParsingConsole::tcodes_0, "SX8634 info", "", 0, callback_touch_info);
-  console.defineCommand("touchmode",   ParsingConsole::tcodes_uint_1, "Get/set SX8634 mode", "", 0, callback_touch_mode);
+  console.defineCommand("touch",       ParsingConsole::tcodes_str_4, "SX8634 tools", "", 0, callback_touch_tools);
   console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);
   console.defineCommand("vib",         'v', ParsingConsole::tcodes_uint_2, "Vibrator test", "", 0, callback_vibrator_test);
   console.defineCommand("disp",        'd', ParsingConsole::tcodes_uint_1, "Display test", "", 1, callback_display_test);
@@ -1406,11 +1381,6 @@ void setup() {
 
   gps.setCallback(location_callback);
 
-  config_time = millis();
-  //display.setTextColor(GREEN);
-  //display.writeString((config_time - boot_time), DEC);
-  //display.writeString("ms\n");
-
   wakelock_tof     = nullptr;
   wakelock_mag     = magneto.getWakeLock();
   wakelock_lux     = nullptr;
@@ -1421,6 +1391,8 @@ void setup() {
   wakelock_gps     = nullptr;
 
   wakelock_mag->referenceCounted(false);
+
+  config_time = millis();
 }
 
 
@@ -1523,24 +1495,30 @@ void loop() {
   read_magnetometer_sensor();
   magneto.adc.fetchLog(&output);
 
-  //stopwatch_sensor_baro.markStart();
-  //if (0 < baro.poll()) {           read_baro_sensor();                  }
-  //stopwatch_sensor_baro.markStop();
+  stopwatch_sensor_baro.markStart();
+  if (0 < baro.poll()) {
+    read_baro_sensor();
+  }
+  stopwatch_sensor_baro.markStop();
 
-  //stopwatch_sensor_uv.markStart();
-  //if (0 < uv.poll()) {             read_uv_sensor();                    }
-  //stopwatch_sensor_uv.markStop();
+  stopwatch_sensor_uv.markStart();
+  if (0 < uv.poll()) {
+    read_uv_sensor();
+  }
+  stopwatch_sensor_uv.markStop();
 
-  //stopwatch_sensor_lux.markStart();
-  //if (0 < tsl2561.poll()) {
-  //  read_visible_sensor();
-  //  stopwatch_sensor_lux.markStop();
-  //}
+  stopwatch_sensor_lux.markStart();
+  if (0 < tsl2561.poll()) {
+    read_visible_sensor();
+    stopwatch_sensor_lux.markStop();
+  }
 
   if (grideye.enabled()) {
     stopwatch_sensor_grideye.markStart();
     grideye.poll();
-    if (0 < grideye.frameReady()) {      read_thermopile_sensor();      }
+    if (0 < grideye.frameReady()) {
+      read_thermopile_sensor();
+    }
     stopwatch_sensor_grideye.markStop();
   }
 

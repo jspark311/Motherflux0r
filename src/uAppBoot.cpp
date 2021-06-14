@@ -70,8 +70,10 @@ typedef struct {
 const UAppInitPoint INIT_LIST[] = {
   {"Display",          UAPP_BOOT_FLAG_INIT_DISPLAY       },
   {"Touchpad",         UAPP_BOOT_FLAG_INIT_MAG_GPIO      },
-  {"Barometer",        UAPP_BOOT_FLAG_INIT_BARO          },
+  {"NV Storage",       UAPP_BOOT_FLAG_INIT_STORAGE       },
+  {"Conf Load",        UAPP_BOOT_FLAG_INIT_CONF_LOADED   },
   {"USB",              UAPP_BOOT_FLAG_INIT_LUX           },
+  {"Barometer",        UAPP_BOOT_FLAG_INIT_BARO          },
   {"GridEye",          UAPP_BOOT_FLAG_INIT_GRIDEYE       },
   {"Audio",            UAPP_BOOT_FLAG_INIT_AUDIO         },
   {"ToF",              UAPP_BOOT_FLAG_INIT_TOF           },
@@ -83,8 +85,6 @@ const UAppInitPoint INIT_LIST[] = {
   {"PMU Guage",        UAPP_BOOT_FLAG_INIT_PMU_GUAGE     },
   {"GPS",              UAPP_BOOT_FLAG_INIT_GPS           },
   {"Magnetometer ADC", UAPP_BOOT_FLAG_INIT_MAG_ADC       },
-  {"NV Storage",       UAPP_BOOT_FLAG_INIT_STORAGE       },
-  {"Conf Load",        UAPP_BOOT_FLAG_INIT_CONF_LOADED   },
   {"Boot Complete",    UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE }
 };
 
@@ -186,29 +186,25 @@ int8_t uAppBoot::_process_user_input() {
 void uAppBoot::_redraw_window() {
   const uint8_t INIT_LIST_LEN = sizeof(INIT_LIST) / sizeof(UAppInitPoint);
   const float   INIT_LIST_PERCENT = 100.0 / (float) INIT_LIST_LEN;
+  const uint8_t BLOCK_WIDTH  = (96/INIT_LIST_LEN);  //INIT_LIST_PERCENT * 96;
+  const uint8_t BLOCK_HEIGHT = 11;
   bool     continue_looping = display.enabled();   // Don't loop if no display.
   uint8_t  i = 0;
 
   while (continue_looping & (i < INIT_LIST_LEN)) {
-    draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, (0 == i), false, (INIT_LIST_PERCENT*(i+1)));
     if (!_init_sent_flags.value(INIT_LIST[i].flag_mask)) {
       // This item has not seen an init call succeed.
       bool ret_local = false;
-      const uint UNFILLED_STR_LEN = strlen(INIT_LIST[i].str);
-      char filled_list_str[17] = {0, };
-      for (uint8_t stri = 0; stri < sizeof(filled_list_str); stri++) {
-        filled_list_str[stri] = (stri < UNFILLED_STR_LEN) ? *(INIT_LIST[i].str + stri) : ' ';
-      }
-      FB->setTextColor(WHITE, BLACK);
-      FB->setCursor(0, 24);
-      FB->writeString(INIT_LIST[i].str);
       switch (INIT_LIST[i].flag_mask) {
         case UAPP_BOOT_FLAG_INIT_DISPLAY:
           FB->fill(BLACK);
+          FB->setTextColor(WHITE, BLACK);
           FB->setCursor(14, 0);
           FB->setTextSize(1);
           FB->writeString("Motherflux0r");
           FB->setTextSize(0);
+          display.fillRect(0, 11, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
+          display.fillRect(0, 24, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_LUX:
@@ -225,6 +221,7 @@ void uAppBoot::_redraw_window() {
           ret_local = (0 == baro.init());
           break;
         case UAPP_BOOT_FLAG_INIT_GRIDEYE:
+          grideye.assignBusInstance(&i2c1);
           ret_local = (0 == grideye.init(&i2c1));
           break;
         case UAPP_BOOT_FLAG_INIT_AUDIO:
@@ -298,12 +295,17 @@ void uAppBoot::_redraw_window() {
       }
       if (ret_local) {
         // If calling the init sequence succeeded, mark it as having been done.
+        //draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, (0 == i), false, (INIT_LIST_PERCENT*(i+1)));
+        display.fillRect(BLOCK_WIDTH*i, 11, BLOCK_WIDTH, BLOCK_HEIGHT, BLUE);
         _init_sent_flags.set(INIT_LIST[i].flag_mask);
         continue_looping = false;
       }
     }
+    else {
+      display.fillRect(BLOCK_WIDTH*i, 11, BLOCK_WIDTH, BLOCK_HEIGHT, GREEN);
+    }
 
-    else if (!_init_done_flags.value(INIT_LIST[i].flag_mask)) {
+    if (!_init_done_flags.value(INIT_LIST[i].flag_mask)) {
       // This item has not seen an init succeed.
       bool ret_local = false;
       switch (INIT_LIST[i].flag_mask) {
@@ -317,14 +319,13 @@ void uAppBoot::_redraw_window() {
           }
           break;
         case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
-          ret_local = magneto.gpio.initialized();
-          if (ret_local) {
+          if (magneto.gpio.initialized()) {
             // TODO: This is just to prod the compass into returning a complete
             //   dataset. It's bogus until there is an IMU.
             Vector3f gravity(0.0, 0.0, 1.0);
             Vector3f gravity_err(0.002, 0.002, 0.002);
             compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
-            magneto.power(true);
+            ret_local = magneto.power(true);
           }
           break;
         case UAPP_BOOT_FLAG_INIT_BARO:
@@ -346,10 +347,13 @@ void uAppBoot::_redraw_window() {
           ret_local = uv.initialized();
           break;
         case UAPP_BOOT_FLAG_INIT_TOUCH:
-          ret_local = touch->devFound();
-          if (ret_local) {
+          if (touch->devFound()) {
             touch->poll();
-            touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
+            ret_local = touch->deviceReady();
+            if (ret_local) {
+              touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
+              touch->setMode(SX8634OpMode::ACTIVE);
+            }
           }
           break;
         case UAPP_BOOT_FLAG_INIT_IMU:
@@ -368,16 +372,19 @@ void uAppBoot::_redraw_window() {
           }
           break;
         case UAPP_BOOT_FLAG_INIT_PMU_CHARGER:
-          ret_local = pmu.bq24155.initComplete();
+          //ret_local = pmu.bq24155.initComplete();
+          ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_PMU_GUAGE:
-          ret_local = pmu.ltc294x.initComplete();
+          //ret_local = pmu.ltc294x.initComplete();
+          ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_GPS:
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_MAG_ADC:
-          ret_local = magneto.configured();
+          //ret_local = magneto.configured();
+          ret_local = magneto.power();
           break;
         case UAPP_BOOT_FLAG_INIT_STORAGE:
           ret_local = true;
@@ -386,18 +393,28 @@ void uAppBoot::_redraw_window() {
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE:
-          ret_local = touch->deviceReady();
-          if (ret_local) {
-            touch->setMode(SX8634OpMode::ACTIVE);
-          }
+          ret_local = (_init_sent_flags.raw == (_init_done_flags.raw | UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE));
           break;
         default:  return;  // TODO: Failure
       }
       if (ret_local) {
         // If init succeeded, mark it as complete.
         _init_done_flags.set(INIT_LIST[i].flag_mask);
+        //draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, (0 == i), false, (INIT_LIST_PERCENT*(i+1)));
+        display.fillRect(BLOCK_WIDTH*i, 24, BLOCK_WIDTH, BLOCK_HEIGHT, BLUE);
+        const uint UNFILLED_STR_LEN = strlen(INIT_LIST[i].str);
+        char filled_list_str[17] = {0, };
+        for (uint8_t stri = 0; stri < sizeof(filled_list_str); stri++) {
+          filled_list_str[stri] = (stri < UNFILLED_STR_LEN) ? *(INIT_LIST[i].str + stri) : ' ';
+        }
+        FB->setTextColor(WHITE, BLACK);
+        FB->setCursor(0, 36);
+        FB->writeString(filled_list_str);
         continue_looping = false;
       }
+    }
+    else {
+      display.fillRect(BLOCK_WIDTH*i, 24, BLOCK_WIDTH, BLOCK_HEIGHT, GREEN);
     }
     i++;
   }
