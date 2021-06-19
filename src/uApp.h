@@ -4,12 +4,15 @@
 #include <Arduino.h>
 #include <StopWatch.h>
 #include <Image/Image.h>
+#include <FlagContainer.h>
 
 #ifndef __U_APP_H_
 #define __U_APP_H_
 
 // TODO: Might make this a config or load-contingent value.
-#define APP_POLLING_PERIOD    20    // App runs at ~50fps.
+#define APP_POLLING_PERIOD        20    // App runs at ~50fps.
+#define UAPP_BOOT_INIT_TIMEOUT  2700    // Number of milliseconds to wait for init.
+
 
 /*******************************************************************************
 * Types

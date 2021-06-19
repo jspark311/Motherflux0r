@@ -47,6 +47,7 @@ uAppTricorder::~uAppTricorder() {}
 */
 int8_t uAppTricorder::_lc_on_preinit() {
   int8_t ret = 1;
+  FB->fill(BLACK);
   redraw_app_window();
   if (nullptr != wakelock_tof) {   wakelock_tof->acquire();   }
   if (nullptr != wakelock_mag) {   wakelock_mag->acquire();   }
@@ -356,16 +357,21 @@ void uAppTricorder::_redraw_window() {
         therm_field_max = graph_array_therm_mean.value() + therm_midpoint_lock;
         therm_field_min = graph_array_therm_mean.value() - therm_midpoint_lock;
       }
-      const float MIDPOINT_T = lock_range_to_absolute ? (TEMP_RANGE / 2.0) : therm_midpoint_lock;
 
+      const float MIDPOINT_T = lock_range_to_absolute ? (TEMP_RANGE / 2.0) : therm_midpoint_lock;
       for (uint8_t i = 0; i < 64; i++) {
         uint x = (i & 0x07) * PIXEL_SIZE;
         uint y = (i >> 3) * PIXEL_SIZE;
         float pix_deviation = abs(MIDPOINT_T - therm_pixels[i]);
         uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (therm_field_max - MIDPOINT_T));
-        uint16_t color = ((uint16_t) pix_intensity) << (therm_pixels[i] <= MIDPOINT_T) ? 8 : 4;
+        uint16_t color = ((uint16_t) pix_intensity) << ((therm_pixels[i] <= MIDPOINT_T) ? 8 : 3);
+        //if (therm_pixels[i] < MIDPOINT_T) {
+        //}
+        //else if (therm_pixels[i] > MIDPOINT_T) {
+        //}
         FB->fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
       }
+
       FB->setTextSize(0);
       FB->setCursor(TEXT_OFFSET, 0);
       FB->setTextColor(RED, BLACK);
@@ -383,27 +389,39 @@ void uAppTricorder::_redraw_window() {
       FB->writeString(&tmp_val_str);
       tmp_val_str.clear();
 
-      FB->setCursor(0, TEXT_OFFSET);
-      FB->setTextColor(WHITE);
-      FB->writeString("Mean:  ");
-      FB->setTextColor(RED, BLACK);
-      tmp_val_str.concatf("%.2f", graph_array_therm_mean.value());
-      FB->writeString(&tmp_val_str);
-      tmp_val_str.clear();
+      if (!_render_text_value()) {
+        FB->setCursor(0, TEXT_OFFSET);
+        FB->setTextColor(WHITE);
+        FB->writeString("Mean:  ");
+        FB->setTextColor(RED, BLACK);
+        tmp_val_str.concatf("%.2f\n", graph_array_therm_mean.value());
+        FB->writeString(&tmp_val_str);
+        tmp_val_str.clear();
 
-      FB->setTextColor(WHITE);
-      FB->writeString("Range: ");
-      FB->setTextColor(RED, BLACK);
-      tmp_val_str.concatf("%.2f", (therm_field_max - therm_field_min));
-      FB->writeString(&tmp_val_str);
-      tmp_val_str.clear();
+        FB->setTextColor(WHITE);
+        FB->writeString("Range: ");
+        FB->setTextColor(RED, BLACK);
+        tmp_val_str.concatf("%.2f\n", (therm_field_max - therm_field_min));
+        FB->writeString(&tmp_val_str);
+        tmp_val_str.clear();
 
-      FB->setTextColor(WHITE);
-      FB->writeString("STDEV: ");
-      FB->setTextColor(RED, BLACK);
-      tmp_val_str.concatf("%.2f", graph_array_therm_frame.stdevValue());
-      FB->writeString(&tmp_val_str);
-      tmp_val_str.clear();
+        FB->setTextColor(WHITE);
+        FB->writeString("STDEV: ");
+        FB->setTextColor(RED, BLACK);
+        tmp_val_str.concatf("%.2f", graph_array_therm_frame.stdevValue());
+        FB->writeString(&tmp_val_str);
+        tmp_val_str.clear();
+      }
+      else {
+        float pix_deviation = abs(MIDPOINT_T - graph_array_therm_mean.value());
+        uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (therm_field_max - MIDPOINT_T));
+        uint16_t color = ((uint16_t) pix_intensity) << ((graph_array_therm_mean.value() <= MIDPOINT_T) ? 8 : 3);
+        draw_graph_obj(
+          0, TEXT_OFFSET, 95, 63-TEXT_OFFSET, color,
+          true, true, true,
+          &graph_array_therm_mean
+        );
+      }
     }
   }
 }

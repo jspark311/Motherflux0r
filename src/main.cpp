@@ -687,31 +687,32 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
 
 int callback_i2c_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = 0;
-  int arg0 = args->position_as_int(0);
-  int arg1 = args->position_as_int(1);
-  int arg2 = args->position_as_int(2);
+  int   bus_id = args->position_as_int(0);
+  char* cmd    = args->position_trimmed(1);
+  int   arg2   = args->position_as_int(2);
   I2CAdapter* bus = nullptr;
-  switch (arg0) {
+  switch (bus_id) {
     case 0:    bus = &i2c0;  break;
     case 1:    bus = &i2c1;  break;
     default:
-      text_return->concatf("Unsupported bus: %d\n", arg0);
-      ret = -1;
+      text_return->concatf("Unsupported bus: %d\n", bus_id);
       break;
   }
   if (nullptr != bus) {
-    switch (arg1) {
-      case 0:
-        bus->printDebug(text_return);
-        bus->printPingMap(text_return);
-        break;
-      case 1:
-        bus->ping_slave_addr((args->count() > 2) ? arg2 : 1);
-        text_return->concatf("i2c%d.ping_slave_addr(0x%02x) started.\n", arg0, arg2);
-        break;
-      default:
-        ret = -1;
-        break;
+    if (0 == StringBuilder::strcasecmp(cmd, "purge")) {
+      bus->purge_current_job();
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "ragepurge")) {
+      bus->purge_queued_work();
+      bus->purge_current_job();
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "ping")) {
+      bus->ping_slave_addr((args->count() > 2) ? arg2 : 1);
+      text_return->concatf("i2c%d.ping_slave_addr(0x%02x) started.\n", bus_id, arg2);
+    }
+    else {
+      bus->printDebug(text_return);
+      bus->printPingMap(text_return);
     }
   }
   return ret;
@@ -1375,9 +1376,16 @@ void setup() {
   pmu.attachCallback(battery_state_callback);
 
   touch = new SX8634(&_touch_opts);
+  touch->assignBusInstance(&i2c0);
   touch->setButtonFxn(cb_button);
   touch->setSliderFxn(cb_slider);
   touch->setLongpressFxn(cb_longpress);
+
+  tsl2561.assignBusInstance(&i2c1);
+  uv.assignBusInstance(&i2c1);
+  baro.assignBusInstance(&i2c1);
+  grideye.assignBusInstance(&i2c1);
+  // tof.assignBusInstance(&i2c1);
 
   gps.setCallback(location_callback);
 
@@ -1515,8 +1523,7 @@ void loop() {
 
   if (grideye.enabled()) {
     stopwatch_sensor_grideye.markStart();
-    grideye.poll();
-    if (0 < grideye.frameReady()) {
+    if (0 < grideye.poll()) {
       read_thermopile_sensor();
     }
     stopwatch_sensor_grideye.markStop();

@@ -208,7 +208,6 @@ void uAppBoot::_redraw_window() {
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_LUX:
-          tsl2561.assignBusInstance(&i2c1);
           ret_local = (0 == tsl2561.init());
           break;
         case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
@@ -217,11 +216,9 @@ void uAppBoot::_redraw_window() {
           ret_local = (0 == magneto.init(&i2c1, &spi0));
           break;
         case UAPP_BOOT_FLAG_INIT_BARO:
-          baro.assignBusInstance(&i2c1);
           ret_local = (0 == baro.init());
           break;
         case UAPP_BOOT_FLAG_INIT_GRIDEYE:
-          grideye.assignBusInstance(&i2c1);
           ret_local = (0 == grideye.init(&i2c1));
           break;
         case UAPP_BOOT_FLAG_INIT_AUDIO:
@@ -249,17 +246,14 @@ void uAppBoot::_redraw_window() {
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_TOF:
-          // tof.assignBusInstance(&i2c1);
           // tof.setTimeout(500);
           // ret_local = (0 == tof.init());
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_UV:
-          uv.assignBusInstance(&i2c1);
           ret_local = (0 == uv.init());
           break;
         case UAPP_BOOT_FLAG_INIT_TOUCH:
-          touch->assignBusInstance(&i2c0);
           ret_local = (0 == touch->reset());
           break;
         case UAPP_BOOT_FLAG_INIT_IMU:
@@ -269,7 +263,9 @@ void uAppBoot::_redraw_window() {
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_PMU_CHARGER:
-          ret_local = (0 == pmu.init(&i2c0));
+          //ret_local = (0 == pmu.init(&i2c0));
+          pmu.init(&i2c0);
+          ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_PMU_GUAGE:
           ret_local = true;
@@ -299,6 +295,7 @@ void uAppBoot::_redraw_window() {
         display.fillRect(BLOCK_WIDTH*i, 11, BLOCK_WIDTH, BLOCK_HEIGHT, BLUE);
         _init_sent_flags.set(INIT_LIST[i].flag_mask);
         continue_looping = false;
+        _last_init_sent = millis();
       }
     }
     else {
@@ -344,7 +341,10 @@ void uAppBoot::_redraw_window() {
           }
           break;
         case UAPP_BOOT_FLAG_INIT_UV:
-          ret_local = uv.initialized();
+          if (uv.initialized()) {
+            ret_local = (VEML6075Err::SUCCESS == uv.enabled(true));
+            //ret_local = (VEML6075Err::SUCCESS == uv.setIntegrationTime(VEML6075IntTime::IT_100MS));
+          }
           break;
         case UAPP_BOOT_FLAG_INIT_TOUCH:
           if (touch->devFound()) {
@@ -417,6 +417,19 @@ void uAppBoot::_redraw_window() {
       display.fillRect(BLOCK_WIDTH*i, 24, BLOCK_WIDTH, BLOCK_HEIGHT, GREEN);
     }
     i++;
+  }
+
+  if (wrap_accounted_delta(_last_init_sent, millis()) >= UAPP_BOOT_INIT_TIMEOUT) {
+    for (uint8_t n = 0; n < INIT_LIST_LEN; n++) {
+      if (!_init_sent_flags.value(INIT_LIST[n].flag_mask)) {
+        _init_sent_flags.set(INIT_LIST[n].flag_mask);
+        display.fillRect(BLOCK_WIDTH*n, 11, BLOCK_WIDTH, BLOCK_HEIGHT, RED);
+      }
+      if (!_init_done_flags.value(INIT_LIST[n].flag_mask)) {
+        _init_done_flags.set(INIT_LIST[n].flag_mask);
+        display.fillRect(BLOCK_WIDTH*n, 24, BLOCK_WIDTH, BLOCK_HEIGHT, RED);
+      }
+    }
   }
   return;
 }
