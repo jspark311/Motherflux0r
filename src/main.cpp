@@ -183,7 +183,7 @@ BME280Settings baro_settings(
   BME280OSR::X1,
   BME280OSR::X1,
   BME280OSR::X1,
-  BME280Mode::Forced,
+  BME280Mode::Normal,
   BME280StandbyTime::StandbyTime_1000ms,
   BME280Filter::Off
 );
@@ -325,6 +325,7 @@ int8_t read_imu() {
 int8_t read_visible_sensor() {
   int8_t ret = 0;
   ret = graph_array_visible.feedFilter(1.0 * tsl2561.getLux());
+  graph_array_broad_ir.feedFilter(1.0 * tsl2561.getIR());
   return ret;
 }
 
@@ -736,32 +737,6 @@ int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_print_sensor_profiler(StringBuilder* text_return, StringBuilder* args) {
-  if (args->count() > 0) {
-    stopwatch_sensor_baro.reset();
-    stopwatch_sensor_uv.reset();
-    stopwatch_sensor_grideye.reset();
-    stopwatch_sensor_imu.reset();
-    stopwatch_sensor_lux.reset();
-    stopwatch_sensor_mag.reset();
-    stopwatch_sensor_gps.reset();
-    stopwatch_sensor_tof.reset();
-    stopwatch_touch_poll.reset();
-  }
-  StopWatch::printDebugHeader(text_return);
-  stopwatch_sensor_baro.printDebug("Baro", text_return);
-  stopwatch_sensor_uv.printDebug("UV", text_return);
-  stopwatch_sensor_grideye.printDebug("GridEye", text_return);
-  stopwatch_sensor_imu.printDebug("IMU", text_return);
-  stopwatch_sensor_lux.printDebug("TSL2561", text_return);
-  stopwatch_sensor_tof.printDebug("ToF", text_return);
-  stopwatch_sensor_mag.printDebug("Magnetometer", text_return);
-  stopwatch_sensor_gps.printDebug("GPS", text_return);
-  stopwatch_touch_poll.printDebug("Touch", text_return);
-  return 0;
-}
-
-
 int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args) {
   if (args->count() > 0) {
     app_meta.resetStopwatch();
@@ -998,30 +973,159 @@ int callback_active_app(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_sensor_info(StringBuilder* text_return, StringBuilder* args) {
+int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = 0;
+  int ret_local = 0;
+  char* cmd    = args->position_trimmed(0);
+  int   s_id   = args->position_as_int(1);
+  bool list_sensors = false;
   if (0 < args->count()) {
-    int arg0 = args->position_as_int(0);
-    switch ((SensorID) arg0) {
-      case SensorID::MAGNETOMETER:   magneto.printDebug(text_return);  break;
-      case SensorID::BARO:           baro.printDebug(text_return);     break;
-      case SensorID::LIGHT:          i2c1.printDebug(text_return);     break;
-      case SensorID::UV:             uv.printDebug(text_return);       break;
-      case SensorID::THERMOPILE:     grideye.printDebug(text_return);  break;
-      case SensorID::LUX:            tsl2561.printDebug(text_return);  break;
-      case SensorID::BATT_VOLTAGE:   grideye.printFrame(text_return);  break;
-      //case SensorID::IMU:                break;
-      //case SensorID::MIC:                break;
-      //case SensorID::GPS:                break;
-      //case SensorID::TOF:            tmp102.printDebug(text_return);        break;
-      default:
-        text_return->concatf("Unsupported sensor: %d\n", arg0);
-        return -1;
+    if (0 == StringBuilder::strcasecmp(cmd, "info")) {
+      if (1 < args->count()) {
+        switch ((SensorID) s_id) {
+          case SensorID::MAGNETOMETER:   magneto.printDebug(text_return);  break;
+          case SensorID::BARO:           baro.printDebug(text_return);     break;
+          case SensorID::LIGHT:          i2c1.printDebug(text_return);     break;
+          case SensorID::UV:             uv.printDebug(text_return);       break;
+          case SensorID::THERMOPILE:     grideye.printDebug(text_return);  break;
+          case SensorID::LUX:            tsl2561.printDebug(text_return);  break;
+          case SensorID::BATT_VOLTAGE:   grideye.printFrame(text_return);  break;
+          //case SensorID::IMU:                break;
+          //case SensorID::MIC:                break;
+          case SensorID::GPS:            gps.printDebug(text_return);      break;
+          //case SensorID::TOF:            tmp102.printDebug(text_return);        break;
+          default:
+            text_return->concatf("Unsupported sensor: %d\n", s_id);
+            list_sensors = true;
+            break;
+        }
+      }
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "init")) {
+      if (1 < args->count()) {
+        switch ((SensorID) s_id) {
+          case SensorID::MAGNETOMETER:   ret_local = magneto.init(&i2c1, &spi0);   break;
+          case SensorID::BARO:           ret_local = baro.init();                  break;
+          case SensorID::LUX:            ret_local = tsl2561.init();               break;
+          case SensorID::UV:             ret_local = uv.init();                    break;
+          case SensorID::THERMOPILE:     ret_local = grideye.init(&i2c1);          break;
+          //case SensorID::TOF:            ret_local = tof.init(&i2c1);              break;
+          //case SensorID::BATT_VOLTAGE:       break;
+          case SensorID::IMU:            ret_local = read_imu();               break;
+          //case SensorID::MIC:                break;
+          //case SensorID::GPS:                break;
+          //case SensorID::LIGHT:              break;
+          default:
+            text_return->concatf("Unsupported sensor: %d\n", s_id);
+            list_sensors = true;
+            break;
+        }
+        text_return->concatf("Sensor %d init() returned %d\n", s_id, ret_local);
+      }
+    }
+    if (0 == StringBuilder::strcasecmp(cmd, "refresh")) {
+      if (1 < args->count()) {
+        switch ((SensorID) s_id) {
+          // case SensorID::MAGNETOMETER:   magneto.printDebug(text_return);  break;
+          case SensorID::BARO:              ret_local = baro.refresh();     break;
+          // case SensorID::LIGHT:          i2c1.printDebug(text_return);     break;
+          // case SensorID::UV:             uv.printDebug(text_return);       break;
+          // case SensorID::THERMOPILE:     grideye.printDebug(text_return);  break;
+          // case SensorID::LUX:            tsl2561.printDebug(text_return);  break;
+          // case SensorID::BATT_VOLTAGE:   grideye.printFrame(text_return);  break;
+          //case SensorID::IMU:                break;
+          //case SensorID::TOF:            tmp102.printDebug(text_return);        break;
+          default:
+            text_return->concatf("Unsupported sensor: %d\n", s_id);
+            list_sensors = true;
+            break;
+        }
+        text_return->concatf("Sensor %d refresh() returned %d\n", s_id, ret_local);
+      }
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "poll")) {
+      if (1 < args->count()) {
+        switch ((SensorID) s_id) {
+          case SensorID::MAGNETOMETER:   ret_local = magneto.poll();   break;
+          case SensorID::BARO:           ret_local = baro.poll();                  break;
+          case SensorID::LUX:            ret_local = tsl2561.poll();               break;
+          case SensorID::UV:             ret_local = uv.poll();                    break;
+          case SensorID::THERMOPILE:     ret_local = grideye.poll();          break;
+          //case SensorID::TOF:            ret_local = tof.poll();              break;
+          //case SensorID::BATT_VOLTAGE:       break;
+          //case SensorID::IMU:            ret_local = read_imu();               break;
+          //case SensorID::MIC:                break;
+          //case SensorID::GPS:                break;
+          //case SensorID::LIGHT:              break;
+          default:
+            text_return->concatf("Unsupported sensor: %d\n", s_id);
+            list_sensors = true;
+            break;
+        }
+        text_return->concatf("Sensor %d poll() returned %d\n", s_id, ret_local);
+      }
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "enable")) {
+      if (1 < args->count()) {
+        bool s_en = (1 < args->count()) ? (1 == args->position_as_int(1)) : true;
+        bool en   = false;
+        switch ((SensorID) s_id) {
+          case SensorID::MAGNETOMETER:  magneto.power(s_en);    en = magneto.power();     break;
+          case SensorID::BARO:          en = baro.enabled();            break;
+          case SensorID::LUX:           tsl2561.enabled(s_en);  en = tsl2561.enabled();   break;
+          case SensorID::UV:            uv.enabled(s_en);       en = uv.enabled();        break;
+          case SensorID::THERMOPILE:    grideye.enabled(s_en);  en = grideye.enabled();   break;
+          case SensorID::BATT_VOLTAGE:  break;
+          case SensorID::IMU:           break;
+          case SensorID::MIC:           break;
+          case SensorID::GPS:           break;
+          case SensorID::TOF:           break;
+          case SensorID::LIGHT:         break;
+          default:
+            text_return->concatf("Unsupported sensor: %d\n", s_id);
+            list_sensors = true;
+            break;
+        }
+        text_return->concatf("Sensor %d is now %sabled\n", s_id, en?"en":"dis");
+      }
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "profiler")) {
+      if (args->count() > 1) {
+        stopwatch_sensor_baro.reset();
+        stopwatch_sensor_uv.reset();
+        stopwatch_sensor_grideye.reset();
+        stopwatch_sensor_imu.reset();
+        stopwatch_sensor_lux.reset();
+        stopwatch_sensor_mag.reset();
+        stopwatch_sensor_gps.reset();
+        stopwatch_sensor_tof.reset();
+        stopwatch_touch_poll.reset();
+      }
+      StopWatch::printDebugHeader(text_return);
+      stopwatch_sensor_baro.printDebug("Baro", text_return);
+      stopwatch_sensor_uv.printDebug("UV", text_return);
+      stopwatch_sensor_grideye.printDebug("GridEye", text_return);
+      stopwatch_sensor_imu.printDebug("IMU", text_return);
+      stopwatch_sensor_lux.printDebug("TSL2561", text_return);
+      stopwatch_sensor_tof.printDebug("ToF", text_return);
+      stopwatch_sensor_mag.printDebug("Magnetometer", text_return);
+      stopwatch_sensor_gps.printDebug("GPS", text_return);
+      stopwatch_touch_poll.printDebug("Touch", text_return);
+    }
+    else {
+      ret = -1;
     }
   }
   else {   // No arguments means print the sensor index list.
+    list_sensors = true;
+  }
+
+  if (list_sensors) {
     listAllSensors(text_return);
   }
-  return 0;
+  return ret;
 }
 
 
@@ -1192,66 +1296,6 @@ int callback_meta_filter_set_strat(StringBuilder* text_return, StringBuilder* ar
 }
 
 
-int callback_sensor_init(StringBuilder* text_return, StringBuilder* args) {
-  int ret = -1;
-  if (1 == args->count()) {
-    int arg0 = args->position_as_int(0);
-    //int arg1 = args->position_as_int(1);
-    switch ((SensorID) arg0) {
-      case SensorID::MAGNETOMETER:   ret = magneto.init(&i2c1, &spi0);   break;
-      case SensorID::BARO:           ret = baro.init();                  break;
-      case SensorID::LUX:            ret = tsl2561.init();               break;
-      case SensorID::UV:             ret = uv.init();                    break;
-      case SensorID::THERMOPILE:     ret = grideye.init(&i2c1);          break;
-      case SensorID::TOF:            ret = tof.init(&Wire1);             break;
-      //case SensorID::BATT_VOLTAGE:       break;
-      case SensorID::IMU:            ret = read_imu();               break;
-      //case SensorID::MIC:                break;
-      //case SensorID::GPS:                break;
-      //case SensorID::LIGHT:              break;
-      default:
-        text_return->concatf("Unsupported sensor: %d\n", arg0);
-        return -1;
-    }
-    text_return->concatf("Sensor %d init() returned %d\n", arg0, ret);
-  }
-  else {   // No arguments means print the sensor index list.
-    listAllSensors(text_return);
-  }
-  return 0;
-}
-
-
-int callback_sensor_enable(StringBuilder* text_return, StringBuilder* args) {
-  if (0 < args->count()) {
-    int arg0  = args->position_as_int(0);
-    bool arg1 = (1 < args->count()) ? (1 == args->position_as_int(1)) : true;
-    bool en   = false;
-    switch ((SensorID) arg0) {
-      case SensorID::MAGNETOMETER:  magneto.power(arg1);    en = magneto.power();     break;
-      case SensorID::BARO:          en = baro.enabled();            break;
-      case SensorID::LUX:           tsl2561.enabled(arg1);  en = tsl2561.enabled();   break;
-      case SensorID::UV:            uv.enabled(arg1);       en = uv.enabled();        break;
-      case SensorID::THERMOPILE:    grideye.enabled(arg1);  en = grideye.enabled();   break;
-      case SensorID::BATT_VOLTAGE:  break;
-      case SensorID::IMU:           break;
-      case SensorID::MIC:           break;
-      case SensorID::GPS:           break;
-      case SensorID::TOF:           break;
-      case SensorID::LIGHT:         break;
-      default:
-        text_return->concatf("Unsupported sensor: %d\n", arg0);
-        return -1;
-    }
-    text_return->concatf("Sensor %d is now %sabled\n", arg0, en?"en":"dis");
-  }
-  else {   // No arguments means print the sensor index list.
-    listAllSensors(text_return);
-  }
-  return 0;
-}
-
-
 int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
   if (1 == args->count()) {
     float arg0 = args->position_as_double(0);
@@ -1343,20 +1387,16 @@ void setup() {
   console.defineCommand("aout",        arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
   console.defineCommand("fft",         arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
   console.defineCommand("synth",       arg_list_4_uuff, "Synth parameters.", "", 2, callback_synth_set);
-  console.defineCommand("si",          's', ParsingConsole::tcodes_uint_1, "Sensor information.", "", 0, callback_sensor_info);
+  console.defineCommand("sensor",      's', ParsingConsole::tcodes_str_4, "Sensor tools", "", 0, callback_sensor_tools);
   console.defineCommand("sfi",         ParsingConsole::tcodes_uint_1, "Sensor filter info.", "", 0, callback_sensor_filter_info);
   console.defineCommand("mfi",         ParsingConsole::tcodes_uint_1, "Meta filter info.", "", 1, callback_meta_filter_info);
-  console.defineCommand("sinit",       ParsingConsole::tcodes_uint_2, "Sensor initialize.", "", 0, callback_sensor_init);
-  console.defineCommand("se",          ParsingConsole::tcodes_uint_2, "Sensor enable.", "", 0, callback_sensor_enable);
   console.defineCommand("sfs",         ParsingConsole::tcodes_uint_3, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
   console.defineCommand("mfs",         ParsingConsole::tcodes_uint_3, "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
   console.defineCommand("app",         'a', ParsingConsole::tcodes_uint_1, "Select active application.", "", 0, callback_active_app);
-  console.defineCommand("sprof",       ParsingConsole::tcodes_uint_1, "Dump sensor profiler.", "", 0, callback_print_sensor_profiler);
   console.defineCommand("aprof",       ParsingConsole::tcodes_uint_1, "Dump application profiler.", "", 0, callback_print_app_profiler);
   console.defineCommand("cbor",        ParsingConsole::tcodes_uint_1, "CBOR test battery.", "", 0, callback_cbor_tests);
   console.defineCommand("vol",         ParsingConsole::tcodes_float_1, "Audio volume.", "", 0, callback_audio_volume);
   console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
-  console.defineCommand("app",         'a', ParsingConsole::tcodes_uint_1, "Select active application.", "", 0, callback_active_app);
   console.defineCommand("conf",        'c',  ParsingConsole::tcodes_str_3, "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
 
   console.setTXTerminator(LineTerm::CRLF);
@@ -1475,7 +1515,6 @@ void loop() {
     if (rx_len > 0) {
     }
   }
-
 
   spi_spin();
   i2c0.poll();

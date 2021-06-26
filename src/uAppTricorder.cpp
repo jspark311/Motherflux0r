@@ -143,8 +143,8 @@ int8_t uAppTricorder::_process_user_input() {
         FB->writeString("Lux");
         FB->setTextColor(WHITE, BLACK);
         FB->writeString(" / ");
-        FB->setTextColor(MAGENTA, BLACK);
-        FB->writeString("UVI");
+        FB->setTextColor(RED, BLACK);
+        FB->writeString("IR");
       }
       else {
         FB->setTextColor(0x791F, BLACK);
@@ -152,7 +152,11 @@ int8_t uAppTricorder::_process_user_input() {
         FB->setTextColor(WHITE, BLACK);
         FB->writeString(" / ");
         FB->setTextColor(0xF80F, BLACK);
-        FB->writeString("UVb       ");
+        FB->writeString("UVb");
+        FB->setTextColor(WHITE, BLACK);
+        FB->writeString(" / ");
+        FB->setTextColor(MAGENTA, BLACK);
+        FB->writeString("UVI");
       }
     }
     else if (_slider_pending <= 37) {
@@ -262,17 +266,17 @@ void uAppTricorder::_redraw_window() {
     if (_render_lock_range()) {
       graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
       draw_graph_obj(
-        0, 10, 96, 53, YELLOW, 0xF140, MAGENTA,
+        0, 10, 96, 53, YELLOW, 0xF140, RED,
         true, _cluttered_display(), _render_text_value(),
-        &graph_array_ana_light, &graph_array_visible, &graph_array_uvi
+        &graph_array_ana_light, &graph_array_visible, &graph_array_broad_ir
       );
     }
     else {
       if (graph_array_uva.dirty()) {
         draw_graph_obj(
-          0, 10, 96, 53, 0x791F, 0xF80F,
+          0, 10, 96, 53, 0x791F, 0xF80F, MAGENTA,
           true, _cluttered_display(), _render_text_value(),
-          &graph_array_uva, &graph_array_uvb
+          &graph_array_uva, &graph_array_uvb, &graph_array_uvi
         );
       }
     }

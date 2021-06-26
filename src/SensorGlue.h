@@ -27,6 +27,7 @@ extern SensorFilter<float> graph_array_uvb;
 extern SensorFilter<float> graph_array_uvi;
 extern SensorFilter<float> graph_array_ana_light;
 extern SensorFilter<float> graph_array_visible;
+extern SensorFilter<float> graph_array_broad_ir;
 extern SensorFilter<float> graph_array_therm_mean;
 extern SensorFilter<float> graph_array_therm_frame;
 //extern SensorFilter<float> graph_array_mag_confidence;

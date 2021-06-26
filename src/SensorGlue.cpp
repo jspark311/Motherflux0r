@@ -16,6 +16,7 @@ SensorFilter<float> graph_array_uvb(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_uvi(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_ana_light(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_broad_ir(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0);
 SensorFilter<float> graph_array_mag_strength_x(FilteringStrategy::RAW, 96, 0);
@@ -46,6 +47,8 @@ int8_t init_sensor_memory() {
   if (0 != graph_array_ana_light.init()) {      return ret;   }
   ret--;
   if (0 != graph_array_visible.init()) {        return ret;   }
+  ret--;
+  if (0 != graph_array_broad_ir.init()) {       return ret;   }
   ret--;
   if (0 != graph_array_therm_mean.init()) {     return ret;   }
   ret--;

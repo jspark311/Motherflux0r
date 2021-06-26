@@ -342,8 +342,8 @@ void uAppBoot::_redraw_window() {
           break;
         case UAPP_BOOT_FLAG_INIT_UV:
           if (uv.initialized()) {
-            ret_local = (VEML6075Err::SUCCESS == uv.enabled(true));
-            //ret_local = (VEML6075Err::SUCCESS == uv.setIntegrationTime(VEML6075IntTime::IT_100MS));
+            //ret_local = (VEML6075Err::SUCCESS == uv.enabled(true));
+            ret_local = (VEML6075Err::SUCCESS == uv.setIntegrationTime(VEML6075IntTime::IT_100MS));
           }
           break;
         case UAPP_BOOT_FLAG_INIT_TOUCH:
