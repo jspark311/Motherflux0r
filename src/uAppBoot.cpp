@@ -203,8 +203,8 @@ void uAppBoot::_redraw_window() {
           FB->setTextSize(1);
           FB->writeString("Motherflux0r");
           FB->setTextSize(0);
-          display.fillRect(0, 11, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
-          display.fillRect(0, 24, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
+          FB->fillRect(0, 11, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
+          FB->fillRect(0, 24, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_LUX:
@@ -263,9 +263,7 @@ void uAppBoot::_redraw_window() {
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_PMU_CHARGER:
-          //ret_local = (0 == pmu.init(&i2c0));
-          pmu.init(&i2c0);
-          ret_local = true;
+          ret_local = (0 == pmu.init(&i2c0));
           break;
         case UAPP_BOOT_FLAG_INIT_PMU_GUAGE:
           ret_local = true;

@@ -130,6 +130,7 @@ SOURCES_CPP += src/uAppStandby.cpp
 SOURCES_CPP += src/uAppSynthBox.cpp
 SOURCES_CPP += src/uAppTouchTest.cpp
 SOURCES_CPP += src/uAppTricorder.cpp
+SOURCES_CPP += src/uAppLocation.cpp
 SOURCES_CPP += src/Storage/CalConfRecord.cpp
 SOURCES_CPP += src/Storage/ConfRecord.cpp
 SOURCES_CPP += src/Storage/UsrConfRecord.cpp

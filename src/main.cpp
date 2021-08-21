@@ -1013,7 +1013,7 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
           //case SensorID::BATT_VOLTAGE:       break;
           case SensorID::IMU:            ret_local = read_imu();               break;
           //case SensorID::MIC:                break;
-          //case SensorID::GPS:                break;
+          case SensorID::GPS:            ret_local = gps.init();               break;
           //case SensorID::LIGHT:              break;
           default:
             text_return->concatf("Unsupported sensor: %d\n", s_id);
@@ -1581,7 +1581,14 @@ void loop() {
       uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
-  pmu.poll();
+  switch (pmu.poll()) {
+    case 1:
+      graph_array_batt_voltage.feedFilter(pmu.battVoltage());
+      graph_array_batt_current.feedFilter(pmu.ltc294x.batteryCurrent());
+      break;
+    default:
+      break;
+  }
   pmu.fetchLog(&output);
 
   millis_now = millis();

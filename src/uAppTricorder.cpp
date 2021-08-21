@@ -30,7 +30,6 @@ static DataVis current_data_vis = DataVis::TEXT;
 
 uAppTricorder::uAppTricorder() : uApp("Tricorder", (Image*) &display) {}
 
-
 uAppTricorder::~uAppTricorder() {}
 
 
@@ -75,6 +74,8 @@ int8_t uAppTricorder::_lc_on_active() {
 */
 int8_t uAppTricorder::_lc_on_teardown() {
   int8_t ret = 1;
+  if (nullptr != wakelock_tof) {   wakelock_tof->release();   }
+  if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
   return ret;
 }
 
@@ -100,10 +101,10 @@ int8_t uAppTricorder::_lc_on_inactive() {
 int8_t uAppTricorder::_process_user_input() {
   int8_t ret = 1;
   if (_slider_current != _slider_pending) {
+    FB->fill(BLACK);
+    FB->setTextSize(0);
+    FB->setCursor(0, 0);
     if (_slider_pending <= 7) {
-      FB->fill(BLACK);
-      FB->setTextSize(0);
-      FB->setCursor(0, 0);
       if (_render_lock_range()) {
         FB->setTextColor(0x03E0, BLACK);
         FB->writeString("Pressure (Pa)");
@@ -118,22 +119,13 @@ int8_t uAppTricorder::_process_user_input() {
       }
     }
     else if (_slider_pending <= 15) {
-      FB->fill(BLACK);
-      FB->setTextSize(0);
-      FB->setCursor(0, 0);
       FB->writeString("Unimplemented");
     }
     else if (_slider_pending <= 22) {
-      FB->fill(BLACK);
-      FB->setTextSize(0);
-      FB->setCursor(0, 0);
       FB->setTextColor(0x8235, BLACK);
       FB->writeString("Distance (mm)");
     }
     else if (_slider_pending <= 30) {
-      FB->fill(BLACK);
-      FB->setTextSize(0);
-      FB->setCursor(0, 0);
       if (_render_lock_range()) {
         FB->setTextColor(YELLOW, BLACK);
         FB->writeString("ANA");
@@ -160,20 +152,22 @@ int8_t uAppTricorder::_process_user_input() {
       }
     }
     else if (_slider_pending <= 37) {
-      FB->fill(BLACK);
-      FB->setTextSize(0);
-      FB->setCursor(0, 0);
-      FB->writeString("Unimplemented");
+      FB->setTextColor(WHITE, BLACK);
+      FB->writeString("Batt ");
+      FB->setTextColor(COLOR_BATT_VOLTAGE, BLACK);
+      FB->writeString("V");
+      FB->setTextColor(WHITE, BLACK);
+      FB->writeString(" / ");
+      FB->setTextColor(COLOR_BATT_CURRENT, BLACK);
+      FB->writeString("I");
     }
     else if (_slider_pending <= 45) {
       redraw_app_window();
     }
     else if (_slider_pending <= 52) {
-      FB->fill(BLACK);
     }
     else {
       //FB->fillRect(0, 11, FB->width()-1, FB->y()-12, BLACK);
-      FB->fill(BLACK);
     }
     _slider_current = _slider_pending;
   }
@@ -282,6 +276,13 @@ void uAppTricorder::_redraw_window() {
     }
   }
   else if (_slider_current <= 37) {
+    if (graph_array_batt_voltage.dirty() && graph_array_batt_current.dirty()) {
+      draw_graph_obj(
+        0, 10, 96, 37, COLOR_BATT_VOLTAGE, COLOR_BATT_CURRENT,
+        true, _cluttered_display(), _render_text_value(),
+        &graph_array_batt_voltage, &graph_array_batt_current
+      );
+    }
   }
   else if (_slider_current <= 45) {
     // IMU

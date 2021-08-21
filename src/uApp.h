@@ -27,8 +27,9 @@ enum class AppID : uint8_t {
   COMMS_TEST   =  6,  // Connecting to the outside world.
   META         =  7,  // Shutdown/reboot/reflash, profiles.
   TRICORDER    =  8,  // This is the primary purpose of the device.
-  HOT_STANDBY  =  9,  // Full operation with powered-down UI elements.
-  SUSPEND      = 10   // Minimal power without an obligatory reboot.
+  LOCATOR      =  9,  // GPS and location tools.
+  HOT_STANDBY  = 10,  // Full operation with powered-down UI elements.
+  SUSPEND      = 11   // Minimal power without an obligatory reboot.
 };
 
 /* Application lifecycle state machine positions. */
@@ -178,6 +179,20 @@ class uAppTricorder : public uApp {
     void   _redraw_window();
 };
 
+
+class uAppLocation : public uApp {
+  public:
+    uAppLocation();
+    ~uAppLocation();
+
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
 
 
 class uAppTouchTest : public uApp {

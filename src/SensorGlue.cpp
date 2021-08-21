@@ -23,6 +23,8 @@ SensorFilter<float> graph_array_mag_strength_x(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_mag_strength_y(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_mag_strength_z(FilteringStrategy::RAW, 96, 0);
 SensorFilter<float> graph_array_time_of_flight(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_batt_voltage(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_batt_current(FilteringStrategy::RAW, 96, 0);
 
 
 /*
@@ -61,6 +63,10 @@ int8_t init_sensor_memory() {
   if (0 != graph_array_mag_strength_z.init()) { return ret;   }
   ret--;
   if (0 != graph_array_time_of_flight.init()) { return ret;   }
+  ret--;
+  if (0 != graph_array_batt_voltage.init()) {   return ret;   }
+  ret--;
+  if (0 != graph_array_batt_current.init()) {   return ret;   }
   ret--;
   //graph_array_mag_confidence.init();
   return 0;

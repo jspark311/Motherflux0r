@@ -112,41 +112,42 @@ void uAppRoot::_redraw_window() {
   FB->setTextColor(MAGENTA, BLACK);
   if (_slider_current <= 7) {
     render_button_icon(ICON_LIGHT, 0, 11, 0xFFFF);
-    FB->writeString("Touch Diag");
+    FB->writeString("Touch Diag  ");
     app_page = AppID::TOUCH_TEST;
   }
   else if (_slider_current <= 15) {
     render_button_icon(ICON_UVI, 0, 11, 0xFFFF);
-    FB->writeString("Settings");
+    FB->writeString("Settings    ");
     app_page = AppID::CONFIGURATOR;
   }
   else if (_slider_current <= 22) {
     render_button_icon(ICON_RH, 0, 11, 0xFFFF);
-    FB->writeString("Data MGMT");
+    FB->writeString("Data MGMT   ");
     app_page = AppID::DATA_MGMT;
   }
   else if (_slider_current <= 30) {
     render_button_icon(ICON_MAGNET, 0, 11, 0xFFFF);
-    FB->writeString("Synth Box");
+    FB->writeString("Synth Box   ");
     app_page = AppID::SYNTH_BOX;
   }
   else if (_slider_current <= 37) {
     render_button_icon(ICON_SOUND, 0, 11, 0xFFFF);
-    FB->writeString("Comms");
+    FB->writeString("Comms       ");
     app_page = AppID::COMMS_TEST;
   }
   else if (_slider_current <= 45) {
     render_button_icon(ICON_THERMO, 0, 11, 0xFFFF);
-    FB->writeString("Meta");
+    FB->writeString("Meta        ");
     app_page = AppID::META;
   }
   else if (_slider_current <= 52) {
     render_button_icon(ICON_GPS, 0, 11, 0xFFFF);
-    FB->writeString("I2C Scanner");
+    FB->writeString("GPS Tools   ");
+    app_page = AppID::LOCATOR;
   }
   else {
     render_button_icon(ICON_IMU, 0, 11, 0xFFFF);
-    FB->writeString("Tricorder");
+    FB->writeString("Tricorder   ");
     app_page = AppID::TRICORDER;
   }
 }

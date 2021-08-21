@@ -35,6 +35,8 @@ extern SensorFilter<float> graph_array_mag_strength_x;
 extern SensorFilter<float> graph_array_mag_strength_y;
 extern SensorFilter<float> graph_array_mag_strength_z;
 extern SensorFilter<float> graph_array_time_of_flight;
+extern SensorFilter<float> graph_array_batt_voltage;
+extern SensorFilter<float> graph_array_batt_current;
 
 /* Magnetic pipeline */
 extern TripleAxisTerminus     mag_vect;   // The magnetic field vector.

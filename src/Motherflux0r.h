@@ -77,6 +77,9 @@
 #define COLOR_Y_AXIS    0xF207
 #define COLOR_Z_AXIS    0x031F
 
+#define COLOR_BATT_VOLTAGE  0x03F2
+#define COLOR_BATT_CURRENT  0x7EF2
+
 
 
 /*******************************************************************************

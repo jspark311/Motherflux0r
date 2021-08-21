@@ -12,6 +12,7 @@ uAppTouchTest app_touch_test;
 uAppRoot app_root;
 uAppSynthBox app_synthbox;
 uAppStandby app_standby;
+uAppLocation app_locator;
 uAppConfigurator app_config;
 uAppComms app_comms;
 uAppDataMgmt app_data_mgmt;
@@ -35,12 +36,13 @@ void  uApp::setAppActive(AppID new_app) {
     case AppID::APP_BOOT:       pending_app_ptr = &app_boot;           break;
     case AppID::APP_SELECT:     pending_app_ptr = &app_root;           break;
     case AppID::TOUCH_TEST:     pending_app_ptr = &app_touch_test;     break;
-    case AppID::TRICORDER:      pending_app_ptr = &app_tricorder;      break;
+    case AppID::META:           pending_app_ptr = &app_meta;           break;
     case AppID::CONFIGURATOR:   pending_app_ptr = &app_config;         break;
     case AppID::DATA_MGMT:      pending_app_ptr = &app_data_mgmt;      break;
     case AppID::SYNTH_BOX:      pending_app_ptr = &app_synthbox;       break;
     case AppID::COMMS_TEST:     pending_app_ptr = &app_comms;          break;
-    case AppID::META:           pending_app_ptr = &app_meta;           break;
+    case AppID::TRICORDER:      pending_app_ptr = &app_tricorder;      break;
+    case AppID::LOCATOR:        pending_app_ptr = &app_locator;        break;
     case AppID::HOT_STANDBY:    pending_app_ptr = &app_standby;        break;
     case AppID::SUSPEND:        pending_app_ptr = &app_standby;        break;
   }
