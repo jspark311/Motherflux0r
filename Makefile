@@ -173,6 +173,7 @@ SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/usb_inst.cpp
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/yield.cpp
 
 SOURCES_CPP += lib/CppPotpourri/src/AbstractPlatform.cpp
+SOURCES_CPP += lib/CppPotpourri/src/EnumeratedTypeCodes.cpp
 SOURCES_CPP += lib/CppPotpourri/src/ParsingConsole.cpp
 SOURCES_CPP += lib/CppPotpourri/src/GPSWrapper.cpp
 SOURCES_CPP += lib/CppPotpourri/src/I2CDevice.cpp
