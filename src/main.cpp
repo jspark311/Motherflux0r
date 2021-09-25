@@ -773,8 +773,17 @@ int callback_touch_tools(StringBuilder* text_return, StringBuilder* args) {
     if (0 == StringBuilder::strcasecmp(cmd, "info")) {
       touch->printDebug(text_return);
     }
+    else if (0 == StringBuilder::strcasecmp(cmd, "poll")) {
+      text_return->concatf("SX8634 poll() returns %d.\n", touch->poll());
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "init")) {
+      text_return->concatf("SX8634 init() returns %d.\n", touch->init());
+    }
     else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
       text_return->concatf("SX8634 reset() returns %d.\n", touch->reset());
+    }
+    else if (0 == StringBuilder::strcasecmp(cmd, "ping")) {
+      text_return->concatf("SX8634 ping() returns %d\n", touch->ping());
     }
     else if (0 == StringBuilder::strcasecmp(cmd, "mode")) {
       if (1 < args->count()) {
@@ -1600,7 +1609,6 @@ void loop() {
 
   if ((Serial) && (output.length() > 0)) {
     Serial.write(output.string(), output.length());
-    SerialGPS.write(output.string(), output.length());
   }
   stopwatch_main_loop_time.markStop();
   graph_array_cpu_time.feedFilter(stopwatch_main_loop_time.meanTime()/1000.0);
