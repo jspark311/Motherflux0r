@@ -312,6 +312,7 @@ SOURCES_CPP += $(TEENSY_PATH)/libraries/Time/Time.cpp
 SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/ConcretePlatform.cpp
 SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/I2CAdapter.cpp
 SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/SPIAdapter.cpp
+SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/UART.cpp
 SOURCES_CPP += lib/teensy4_i2c/src/i2c_register_slave.cpp
 SOURCES_CPP += lib/teensy4_i2c/src/i2c_driver_wire.cpp
 SOURCES_CPP += lib/teensy4_i2c/src/imx_rt1060/imx_rt1060_i2c_driver.cpp

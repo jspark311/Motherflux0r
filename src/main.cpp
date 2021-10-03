@@ -14,6 +14,7 @@
 
 #include <SPIAdapter.h>
 #include <I2CAdapter.h>
+#include <UARTAdapter.h>
 
 #include <Audio.h>
 #include <SD.h>
@@ -121,6 +122,20 @@ const I2CAdapterOptions i2c1_opts(
 
 I2CAdapter i2c0(&i2c0_opts);
 I2CAdapter i2c1(&i2c1_opts);
+
+UARTOpts usb_comm_opts {
+  .bitrate       = 115200,
+  .start_bits    = 0,
+  .bit_per_word  = 8,
+  .stop_bits     = UARTStopBit::STOP_1,
+  .parity        = UARTParityBit::NONE,
+  .flow_control  = UARTFlowControl::NONE,
+  .xoff_char     = 0,
+  .xon_char      = 0,
+  .padding       = 0
+};
+
+UARTAdapter console_uart(0, 255, 255, 255, 255, 48, 256);
 
 
 /*******************************************************************************
@@ -1334,6 +1349,80 @@ int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
+  //void clearHistory();
+  //void maxHistoryDepth(uint8_t);
+  //inline uint8_t maxHistoryDepth() {    return _max_history;       };
+  //inline uint8_t historyDepth() {       return _history.size();    };
+  //inline void setPromptString(const char* str) {    _prompt_string = (char*) str;   };
+  //inline bool historyFail() {            return _console_flag(CONSOLE_FLAG_HISTORY_FAIL);               };
+  //inline void historyFail(bool x) {      return _console_set_flag(CONSOLE_FLAG_HISTORY_FAIL, x);        };
+  //inline bool hasColor() {               return _console_flag(CONSOLE_FLAG_HAS_ANSI);                   };
+  //inline void hasColor(bool x) {         return _console_set_flag(CONSOLE_FLAG_HAS_ANSI, x);            };
+  //inline bool printHelpOnFail() {        return _console_flag(CONSOLE_FLAG_PRINT_HELP_ON_FAIL);         };
+  //inline void printHelpOnFail(bool x) {  return _console_set_flag(CONSOLE_FLAG_PRINT_HELP_ON_FAIL, x);  };
+  int ret = 0;
+  char* cmd    = args->position_trimmed(0);
+  int   arg1   = args->position_as_int(1);
+  bool  print_term_enum = false;
+  if (0 == StringBuilder::strcasecmp(cmd, "echo")) {
+    if (1 < args->count()) {
+      console.localEcho(0 != arg1);
+    }
+    text_return->concatf("Console RX echo %sabled.\n", console.localEcho()?"en":"dis");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "prompt")) {
+    if (1 < args->count()) {
+      console.emitPrompt(0 != arg1);
+    }
+    text_return->concatf("Console autoprompt %sabled.\n", console.emitPrompt()?"en":"dis");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "force")) {
+    if (1 < args->count()) {
+      console.forceReturn(0 != arg1);
+    }
+    text_return->concatf("Console force-return %sabled.\n", console.forceReturn()?"en":"dis");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "rxterm")) {
+    if (1 < args->count()) {
+      switch (arg1) {
+        case 0:  case 1:  case 2:  case 3:
+          console.setRXTerminator((LineTerm) arg1);
+          break;
+        default:
+          print_term_enum = true;
+          break;
+      }
+    }
+    text_return->concatf("Console RX terminator: %s\n", ParsingConsole::terminatorStr(console.getRXTerminator()));
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "txterm")) {
+    if (1 < args->count()) {
+      switch (arg1) {
+        case 0:  case 1:  case 2:  case 3:
+          console.setTXTerminator((LineTerm) arg1);
+          break;
+        default:
+          print_term_enum = true;
+          break;
+      }
+    }
+    text_return->concatf("Console TX terminator: %s\n", ParsingConsole::terminatorStr(console.getTXTerminator()));
+  }
+  else {
+    ret = -1;
+  }
+
+  if (print_term_enum) {
+    text_return->concat("Terminator options:\n");
+    text_return->concat("\t0: ZEROBYTE\n");
+    text_return->concat("\t1: CR\n");
+    text_return->concat("\t2: LF\n");
+    text_return->concat("\t3: CRLF\n");
+  }
+  return ret;
+}
+
 
 
 /*******************************************************************************
@@ -1342,7 +1431,9 @@ int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
 void setup() {
   platform_init();
   boot_time = millis();
-  Serial.begin(115200);   // USB
+  console_uart.init(&usb_comm_opts);
+  console_uart.readCallback(&console);     // Attach the UART to console...
+  console.setOutputTarget(&console_uart); // ...and console to UART.
 
   pinMode(IMU_IRQ_PIN,    GPIOMode::INPUT_PULLUP);
   pinMode(DRV425_CS_PIN,  GPIOMode::INPUT); // Wrong
@@ -1380,7 +1471,7 @@ void setup() {
 
   /* Allocate memory for the filters. */
   if (0 != init_sensor_memory()) {
-    Serial.write("Failed to allocate memory for sensors.\n");
+    console_uart.write("Failed to allocate memory for sensors.\n");
   }
 
   graph_array_cpu_time.init();
@@ -1407,6 +1498,7 @@ void setup() {
   console.defineCommand("vol",         ParsingConsole::tcodes_float_1, "Audio volume.", "", 0, callback_audio_volume);
   console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
   console.defineCommand("conf",        'c',  ParsingConsole::tcodes_str_3, "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
+  console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "", 0, callback_console_tools);
 
   console.setTXTerminator(LineTerm::CRLF);
   console.setRXTerminator(LineTerm::CR);
@@ -1482,25 +1574,12 @@ void poll_uarts() {
 void loop() {
   stopwatch_main_loop_time.markStart();
   StringBuilder output;
-
   const uint8_t RX_BUF_LEN = 64;
   uint8_t ser_buffer[RX_BUF_LEN];
   uint8_t rx_len = 0;
+  memset(ser_buffer, 0, RX_BUF_LEN);
 
-  if (Serial) {
-    StringBuilder console_input;
-    memset(ser_buffer, 0, RX_BUF_LEN);
-    while ((RX_BUF_LEN > rx_len) && (0 < Serial.available())) {
-      ser_buffer[rx_len++] = Serial.read();
-    }
-    if (rx_len > 0) {
-      last_interaction = millis();
-      console_input.concat(ser_buffer, rx_len);
-      console.provideBuffer(&console_input);
-      ledOn(LED_B_PIN, 5, 500);
-    }
-    console.fetchLog(&output);
-  }
+  //last_interaction = millis();
 
   if (SerialGPS.available() > 1) {
     StringBuilder gps_input;
@@ -1607,9 +1686,8 @@ void loop() {
   // For tracking framerate, convert from period in micros to hz...
   graph_array_frame_rate.feedFilter(1000000.0 / 1+stopwatch_display.meanTime());
 
-  if ((Serial) && (output.length() > 0)) {
-    Serial.write(output.string(), output.length());
-  }
+  console.printToLog(&output);
+  console_uart.poll();
   stopwatch_main_loop_time.markStop();
   graph_array_cpu_time.feedFilter(stopwatch_main_loop_time.meanTime()/1000.0);
 }
