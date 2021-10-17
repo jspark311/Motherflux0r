@@ -14,14 +14,13 @@ tools/
 *.gch
 *.pch
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
+# Imported libraries
+lib/Audio/
+lib/CppPotpourri
+lib/ManuvrArduino
+lib/ManuvrDrivers
+lib/SD/
+lib/teensy4_i2c
 
 # Compiled Static libraries
 *.lai

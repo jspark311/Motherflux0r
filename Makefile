@@ -42,6 +42,9 @@ export MAKE    = $(shell which make)
 ###########################################################################
 CXXFLAGS     = -felide-constructors -fno-exceptions -fno-rtti -MMD
 CXXFLAGS    += -fpermissive -fno-threadsafe-statics
+CXXFLAGS    += -DCONFIG_MANUVR_CBOR
+CXXFLAGS    += -DCONFIG_MANUVR_IMG_SUPPORT
+CXXFLAGS    += -DCONFIG_MANUVR_M2M_SUPPORT
 
 CFLAGS       = -Wall -nostdlib
 CFLAGS      += -DF_CPU=$(CPU_SPEED)
@@ -197,6 +200,9 @@ SOURCES_CPP += lib/CppPotpourri/src/UARTAdapter.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Battery.cpp
 SOURCES_CPP += lib/CppPotpourri/src/WakeLock.cpp
 SOURCES_CPP += lib/CppPotpourri/src/uuid.cpp
+SOURCES_CPP += lib/CppPotpourri/src/ManuvrLink/ManuvrLink.cpp
+SOURCES_CPP += lib/CppPotpourri/src/ManuvrLink/ManuvrMsg.cpp
+SOURCES_CPP += lib/CppPotpourri/src/ManuvrLink/ManuvrMsgHdr.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Image/Image.cpp
 SOURCES_CPP += lib/CppPotpourri/src/cbor-cpp/cbor.cpp
 

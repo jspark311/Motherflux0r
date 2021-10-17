@@ -14,7 +14,7 @@
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
 
-#define TEST_PROG_VERSION           "1.7"
+#define TEST_PROG_VERSION           "1.8"
 #define TOUCH_DWELL_LONG_PRESS       1000  // Milliseconds for "long-press".
 #define E_VAL                      1.0184
 

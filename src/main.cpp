@@ -257,6 +257,7 @@ uint32_t tof_update_next   = 0;      //
 
 /* Console junk... */
 ParsingConsole console(128);
+const char* console_prompt_str = "Motherflux0r # ";
 static const TCode arg_list_4_uuff[]  = {TCode::UINT32, TCode::UINT32, TCode::FLOAT, TCode::FLOAT, TCode::NONE};
 static const TCode arg_list_4_float[] = {TCode::FLOAT,  TCode::FLOAT,  TCode::FLOAT, TCode::FLOAT, TCode::NONE};
 
@@ -1432,8 +1433,14 @@ void setup() {
   platform_init();
   boot_time = millis();
   console_uart.init(&usb_comm_opts);
-  console_uart.readCallback(&console);     // Attach the UART to console...
+  console_uart.readCallback(&console);    // Attach the UART to console...
   console.setOutputTarget(&console_uart); // ...and console to UART.
+  console.emitPrompt(true);
+  console.setTXTerminator(LineTerm::CRLF);
+  console.setRXTerminator(LineTerm::CR);
+  console.localEcho(true);
+  console.printHelpOnFail(true);
+  console.setPromptString(console_prompt_str);
 
   pinMode(IMU_IRQ_PIN,    GPIOMode::INPUT_PULLUP);
   pinMode(DRV425_CS_PIN,  GPIOMode::INPUT); // Wrong
@@ -1498,12 +1505,8 @@ void setup() {
   console.defineCommand("vol",         ParsingConsole::tcodes_float_1, "Audio volume.", "", 0, callback_audio_volume);
   console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
   console.defineCommand("conf",        'c',  ParsingConsole::tcodes_str_3, "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
-  console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "", 0, callback_console_tools);
+  console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
 
-  console.setTXTerminator(LineTerm::CRLF);
-  console.setRXTerminator(LineTerm::CR);
-  console.localEcho(true);
-  console.printHelpOnFail(true);
   console.init();
 
   StringBuilder ptc("Motherflux0r ");
