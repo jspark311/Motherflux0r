@@ -9,6 +9,7 @@
 #include <GPSWrapper.h>
 #include <StopWatch.h>
 #include <Image/Image.h>
+#include <ManuvrLink/ManuvrLink.h>
 #include <cbor-cpp/cbor.h>
 #include <uuid.h>
 
@@ -123,6 +124,40 @@ const I2CAdapterOptions i2c1_opts(
 I2CAdapter i2c0(&i2c0_opts);
 I2CAdapter i2c1(&i2c1_opts);
 
+ManuvrLinkOpts link_opts(
+  100,   // ACK timeout is 100ms.
+  2000,  // Send a KA every 2s.
+  2048,  // MTU for this link is 2 kibi.
+  TCode::CBOR,   // Payloads should be CBOR encoded.
+  // This side of the link will send a KA while IDLE, and
+  //   allows remote log write.
+  (MANUVRLINK_FLAG_SEND_KA | MANUVRLINK_FLAG_ALLOW_LOG_WRITE)
+);
+
+UARTOpts comm_unit_uart_opts {
+  .bitrate       = 115200,
+  .start_bits    = 0,
+  .bit_per_word  = 8,
+  .stop_bits     = UARTStopBit::STOP_1,
+  .parity        = UARTParityBit::NONE,
+  .flow_control  = UARTFlowControl::NONE,
+  .xoff_char     = 0,
+  .xon_char      = 0,
+  .padding       = 0
+};
+
+UARTOpts gps_uart_opts {
+  .bitrate       = 9600,
+  .start_bits    = 0,
+  .bit_per_word  = 8,
+  .stop_bits     = UARTStopBit::STOP_1,
+  .parity        = UARTParityBit::NONE,
+  .flow_control  = UARTFlowControl::NONE,
+  .xoff_char     = 0,
+  .xon_char      = 0,
+  .padding       = 0
+};
+
 UARTOpts usb_comm_opts {
   .bitrate       = 115200,
   .start_bits    = 0,
@@ -135,7 +170,14 @@ UARTOpts usb_comm_opts {
   .padding       = 0
 };
 
+
 UARTAdapter console_uart(0, 255, 255, 255, 255, 48, 256);
+UARTAdapter comm_unit_uart(1, COMM_RX_PIN, COMM_TX_PIN, 255, 255, 2048, 2048);
+UARTAdapter gps_uart(6, GPS_RX_PIN, GPS_TX_PIN, 255, 255, 48, 256);
+
+/* This object will contain our relationship with the Comm unit. */
+ManuvrLink* m_link = nullptr;
+
 
 
 /*******************************************************************************
@@ -245,8 +287,8 @@ StopWatch stopwatch_sensor_gps;
 StopWatch stopwatch_sensor_tof;
 
 StopWatch stopwatch_touch_poll;
-SensorFilter<float> graph_array_cpu_time(FilteringStrategy::MOVING_MED, 96, 0);
-SensorFilter<float> graph_array_frame_rate(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_cpu_time(96, FilteringStrategy::MOVING_MED);
+SensorFilter<float> graph_array_frame_rate(96, FilteringStrategy::RAW);
 
 
 /* Cheeseball async support stuff. */
@@ -292,6 +334,35 @@ static bool     imu_irq_fired       = false;
 * ISRs
 *******************************************************************************/
 void imu_isr_fxn() {         imu_irq_fired = true;        }
+
+
+/*******************************************************************************
+* Link callbacks
+*******************************************************************************/
+void link_callback_state(ManuvrLink* cb_link) {
+  StringBuilder log;
+  log.concatf("Link (0x%x) entered state %s\n", cb_link->linkTag(), ManuvrLink::sessionStateStr(cb_link->getState()));
+  //printf("%s\n\n", (const char*) log.string());
+}
+
+
+void link_callback_message(uint32_t tag, ManuvrMsg* msg) {
+  StringBuilder log;
+  KeyValuePair* kvps_rxd = nullptr;
+  log.concatf("link_callback_message(0x%x): \n", tag, msg->uniqueId());
+  msg->printDebug(&log);
+  msg->getPayload(&kvps_rxd);
+  if (kvps_rxd) {
+    //kvps_rxd->printDebug(&log);
+  }
+  if (msg->expectsReply()) {
+    int8_t ack_ret = msg->ack();
+    log.concatf("\nlink_callback_message ACK'ing %u returns %d.\n", msg->uniqueId(), ack_ret);
+  }
+  //printf("%s\n\n", (const char*) log.string());
+}
+
+
 
 
 /*******************************************************************************
@@ -581,6 +652,48 @@ static void cb_longpress(int button, uint32_t duration) {
 * Console callbacks
 *******************************************************************************/
 
+int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = 0;
+  char* cmd = args->position_trimmed(0);
+  if (0 == StringBuilder::strcasecmp(cmd, "info")) {
+    m_link->printDebug(text_return);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
+    text_return->concatf("Link reset() returns %d\n", m_link->reset());
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "hangup")) {
+    text_return->concatf("Link hangup() returns %d\n", m_link->hangup());
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "verbosity")) {
+    switch (args->count()) {
+      case 2:
+        m_link->verbosity(0x07 & args->position_as_int(1));
+      default:
+        text_return->concatf("Link verbosity is %u\n", m_link->verbosity());
+        break;
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "log")) {
+    //if (1 < args->count()) {
+      StringBuilder tmp_log("This is a remote log test.\n");
+      int8_t ret_local = m_link->writeRemoteLog(&tmp_log, false);
+      text_return->concatf("Remote log write returns %d\n", ret_local);
+    //}
+    //else text_return->concat("Usage: link log <logText>\n");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
+    // Send a description request message.
+    KeyValuePair a((uint32_t) millis(), "time_ms");
+    a.append((uint32_t) randomUInt32(), "rand");
+    int8_t ret_local = m_link->send(&a, true);
+    text_return->concatf("Description request send() returns ID %u\n", ret_local);
+  }
+  else text_return->concat("Usage: [info|reset|hangup|verbosity|desc]\n");
+
+  return ret;
+}
+
+
 int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
   char* conf_group_str = args->position_trimmed(0);
   char* key            = args->position_trimmed(1);
@@ -743,12 +856,6 @@ int callback_help(StringBuilder* text_return, StringBuilder* args) {
   else {
     console.printHelp(text_return);
   }
-  return 0;
-}
-
-
-int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
-  console.printHistory(text_return);
   return 0;
 }
 
@@ -1334,34 +1441,10 @@ int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_cbor_tests(StringBuilder* text_return, StringBuilder* args) {
-  int ret = 0;
-  int eeprom_len = EEPROM.length();
-  text_return->concatf("EEPROM len:  %d\n", eeprom_len);
-  StringBuilder cbor_return;
-  package_sensor_data_cbor(&cbor_return);
-  text_return->concatf("CBOR test results: %d\n", ret);
-  StringBuilder::printBuffer(text_return, cbor_return.string(), cbor_return.length(), "\t");
-  text_return->concatf("CBOR test results: %d\n", ret);
-  UUID testuuid;
-  uuid_gen(&testuuid);
-  uuid_to_sb(&testuuid, text_return);
-  return ret;
-}
-
-
 int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
-  //void clearHistory();
-  //void maxHistoryDepth(uint8_t);
-  //inline uint8_t maxHistoryDepth() {    return _max_history;       };
-  //inline uint8_t historyDepth() {       return _history.size();    };
   //inline void setPromptString(const char* str) {    _prompt_string = (char*) str;   };
-  //inline bool historyFail() {            return _console_flag(CONSOLE_FLAG_HISTORY_FAIL);               };
-  //inline void historyFail(bool x) {      return _console_set_flag(CONSOLE_FLAG_HISTORY_FAIL, x);        };
   //inline bool hasColor() {               return _console_flag(CONSOLE_FLAG_HAS_ANSI);                   };
   //inline void hasColor(bool x) {         return _console_set_flag(CONSOLE_FLAG_HAS_ANSI, x);            };
-  //inline bool printHelpOnFail() {        return _console_flag(CONSOLE_FLAG_PRINT_HELP_ON_FAIL);         };
-  //inline void printHelpOnFail(bool x) {  return _console_set_flag(CONSOLE_FLAG_PRINT_HELP_ON_FAIL, x);  };
   int ret = 0;
   char* cmd    = args->position_trimmed(0);
   int   arg1   = args->position_as_int(1);
@@ -1371,6 +1454,38 @@ int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
       console.localEcho(0 != arg1);
     }
     text_return->concatf("Console RX echo %sabled.\n", console.localEcho()?"en":"dis");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "history")) {
+    if (1 < args->count()) {
+      console.emitPrompt(0 != arg1);
+      char* subcmd = args->position_trimmed(1);
+      if (0 == StringBuilder::strcasecmp(subcmd, "clear")) {
+        console.clearHistory();
+        text_return->concat("History cleared.\n");
+      }
+      else if (0 == StringBuilder::strcasecmp(subcmd, "depth")) {
+        if (2 < args->count()) {
+          arg1 = args->position_as_int(2);
+          console.maxHistoryDepth(arg1);
+        }
+        text_return->concatf("History depth: %u\n", console.maxHistoryDepth());
+      }
+      else if (0 == StringBuilder::strcasecmp(subcmd, "logerrors")) {
+        if (2 < args->count()) {
+          arg1 = args->position_as_int(2);
+          console.historyFail(0 != arg1);
+        }
+        text_return->concatf("History %scludes failed commands.\n", console.historyFail()?"in":"ex");
+      }
+      else text_return->concat("Valid options are [clear|depth|logerrors]\n");
+    }
+    else console.printHistory(text_return);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "help-on-fail")) {
+    if (1 < args->count()) {
+      console.printHelpOnFail(0 != arg1);
+    }
+    text_return->concatf("Console prints command help on failure: %s.\n", console.printHelpOnFail()?"yes":"no");
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "prompt")) {
     if (1 < args->count()) {
@@ -1435,6 +1550,7 @@ void setup() {
   console_uart.init(&usb_comm_opts);
   console_uart.readCallback(&console);    // Attach the UART to console...
   console.setOutputTarget(&console_uart); // ...and console to UART.
+
   console.emitPrompt(true);
   console.setTXTerminator(LineTerm::CRLF);
   console.setRXTerminator(LineTerm::CR);
@@ -1465,14 +1581,11 @@ void setup() {
   i2c0.init();
   i2c1.init();
 
-  // GPS
-  SerialGPS.setRX(GPS_TX_PIN);
-  SerialGPS.setTX(GPS_RX_PIN);
-  SerialGPS.begin(9600);      // GPS
+  comm_unit_uart.init(&comm_unit_uart_opts);
 
-  SerialWireless.setRX(COMM_TX_PIN);
-  SerialWireless.setTX(COMM_RX_PIN);
-  SerialWireless.begin(115200);    // Comm
+  gps_uart.init(&gps_uart_opts);
+  gps_uart.readCallback(&gps);  // Attach the GPS UART to its parser.
+  gps.setCallback(location_callback);
 
   //SD.begin(BUILTIN_SDCARD);
 
@@ -1485,7 +1598,6 @@ void setup() {
   graph_array_frame_rate.init();
 
   console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
-  console.defineCommand("history",     ParsingConsole::tcodes_0, "Print command history.", "", 0, callback_print_history);
   platform.configureConsole(&console);
   console.defineCommand("touch",       ParsingConsole::tcodes_str_4, "SX8634 tools", "", 0, callback_touch_tools);
   console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);
@@ -1501,12 +1613,11 @@ void setup() {
   console.defineCommand("mfs",         ParsingConsole::tcodes_uint_3, "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
   console.defineCommand("app",         'a', ParsingConsole::tcodes_uint_1, "Select active application.", "", 0, callback_active_app);
   console.defineCommand("aprof",       ParsingConsole::tcodes_uint_1, "Dump application profiler.", "", 0, callback_print_app_profiler);
-  console.defineCommand("cbor",        ParsingConsole::tcodes_uint_1, "CBOR test battery.", "", 0, callback_cbor_tests);
   console.defineCommand("vol",         ParsingConsole::tcodes_float_1, "Audio volume.", "", 0, callback_audio_volume);
   console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
   console.defineCommand("conf",        'c',  ParsingConsole::tcodes_str_3, "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
   console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
-
+  console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
   console.init();
 
   StringBuilder ptc("Motherflux0r ");
@@ -1530,8 +1641,6 @@ void setup() {
   baro.assignBusInstance(&i2c1);
   grideye.assignBusInstance(&i2c1);
   // tof.assignBusInstance(&i2c1);
-
-  gps.setCallback(location_callback);
 
   wakelock_tof     = nullptr;
   wakelock_mag     = magneto.getWakeLock();
@@ -1583,29 +1692,8 @@ void loop() {
   memset(ser_buffer, 0, RX_BUF_LEN);
 
   //last_interaction = millis();
-
-  if (SerialGPS.available() > 1) {
-    StringBuilder gps_input;
-    rx_len = 0;
-    memset(ser_buffer, 0, RX_BUF_LEN);
-    while ((RX_BUF_LEN > rx_len) && (0 < SerialGPS.available())) {
-      ser_buffer[rx_len++] = SerialGPS.read();
-    }
-    if (rx_len > 0) {
-      gps_input.concat(ser_buffer, rx_len);
-      //gps.provideBuffer(&gps_input);
-    }
-  }
-
-  if (SerialWireless.available()) {
-    rx_len = 0;
-    memset(ser_buffer, 0, RX_BUF_LEN);
-    while ((RX_BUF_LEN > rx_len) && (0 < SerialWireless.available())) {
-      ser_buffer[rx_len++] = SerialWireless.read();
-    }
-    if (rx_len > 0) {
-    }
-  }
+  gps_uart.poll();
+  comm_unit_uart.poll();
 
   spi_spin();
   i2c0.poll();

@@ -200,9 +200,12 @@ SOURCES_CPP += lib/CppPotpourri/src/UARTAdapter.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Battery.cpp
 SOURCES_CPP += lib/CppPotpourri/src/WakeLock.cpp
 SOURCES_CPP += lib/CppPotpourri/src/uuid.cpp
+SOURCES_CPP += lib/CppPotpourri/src/KeyValuePair.cpp
 SOURCES_CPP += lib/CppPotpourri/src/ManuvrLink/ManuvrLink.cpp
 SOURCES_CPP += lib/CppPotpourri/src/ManuvrLink/ManuvrMsg.cpp
 SOURCES_CPP += lib/CppPotpourri/src/ManuvrLink/ManuvrMsgHdr.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Identity/Identity.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Identity/IdentityUUID.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Image/Image.cpp
 SOURCES_CPP += lib/CppPotpourri/src/cbor-cpp/cbor.cpp
 

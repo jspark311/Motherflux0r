@@ -56,9 +56,6 @@
 #define DISPLAY_RST_PIN     32
 #define LED_B_PIN           33
 
-#define SerialGPS      Serial6
-#define SerialWireless Serial1
-
 
 /*******************************************************************************
 * Application color scheme (16-bit)

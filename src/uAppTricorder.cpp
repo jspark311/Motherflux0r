@@ -413,7 +413,7 @@ void uAppTricorder::_redraw_window() {
         FB->setTextColor(WHITE);
         FB->writeString("STDEV: ");
         FB->setTextColor(RED, BLACK);
-        tmp_val_str.concatf("%.2f", graph_array_therm_frame.stdevValue());
+        tmp_val_str.concatf("%.2f", graph_array_therm_frame.stdev());
         FB->writeString(&tmp_val_str);
         tmp_val_str.clear();
       }

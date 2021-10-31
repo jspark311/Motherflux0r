@@ -7,24 +7,24 @@
 *******************************************************************************/
 
 /* Data buffers for sensors. */
-SensorFilter<float> graph_array_pressure(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_humidity(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_air_temp(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_psu_temp(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_uva(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_uvb(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_uvi(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_ana_light(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_visible(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_broad_ir(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_therm_mean(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_therm_frame(FilteringStrategy::MOVING_AVG, 64, 0);
-SensorFilter<float> graph_array_mag_strength_x(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_mag_strength_y(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_mag_strength_z(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_time_of_flight(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_batt_voltage(FilteringStrategy::RAW, 96, 0);
-SensorFilter<float> graph_array_batt_current(FilteringStrategy::RAW, 96, 0);
+SensorFilter<float> graph_array_pressure(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_humidity(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_air_temp(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_psu_temp(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_uva(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_uvb(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_uvi(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_ana_light(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_visible(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_broad_ir(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_therm_mean(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_therm_frame(64, FilteringStrategy::MOVING_AVG);
+SensorFilter<float> graph_array_mag_strength_x(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_mag_strength_y(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_mag_strength_z(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_time_of_flight(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_batt_voltage(96, FilteringStrategy::RAW);
+SensorFilter<float> graph_array_batt_current(96, FilteringStrategy::RAW);
 
 
 /*
