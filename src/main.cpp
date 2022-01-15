@@ -651,44 +651,32 @@ static void cb_longpress(int button, uint32_t duration) {
 /*******************************************************************************
 * Console callbacks
 *******************************************************************************/
+int callback_help(StringBuilder* text_return, StringBuilder* args) {
+  return console.console_handler_help(text_return, args);
+}
+
+int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
+  return console.console_handler_conf(text_return, args);
+}
+
+int callback_touch_tools(StringBuilder* text_return, StringBuilder* args) {
+  return touch->console_handler(text_return, args);
+}
+
 
 int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
-  int ret = 0;
+  int ret = -1;
   char* cmd = args->position_trimmed(0);
-  if (0 == StringBuilder::strcasecmp(cmd, "info")) {
-    m_link->printDebug(text_return);
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
-    text_return->concatf("Link reset() returns %d\n", m_link->reset());
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "hangup")) {
-    text_return->concatf("Link hangup() returns %d\n", m_link->hangup());
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "verbosity")) {
-    switch (args->count()) {
-      case 2:
-        m_link->verbosity(0x07 & args->position_as_int(1));
-      default:
-        text_return->concatf("Link verbosity is %u\n", m_link->verbosity());
-        break;
-    }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "log")) {
-    //if (1 < args->count()) {
-      StringBuilder tmp_log("This is a remote log test.\n");
-      int8_t ret_local = m_link->writeRemoteLog(&tmp_log, false);
-      text_return->concatf("Remote log write returns %d\n", ret_local);
-    //}
-    //else text_return->concat("Usage: link log <logText>\n");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
+  // We interdict if the command is something specific to this application.
+  if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
     // Send a description request message.
     KeyValuePair a((uint32_t) millis(), "time_ms");
     a.append((uint32_t) randomUInt32(), "rand");
     int8_t ret_local = m_link->send(&a, true);
     text_return->concatf("Description request send() returns ID %u\n", ret_local);
+    ret = 0;
   }
-  else text_return->concat("Usage: [info|reset|hangup|verbosity|desc]\n");
+  else ret = m_link->console_handler(text_return, args);
 
   return ret;
 }
@@ -849,17 +837,6 @@ int callback_i2c_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_help(StringBuilder* text_return, StringBuilder* args) {
-  if (0 < args->count()) {
-    console.printHelp(text_return, args->position_trimmed(0));
-  }
-  else {
-    console.printHelp(text_return);
-  }
-  return 0;
-}
-
-
 int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args) {
   if (args->count() > 0) {
     app_meta.resetStopwatch();
@@ -885,38 +862,6 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
   stopwatch_main_loop_time.printDebug("Main loop", text_return);
   stopwatch_display.printDebug("Display", text_return);
   return 0;
-}
-
-
-int callback_touch_tools(StringBuilder* text_return, StringBuilder* args) {
-  int ret = -1;
-  char* cmd = args->position_trimmed(0);
-  if (0 < args->count()) {
-    ret = 0;
-    if (0 == StringBuilder::strcasecmp(cmd, "info")) {
-      touch->printDebug(text_return);
-    }
-    else if (0 == StringBuilder::strcasecmp(cmd, "poll")) {
-      text_return->concatf("SX8634 poll() returns %d.\n", touch->poll());
-    }
-    else if (0 == StringBuilder::strcasecmp(cmd, "init")) {
-      text_return->concatf("SX8634 init() returns %d.\n", touch->init());
-    }
-    else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
-      text_return->concatf("SX8634 reset() returns %d.\n", touch->reset());
-    }
-    else if (0 == StringBuilder::strcasecmp(cmd, "ping")) {
-      text_return->concatf("SX8634 ping() returns %d\n", touch->ping());
-    }
-    else if (0 == StringBuilder::strcasecmp(cmd, "mode")) {
-      if (1 < args->count()) {
-        int mode_int = args->position_as_int(1);
-        text_return->concatf("SX8634 setMode(%s) returns %d.\n", SX8634::getModeStr((SX8634OpMode) mode_int), touch->setMode((SX8634OpMode) mode_int));
-      }
-      text_return->concatf("SX8634 mode set to %s.\n", SX8634::getModeStr(touch->operationalMode()));
-    }
-  }
-  return ret;
 }
 
 
@@ -1441,104 +1386,6 @@ int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
-  //inline void setPromptString(const char* str) {    _prompt_string = (char*) str;   };
-  //inline bool hasColor() {               return _console_flag(CONSOLE_FLAG_HAS_ANSI);                   };
-  //inline void hasColor(bool x) {         return _console_set_flag(CONSOLE_FLAG_HAS_ANSI, x);            };
-  int ret = 0;
-  char* cmd    = args->position_trimmed(0);
-  int   arg1   = args->position_as_int(1);
-  bool  print_term_enum = false;
-  if (0 == StringBuilder::strcasecmp(cmd, "echo")) {
-    if (1 < args->count()) {
-      console.localEcho(0 != arg1);
-    }
-    text_return->concatf("Console RX echo %sabled.\n", console.localEcho()?"en":"dis");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "history")) {
-    if (1 < args->count()) {
-      console.emitPrompt(0 != arg1);
-      char* subcmd = args->position_trimmed(1);
-      if (0 == StringBuilder::strcasecmp(subcmd, "clear")) {
-        console.clearHistory();
-        text_return->concat("History cleared.\n");
-      }
-      else if (0 == StringBuilder::strcasecmp(subcmd, "depth")) {
-        if (2 < args->count()) {
-          arg1 = args->position_as_int(2);
-          console.maxHistoryDepth(arg1);
-        }
-        text_return->concatf("History depth: %u\n", console.maxHistoryDepth());
-      }
-      else if (0 == StringBuilder::strcasecmp(subcmd, "logerrors")) {
-        if (2 < args->count()) {
-          arg1 = args->position_as_int(2);
-          console.historyFail(0 != arg1);
-        }
-        text_return->concatf("History %scludes failed commands.\n", console.historyFail()?"in":"ex");
-      }
-      else text_return->concat("Valid options are [clear|depth|logerrors]\n");
-    }
-    else console.printHistory(text_return);
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "help-on-fail")) {
-    if (1 < args->count()) {
-      console.printHelpOnFail(0 != arg1);
-    }
-    text_return->concatf("Console prints command help on failure: %s.\n", console.printHelpOnFail()?"yes":"no");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "prompt")) {
-    if (1 < args->count()) {
-      console.emitPrompt(0 != arg1);
-    }
-    text_return->concatf("Console autoprompt %sabled.\n", console.emitPrompt()?"en":"dis");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "force")) {
-    if (1 < args->count()) {
-      console.forceReturn(0 != arg1);
-    }
-    text_return->concatf("Console force-return %sabled.\n", console.forceReturn()?"en":"dis");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "rxterm")) {
-    if (1 < args->count()) {
-      switch (arg1) {
-        case 0:  case 1:  case 2:  case 3:
-          console.setRXTerminator((LineTerm) arg1);
-          break;
-        default:
-          print_term_enum = true;
-          break;
-      }
-    }
-    text_return->concatf("Console RX terminator: %s\n", ParsingConsole::terminatorStr(console.getRXTerminator()));
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "txterm")) {
-    if (1 < args->count()) {
-      switch (arg1) {
-        case 0:  case 1:  case 2:  case 3:
-          console.setTXTerminator((LineTerm) arg1);
-          break;
-        default:
-          print_term_enum = true;
-          break;
-      }
-    }
-    text_return->concatf("Console TX terminator: %s\n", ParsingConsole::terminatorStr(console.getTXTerminator()));
-  }
-  else {
-    ret = -1;
-  }
-
-  if (print_term_enum) {
-    text_return->concat("Terminator options:\n");
-    text_return->concat("\t0: ZEROBYTE\n");
-    text_return->concat("\t1: CR\n");
-    text_return->concat("\t2: LF\n");
-    text_return->concat("\t3: CRLF\n");
-  }
-  return ret;
-}
-
 
 
 /*******************************************************************************
@@ -1597,9 +1444,11 @@ void setup() {
   graph_array_cpu_time.init();
   graph_array_frame_rate.init();
 
-  console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
+  console.defineCommand("help",        '?',  ParsingConsole::tcodes_str_1, "Prints help to console.", "[<specific command>]", 0, callback_help);
+  console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
   platform.configureConsole(&console);
   console.defineCommand("touch",       ParsingConsole::tcodes_str_4, "SX8634 tools", "", 0, callback_touch_tools);
+  console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);
   console.defineCommand("vib",         'v', ParsingConsole::tcodes_uint_2, "Vibrator test", "", 0, callback_vibrator_test);
   console.defineCommand("disp",        'd', ParsingConsole::tcodes_uint_1, "Display test", "", 1, callback_display_test);
@@ -1616,8 +1465,6 @@ void setup() {
   console.defineCommand("vol",         ParsingConsole::tcodes_float_1, "Audio volume.", "", 0, callback_audio_volume);
   console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
   console.defineCommand("conf",        'c',  ParsingConsole::tcodes_str_3, "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
-  console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
-  console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
   console.init();
 
   StringBuilder ptc("Motherflux0r ");
