@@ -682,6 +682,23 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+int callback_i2c_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = -1;
+  if (0 < args->count()) {
+    int bus_id = args->position_as_int(0);
+    args->drop_position(0);
+    switch (bus_id) {
+      case 0:   ret = i2c0.console_handler(text_return, args);  break;
+      case 1:   ret = i2c1.console_handler(text_return, args);  break;
+      default:
+        text_return->concatf("Unsupported bus: %d\n", bus_id);
+        break;
+    }
+  }
+  return ret;
+}
+
+
 int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
   char* conf_group_str = args->position_trimmed(0);
   char* key            = args->position_trimmed(1);
@@ -803,40 +820,6 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_i2c_tools(StringBuilder* text_return, StringBuilder* args) {
-  int ret = 0;
-  int   bus_id = args->position_as_int(0);
-  char* cmd    = args->position_trimmed(1);
-  int   arg2   = args->position_as_int(2);
-  I2CAdapter* bus = nullptr;
-  switch (bus_id) {
-    case 0:    bus = &i2c0;  break;
-    case 1:    bus = &i2c1;  break;
-    default:
-      text_return->concatf("Unsupported bus: %d\n", bus_id);
-      break;
-  }
-  if (nullptr != bus) {
-    if (0 == StringBuilder::strcasecmp(cmd, "purge")) {
-      bus->purge_current_job();
-    }
-    else if (0 == StringBuilder::strcasecmp(cmd, "ragepurge")) {
-      bus->purge_queued_work();
-      bus->purge_current_job();
-    }
-    else if (0 == StringBuilder::strcasecmp(cmd, "ping")) {
-      bus->ping_slave_addr((args->count() > 2) ? arg2 : 1);
-      text_return->concatf("i2c%d.ping_slave_addr(0x%02x) started.\n", bus_id, arg2);
-    }
-    else {
-      bus->printDebug(text_return);
-      bus->printPingMap(text_return);
-    }
-  }
-  return ret;
-}
-
-
 int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args) {
   if (args->count() > 0) {
     app_meta.resetStopwatch();
@@ -866,25 +849,22 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
 
 
 int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
+  int ret = display.console_handler(text_return, args);
+  if (0 == ret) return ret;
+  // ^this^ is using superglue instead of stiches.
+
   int arg0 = args->position_as_int(0);
   uint32_t millis_0 = millis();
   uint32_t millis_1 = millis_0;
   switch (arg0) {
-    case 0:    display.fill(WHITE);     break;
-    case 1:    text_return->concatf("display.reset() returns %d\n", display.reset());        break;
-    case 2:    text_return->concatf("display.init() returns %d\n", display.init());          break;
-    case 3:    text_return->concatf("commitFrameBuffer() returns %d\n", display.commitFrameBuffer());   break;
-    case 4:
+    case 1:
       #ifdef SPI_HAS_TRANSFER_ASYNC
         text_return->concat("SPI_HAS_TRANSFER_ASYNC is set.\n");
       #else
         text_return->concat("SPI_HAS_TRANSFER_ASYNC is NOT set.\n");
       #endif
       break;
-    case 5:    break;
-    case 6:    break;
-    case 7:    break;
-    case 8:
+    case 2:
       display.fill(BLACK);
       draw_progress_bar_vertical(0, 0, 12, 63, CYAN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
@@ -912,7 +892,7 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
       }
       break;
 
-    case 9:    // Progress bar test
+    case 3:    // Progress bar test
       display.fill(BLACK);
       draw_progress_bar_horizontal(0, 14, 95, 7, CYAN, true, false, 0.0);
       for (uint8_t i = 0; i <= 100; i++) {
@@ -939,7 +919,7 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
         draw_progress_bar_horizontal(0, 34, 95, 14, GREEN, false, true, (i * 0.01));
       }
       break;
-    case 10:    // Vector display test
+    case 4:    // Vector display test
       display.fill(BLACK);
       draw_3vector(0, 0, 50, 50, RED,    true,  false, 1.0, 0.0, 0.0);
       draw_3vector(0, 0, 50, 50, GREEN,  false, false, 0.0, 1.0, 0.0);
@@ -952,7 +932,7 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
   }
   millis_1 = millis();
   text_return->concatf("Display update took %ums\n", millis_1-millis_0);
-  return 0;
+  return ret;
 }
 
 int callback_vibrator_test(StringBuilder* text_return, StringBuilder* args) {
@@ -1449,9 +1429,11 @@ void setup() {
   platform.configureConsole(&console);
   console.defineCommand("touch",       ParsingConsole::tcodes_str_4, "SX8634 tools", "", 0, callback_touch_tools);
   console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
+  console.defineCommand("disp",        'd', ParsingConsole::tcodes_uint_1, "Display test", "", 1, callback_display_test);
+  console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
+
   console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);
   console.defineCommand("vib",         'v', ParsingConsole::tcodes_uint_2, "Vibrator test", "", 0, callback_vibrator_test);
-  console.defineCommand("disp",        'd', ParsingConsole::tcodes_uint_1, "Display test", "", 1, callback_display_test);
   console.defineCommand("aout",        arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
   console.defineCommand("fft",         arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
   console.defineCommand("synth",       arg_list_4_uuff, "Synth parameters.", "", 2, callback_synth_set);
@@ -1463,7 +1445,6 @@ void setup() {
   console.defineCommand("app",         'a', ParsingConsole::tcodes_uint_1, "Select active application.", "", 0, callback_active_app);
   console.defineCommand("aprof",       ParsingConsole::tcodes_uint_1, "Dump application profiler.", "", 0, callback_print_app_profiler);
   console.defineCommand("vol",         ParsingConsole::tcodes_float_1, "Audio volume.", "", 0, callback_audio_volume);
-  console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
   console.defineCommand("conf",        'c',  ParsingConsole::tcodes_str_3, "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
   console.init();
 
