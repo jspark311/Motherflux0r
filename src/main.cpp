@@ -8,6 +8,7 @@
 #include <TripleAxisPipe.h>
 #include <GPSWrapper.h>
 #include <StopWatch.h>
+#include <C3PLogger.h>
 #include <Image/Image.h>
 #include <ManuvrLink/ManuvrLink.h>
 #include <cbor-cpp/cbor.h>
@@ -174,6 +175,11 @@ UARTOpts usb_comm_opts {
 UARTAdapter console_uart(0, 255, 255, 255, 255, 48, 256);
 UARTAdapter comm_unit_uart(1, COMM_RX_PIN, COMM_TX_PIN, 255, 255, 2048, 2048);
 UARTAdapter gps_uart(6, GPS_RX_PIN, GPS_TX_PIN, 255, 255, 48, 256);
+
+/* We use CppPotpourri's logging class, shunted to the serial port. */
+C3PLogger c3p_log_obj(
+  (LOGGER_FLAG_PRINT_LEVEL | LOGGER_FLAG_PRINT_TAG)
+);
 
 /* This object will contain our relationship with the Comm unit. */
 ManuvrLink* m_link = nullptr;
@@ -1366,6 +1372,72 @@ int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+int callback_logger_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = 0;
+  char* cmd = args->position_trimmed(0);
+  int   arg = args->position_as_int(1);
+
+  if (0 == StringBuilder::strcasecmp(cmd, "test")) {
+    c3p_log(LOG_LEV_ALERT, "TAG", "LOG_LEV_ALERT");
+    c3p_log(LOG_LEV_EMERGENCY, "", "LOG_LEV_EMERGENCY");
+    c3p_log(LOG_LEV_NOTICE, __PRETTY_FUNCTION__, "LOG_LEV_NOTICE");
+    c3p_log(LOG_LEV_ERROR, "TAG-inc", "LOG_LEV_ERROR");
+    c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "LOG_LEV_DEBUG");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "tag")) {
+    if (1 < args->count()) c3p_log_obj.printTag(0 != arg);
+    text_return->concatf("Print tag:      %c\n", c3p_log_obj.printTag()?'y':'n');
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "severity")) {
+    if (1 < args->count()) c3p_log_obj.printSeverity(0 != arg);
+    text_return->concatf("Print severity: %c\n", c3p_log_obj.printSeverity()?'y':'n');
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "time")) {
+    //if (1 < args->count()) c3p_log_obj.printTime(0 != arg);
+    c3p_log_obj.printTime(false);
+    text_return->concatf("Print time:     %c\n", c3p_log_obj.printTime()?'y':'n');
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "t1")) {
+    c3p_log_obj.printTime(true);
+    text_return->concatf("Print time:     %c\n", c3p_log_obj.printTime()?'y':'n');
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "t2")) {
+    c3p_log_obj = C3PLogger(0, &console_uart);
+    text_return->concatf("Print time:     %c\n", c3p_log_obj.printTime()?'y':'n');
+    text_return->concatf("Print severity: %c\n", c3p_log_obj.printSeverity()?'y':'n');
+    text_return->concatf("Print tag:      %c\n", c3p_log_obj.printTag()?'y':'n');
+  }
+  else {
+    ret = -1;
+  }
+
+  return ret;
+}
+
+
+
+/*******************************************************************************
+* Logger support.
+*******************************************************************************/
+
+/**
+* This function is declared in CppPotpourri (AbstractPlatform.h).
+* Shunt the message into the C3PLogger formatter.
+*
+* @param severity is the syslog-style importance of the message.
+* @param tag is the free-form source of the message.
+* @param msg contains the log content.
+*/
+void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
+  c3p_log_obj.print(severity, tag, msg);
+  // TODO: The line above should be the only line required.
+  // We want to benefit from the line-ending conversion features in
+  //   ParsingConsole, so we don't use the BufferAccepter API.
+  StringBuilder l_tmp;
+  c3p_log_obj.fetchLog(&l_tmp);
+  console.printToLog(&l_tmp);
+}
+
 
 
 /*******************************************************************************
@@ -1431,6 +1503,7 @@ void setup() {
   console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("disp",        'd', ParsingConsole::tcodes_uint_1, "Display test", "", 1, callback_display_test);
   console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
+  console.defineCommand("log",         ParsingConsole::tcodes_uint_3, "Logger tools", "", 0, callback_logger_tools);
 
   console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);
   console.defineCommand("vib",         'v', ParsingConsole::tcodes_uint_2, "Vibrator test", "", 0, callback_vibrator_test);
@@ -1452,6 +1525,7 @@ void setup() {
   ptc.concat(TEST_PROG_VERSION);
   ptc.concat("\t Build date " __DATE__ " " __TIME__ "\n");
   console.printToLog(&ptc);
+  const char* TAG = "main.cpp";
 
   magneto.configureConsole(&console);
 
@@ -1547,7 +1621,6 @@ void loop() {
 
   /* Poll each sensor class. */
   read_magnetometer_sensor();
-  magneto.adc.fetchLog(&output);
 
   stopwatch_sensor_baro.markStart();
   if (0 < baro.poll()) {
@@ -1596,7 +1669,6 @@ void loop() {
     default:
       break;
   }
-  pmu.fetchLog(&output);
 
   millis_now = millis();
   stopwatch_display.markStart();
