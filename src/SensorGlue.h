@@ -7,6 +7,7 @@
 
 /* Sensor representations */
 extern DRV425 magneto;
+extern SX1503 sx1503;
 extern TMP102 tmp102;
 extern GridEYE grideye;
 extern VEML6075 uv;
@@ -43,13 +44,10 @@ extern TripleAxisTerminus     mag_vect;   // The magnetic field vector.
 extern TripleAxisCompass      compass;    // Tilt-compensated compass.
 extern TripleAxisFork         mag_fork;
 extern TripleAxisSingleFilter mag_filter; // Input-side filter.
-extern TripleAxisConvention   mag_conv;   // Gnomon conversion stage.
 
 /* Inertial pipeline */
 extern TripleAxisTerminus     down;       // Gnomon conversion stage.
 extern TripleAxisFork         imu_fork;
-extern TripleAxisConvention   tilt_conv;  // Gnomon conversion stage.
-
 
 
 int8_t init_sensor_memory();

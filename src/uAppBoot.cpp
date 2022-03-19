@@ -212,7 +212,7 @@ void uAppBoot::_redraw_window() {
           break;
         case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
           mag_filter.init();
-          magneto.attachPipe(&mag_conv);   // Connect the driver to its pipeline.
+          magneto.attachPipe(&mag_filter);   // Connect the driver to its pipeline.
           ret_local = (0 == magneto.init(&i2c1, &spi0));
           break;
         case UAPP_BOOT_FLAG_INIT_BARO:
@@ -314,7 +314,7 @@ void uAppBoot::_redraw_window() {
           }
           break;
         case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
-          if (magneto.gpio.initialized()) {
+          if (sx1503.initialized()) {
             // TODO: This is just to prod the compass into returning a complete
             //   dataset. It's bogus until there is an IMU.
             Vector3f gravity(0.0, 0.0, 1.0);

@@ -95,12 +95,10 @@ TripleAxisTerminus     mag_vect(SpatialSense::MAG, callback_3axis);   // The mag
 TripleAxisCompass      compass(callback_3axis);
 TripleAxisFork         mag_fork(&compass, &mag_vect);
 TripleAxisSingleFilter mag_filter(SpatialSense::MAG, &mag_fork, FilteringStrategy::MOVING_AVG, 2, 0);
-TripleAxisConvention   mag_conv(&mag_filter, GnomonType::RH_POS_Z);   // TODO: Determine true value.
 
 // Inertial pipeline
 TripleAxisTerminus     down(SpatialSense::ACC, callback_3axis);  // The tilt sensor's best-estimate of "down".
 TripleAxisFork         imu_fork(&compass, &down);
-TripleAxisConvention   tilt_conv(&imu_fork, GnomonType::RH_POS_Z);   // TODO: Determine true value.
 
 
 /*******************************************************************************
@@ -241,6 +239,51 @@ ManuvrPMU pmu(&charger_opts, &gas_gauge_opts, &powerplant_opts);
 /*******************************************************************************
 * Sensors
 *******************************************************************************/
+// This is the desired SX1503 GPIO state on init.
+#define SX1503_OUTPUT_PINS_0 ((uint8_t) ((1 << SX_PIN_ADC_OSC_EN) | (1 << SX_PIN_REGULATOR_EN)))
+#define SX1503_OUTPUT_PINS_1 ((uint8_t) (1 << (SX_PIN_BANDWIDTH & 0x07)))
+#define SX1503_INPUT_PINS_0  ((uint8_t) ~SX1503_OUTPUT_PINS_0)
+#define SX1503_INPUT_PINS_1  ((uint8_t) ~SX1503_OUTPUT_PINS_1)
+
+
+const MCP356xConfig MCP3564_CONF_OBJ(
+  0x00001700,  // DIFF_A,B,C and TEMP
+  0,           // No special flags
+  MCP356xMode::CONTINUOUS,
+  MCP356xGain::GAIN_2,
+  MCP356xBiasCurrent::NONE,
+  MCP356xOversamplingRatio::OSR_8192,
+  MCP356xAMCLKPrescaler::OVER_2
+);
+
+
+const DRV425Config DRV425_CONFIG = {
+  .ADC_OSC_EN_PIN   = SX_PIN_ADC_OSC_EN,
+  .REGULATOR_EN_PIN = SX_PIN_REGULATOR_EN,
+  .BANDWIDTH_PIN    = SX_PIN_BANDWIDTH,
+  .ERR_0_PIN        = SX_PIN_ERR_0,
+  .OVERRUN_0_PIN    = SX_PIN_OVERRUN_0,
+  .ERR_1_PIN        = SX_PIN_ERR_1,
+  .OVERRUN_1_PIN    = SX_PIN_OVERRUN_1,
+  .ERR_2_PIN        = SX_PIN_ERR_2,
+  .OVERRUN_2_PIN    = SX_PIN_OVERRUN_2,
+  .SX_CONFIG        = {
+    0x01,                              // Serialization format
+    DRV425_GPIO_IRQ_PIN, 255,          // IRQ and RESET pins. No reset pin.
+    0x00, 0x00,                        // Driver flags. Nothing special.
+    0, 0,                              // Registers start here. Set initial output values.
+    SX1503_INPUT_PINS_1,  SX1503_INPUT_PINS_0,  // Direction registers. 1 implies input.
+    SX1503_INPUT_PINS_1,  SX1503_INPUT_PINS_0,  // All inputs have pull-ups.
+    0x00, 0x00,                                 // No pull-downs
+    SX1503_OUTPUT_PINS_1, SX1503_OUTPUT_PINS_0, // All inputs generate interrupts...
+    0xff, 0xff, 0xff, 0xff,                     // ...on both edges.
+    0x00, 0x00, 0x00, 0x00, 0x00,               // No use of the PLD feature.
+    0x00, 0x00, 0x00, 0x00, 0x00,               // No use of the PLD feature.
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,         // No use of the PLD feature.
+    0x04                                        // No BOOST. IRQ autoclears on status read.
+  }
+};
+
 BME280Settings baro_settings(
   0x76,
   BME280OSR::X1,
@@ -259,9 +302,11 @@ static const SX8634Opts _touch_opts(
 );
 SX8634* touch = nullptr;
 
-
 /* Sensor representations... */
-DRV425 magneto(DRV425_ADC_IRQ_PIN, DRV425_GPIO_IRQ_PIN, 255, DRV425_CS_PIN);   // No GPIO reset pin.
+SX1503   sx1503(DRV425_CONFIG.SX_CONFIG, SX1503_SERIALIZE_SIZE);
+MCP356x  mag_adc(DRV425_ADC_IRQ_PIN, DRV425_CS_PIN, 255, 1, &MCP3564_CONF_OBJ);
+DRV425   magneto(&sx1503, &mag_adc, &DRV425_CONFIG);
+
 GridEYE grideye(0x69, AMG8866_IRQ_PIN);
 VEML6075 uv;
 ICM_20948_SPI imu;
@@ -667,6 +712,10 @@ int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
 
 int callback_touch_tools(StringBuilder* text_return, StringBuilder* args) {
   return touch->console_handler(text_return, args);
+}
+
+int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) {
+  return magneto.console_handler(text_return, args);
 }
 
 
@@ -1504,13 +1553,13 @@ void setup() {
   console.defineCommand("disp",        'd', ParsingConsole::tcodes_uint_1, "Display test", "", 1, callback_display_test);
   console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
   console.defineCommand("log",         ParsingConsole::tcodes_uint_3, "Logger tools", "", 0, callback_logger_tools);
-
   console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);
   console.defineCommand("vib",         'v', ParsingConsole::tcodes_uint_2, "Vibrator test", "", 0, callback_vibrator_test);
   console.defineCommand("aout",        arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
   console.defineCommand("fft",         arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
   console.defineCommand("synth",       arg_list_4_uuff, "Synth parameters.", "", 2, callback_synth_set);
   console.defineCommand("sensor",      's', ParsingConsole::tcodes_str_4, "Sensor tools", "", 0, callback_sensor_tools);
+  console.defineCommand("mag",         'M',  ParsingConsole::tcodes_str_4,  "Magnetometer tools", "[info|gpio|adc]", 0, callback_magnetometer_fxns);
   console.defineCommand("sfi",         ParsingConsole::tcodes_uint_1, "Sensor filter info.", "", 0, callback_sensor_filter_info);
   console.defineCommand("mfi",         ParsingConsole::tcodes_uint_1, "Meta filter info.", "", 1, callback_meta_filter_info);
   console.defineCommand("sfs",         ParsingConsole::tcodes_uint_3, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
@@ -1527,7 +1576,8 @@ void setup() {
   console.printToLog(&ptc);
   const char* TAG = "main.cpp";
 
-  magneto.configureConsole(&console);
+  mag_adc.setReferenceRange(3.6, 0.0);
+  mag_adc.setMCLKFrequency(19660800.0);   // 19.6608 MHz
 
   pmu.configureConsole(&console);
   pmu.attachCallback(battery_state_callback);

@@ -56,6 +56,17 @@
 #define DISPLAY_RST_PIN     32
 #define LED_B_PIN           33
 
+/* Pin mappings for the SX1503... */
+#define SX_PIN_ADC_OSC_EN       6
+#define SX_PIN_REGULATOR_EN     7
+#define SX_PIN_BANDWIDTH        8
+#define SX_PIN_ERR_0           10
+#define SX_PIN_OVERRUN_0       11
+#define SX_PIN_ERR_1           12
+#define SX_PIN_OVERRUN_1       13
+#define SX_PIN_ERR_2           14
+#define SX_PIN_OVERRUN_2       15
+
 
 /*******************************************************************************
 * Application color scheme (16-bit)
