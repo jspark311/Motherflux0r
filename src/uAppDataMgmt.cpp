@@ -1,9 +1,6 @@
 #include "Motherflux0r.h"
 #include "uApp.h"
 
-extern SSD13xx display;
-
-
     // TODO: Put things into reset states.
     // TODO: Power off non-essential rails.
     // TODO: Scale back the CPU clock.
@@ -11,7 +8,6 @@ extern SSD13xx display;
 
 
 uAppDataMgmt::uAppDataMgmt() : uApp("Data Mgmt", (Image*) &display) {}
-
 
 uAppDataMgmt::~uAppDataMgmt() {}
 

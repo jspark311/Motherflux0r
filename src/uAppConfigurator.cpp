@@ -4,10 +4,6 @@
 #include "Motherflux0r.h"
 
 
-extern SSD13xx display;
-
-
-
 uAppConfigurator::uAppConfigurator() : uApp("Config", (Image*) &display) {}
 
 uAppConfigurator::~uAppConfigurator() {}

@@ -5,9 +5,6 @@
 #include "uApp.h"
 #include "Motherflux0r.h"
 
-
-extern SSD13xx display;
-
 extern SensorFilter<float> graph_array_frame_rate;
 extern SensorFilter<float> graph_array_cpu_time;
 extern StopWatch stopwatch_main_loop_time;

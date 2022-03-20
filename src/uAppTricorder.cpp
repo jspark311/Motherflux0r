@@ -5,9 +5,6 @@
 #include "uApp.h"
 #include "Motherflux0r.h"
 
-extern SSD13xx display;
-
-
 extern WakeLock* wakelock_tof;
 extern WakeLock* wakelock_mag;
 extern WakeLock* wakelock_lux;

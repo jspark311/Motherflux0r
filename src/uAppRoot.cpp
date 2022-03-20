@@ -3,8 +3,6 @@
 #include "uApp.h"
 #include "Motherflux0r.h"
 
-extern SSD13xx display;
-
 
 uAppRoot::uAppRoot() : uApp("Root menu", (Image*) &display) {}
 

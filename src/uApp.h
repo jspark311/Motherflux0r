@@ -5,6 +5,7 @@
 #include <StopWatch.h>
 #include <Image/Image.h>
 #include <FlagContainer.h>
+#include <ManuvrDrivers.h>
 
 #ifndef __U_APP_H_
 #define __U_APP_H_
@@ -15,7 +16,7 @@
 
 
 /*******************************************************************************
-* Types
+* Types, defines, and externs
 *******************************************************************************/
 enum class AppID : uint8_t {
   APP_BOOT     =  0,  // Should run once on startup.
@@ -40,6 +41,8 @@ enum class AppLifecycle : uint8_t {
   TEARDOWN      = 3,  //
   INACTIVE      = 4   //
 };
+
+extern SSD1331 display;
 
 
 /* Class flags */

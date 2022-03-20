@@ -2,8 +2,6 @@
 #include "uApp.h"
 #include "Motherflux0r.h"
 
-extern SSD13xx display;
-
 /* Application tracking and interrupts... */
 uAppBoot app_boot;
 uAppTricorder app_tricorder;

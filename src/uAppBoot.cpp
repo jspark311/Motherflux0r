@@ -9,7 +9,6 @@
 #include "uApp.h"
 #include "SensorGlue.h"
 
-extern SSD13xx display;
 extern SX8634* touch;
 
 extern SPIAdapter spi0;

@@ -198,7 +198,7 @@ const SSD13xxOpts disp_opts(
 
 /* Driver classes */
 SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 8);
-SSD13xx display(&disp_opts);
+SSD1331 display(&disp_opts);
 
 
 /*******************************************************************************
@@ -317,14 +317,6 @@ VL53L0X tof;
 GPSWrapper gps;
 LocationFrame current_location;
 
-/* Immediate data... */
-static Vector3f64 grav;       // Gravity vector from the IMU.
-static Vector3f64 acc_vect;   // Acceleration vector from the IMU.
-static Vector3f64 gyr_vect;   // Gyroscopic vector from the IMU.
-static Vector3f64 mag_vect0;  // Magnetism vector from the IMU.
-static Vector3f64 mag_vect1;  // Magnetism vector from the DRV425 complex.
-
-
 /* Profiling data */
 StopWatch stopwatch_main_loop_time;
 StopWatch stopwatch_display;
@@ -351,8 +343,6 @@ uint32_t tof_update_next   = 0;      //
 /* Console junk... */
 ParsingConsole console(128);
 const char* console_prompt_str = "Motherflux0r # ";
-static const TCode arg_list_4_uuff[]  = {TCode::UINT32, TCode::UINT32, TCode::FLOAT, TCode::FLOAT, TCode::NONE};
-static const TCode arg_list_4_float[] = {TCode::FLOAT,  TCode::FLOAT,  TCode::FLOAT, TCode::FLOAT, TCode::NONE};
 
 /* Application tracking and interrupts... */
 extern uAppBoot app_boot;
@@ -1555,11 +1545,11 @@ void setup() {
   console.defineCommand("log",         ParsingConsole::tcodes_uint_3, "Logger tools", "", 0, callback_logger_tools);
   console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);
   console.defineCommand("vib",         'v', ParsingConsole::tcodes_uint_2, "Vibrator test", "", 0, callback_vibrator_test);
-  console.defineCommand("aout",        arg_list_4_float, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
-  console.defineCommand("fft",         arg_list_4_float, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
-  console.defineCommand("synth",       arg_list_4_uuff, "Synth parameters.", "", 2, callback_synth_set);
+  console.defineCommand("aout",        ParsingConsole::tcodes_str_4, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
+  console.defineCommand("fft",         ParsingConsole::tcodes_str_4, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
+  console.defineCommand("synth",       ParsingConsole::tcodes_str_4, "Synth parameters.", "", 2, callback_synth_set);
   console.defineCommand("sensor",      's', ParsingConsole::tcodes_str_4, "Sensor tools", "", 0, callback_sensor_tools);
-  console.defineCommand("mag",         'M',  ParsingConsole::tcodes_str_4,  "Magnetometer tools", "[info|gpio|adc]", 0, callback_magnetometer_fxns);
+  console.defineCommand("mag",         'M', ParsingConsole::tcodes_str_4,  "Magnetometer tools", "[info|gpio|adc]", 0, callback_magnetometer_fxns);
   console.defineCommand("sfi",         ParsingConsole::tcodes_uint_1, "Sensor filter info.", "", 0, callback_sensor_filter_info);
   console.defineCommand("mfi",         ParsingConsole::tcodes_uint_1, "Meta filter info.", "", 1, callback_meta_filter_info);
   console.defineCommand("sfs",         ParsingConsole::tcodes_uint_3, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
@@ -1574,7 +1564,6 @@ void setup() {
   ptc.concat(TEST_PROG_VERSION);
   ptc.concat("\t Build date " __DATE__ " " __TIME__ "\n");
   console.printToLog(&ptc);
-  const char* TAG = "main.cpp";
 
   mag_adc.setReferenceRange(3.6, 0.0);
   mag_adc.setMCLKFrequency(19660800.0);   // 19.6608 MHz
@@ -1619,19 +1608,11 @@ void spi_spin() {
   int8_t polling_ret = spi0.poll();
   while (0 < polling_ret) {
     polling_ret = spi0.poll();
-    //Serial.println("spi_spin() 0");
   }
   polling_ret = spi0.service_callback_queue();
   while (0 < polling_ret) {
     polling_ret = spi0.service_callback_queue();
-    //Serial.println("spi_spin() 1");
   }
-}
-
-/*
-* Drain any of the UARTs that have data.
-*/
-void poll_uarts() {
 }
 
 

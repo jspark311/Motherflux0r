@@ -6,7 +6,7 @@
 #include <Image/Image.h>
 
 
-extern SSD13xx display;
+extern SSD1331 display;
 
 static uint32_t off_time_vib      = 0;      // millis() when vibrator should be disabled.
 static uint32_t off_time_led_r    = 0;      // millis() when LED_R should be disabled.

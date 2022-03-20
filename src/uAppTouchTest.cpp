@@ -4,7 +4,6 @@
 #include "Motherflux0r.h"
 
 /* Externs... */
-extern SSD13xx display;
 extern SX8634* touch;
 
 

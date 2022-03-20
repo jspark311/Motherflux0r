@@ -4,9 +4,6 @@
 #include "uApp.h"
 #include "Motherflux0r.h"
 
-
-extern SSD13xx display;
-
 extern float volume_left_output;
 extern float volume_right_output;
 extern float volume_pink_noise;

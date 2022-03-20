@@ -4,8 +4,6 @@
 #include "Motherflux0r.h"
 #include "uApp.h"
 
-extern SSD13xx display;
-
 
 uAppComms::uAppComms() : uApp("Comms", (Image*) &display) {}
 

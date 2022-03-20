@@ -8,11 +8,8 @@
     // TODO: Scale back the CPU clock.
     // TODO: Set wake sources.
 
-extern SSD13xx display;
-
 
 uAppStandby::uAppStandby() : uApp("Standby", (Image*) &display) {}
-
 
 uAppStandby::~uAppStandby() {}
 
