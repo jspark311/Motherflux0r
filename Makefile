@@ -217,6 +217,7 @@ SOURCES_CPP += lib/ManuvrDrivers/src/LTC294x/LTC294x.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/MCP356x/MCP356x.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/MCP356x/MCP356x_Util.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/MCP356x/MCP356x_Regs.cpp
+SOURCES_CPP += lib/ManuvrDrivers/src/SSD13xx/SSD13xx.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/SSD13xx/SSD1331.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/SX1503/SX1503.cpp
 SOURCES_CPP += lib/ManuvrDrivers/src/SX8634/SX8634.cpp

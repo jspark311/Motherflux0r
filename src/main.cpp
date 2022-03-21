@@ -192,8 +192,7 @@ const SSD13xxOpts disp_opts(
   ImgOrientation::ROTATION_0,
   DISPLAY_RST_PIN,
   DISPLAY_DC_PIN,
-  DISPLAY_CS_PIN,
-  SSDModel::SSD1331
+  DISPLAY_CS_PIN
 );
 
 /* Driver classes */
