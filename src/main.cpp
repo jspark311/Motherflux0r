@@ -120,19 +120,6 @@ const I2CAdapterOptions i2c1_opts(
   400000
 );
 
-I2CAdapter i2c0(&i2c0_opts);
-I2CAdapter i2c1(&i2c1_opts);
-
-ManuvrLinkOpts link_opts(
-  100,   // ACK timeout is 100ms.
-  2000,  // Send a KA every 2s.
-  2048,  // MTU for this link is 2 kibi.
-  TCode::CBOR,   // Payloads should be CBOR encoded.
-  // This side of the link will send a KA while IDLE, and
-  //   allows remote log write.
-  (MANUVRLINK_FLAG_SEND_KA | MANUVRLINK_FLAG_ALLOW_LOG_WRITE)
-);
-
 UARTOpts comm_unit_uart_opts {
   .bitrate       = 115200,
   .start_bits    = 0,
@@ -170,13 +157,29 @@ UARTOpts usb_comm_opts {
 };
 
 
+I2CAdapter i2c0(&i2c0_opts);
+I2CAdapter i2c1(&i2c1_opts);
+SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 8);
+
 UARTAdapter console_uart(0, 255, 255, 255, 255, 48, 256);
 UARTAdapter comm_unit_uart(1, COMM_RX_PIN, COMM_TX_PIN, 255, 255, 2048, 2048);
 UARTAdapter gps_uart(6, GPS_RX_PIN, GPS_TX_PIN, 255, 255, 48, 256);
 
+
 /* We use CppPotpourri's logging class, shunted to the serial port. */
 C3PLogger c3p_log_obj(
   (LOGGER_FLAG_PRINT_LEVEL | LOGGER_FLAG_PRINT_TAG)
+);
+
+
+ManuvrLinkOpts link_opts(
+  100,   // ACK timeout is 100ms.
+  2000,  // Send a KA every 2s.
+  2048,  // MTU for this link is 2 kibi.
+  TCode::CBOR,   // Payloads should be CBOR encoded.
+  // This side of the link will send a KA while IDLE, and
+  //   allows remote log write.
+  (MANUVRLINK_FLAG_SEND_KA | MANUVRLINK_FLAG_ALLOW_LOG_WRITE)
 );
 
 /* This object will contain our relationship with the Comm unit. */
@@ -195,8 +198,6 @@ const SSD13xxOpts disp_opts(
   DISPLAY_CS_PIN
 );
 
-/* Driver classes */
-SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 8);
 SSD1331 display(&disp_opts);
 
 
@@ -327,8 +328,8 @@ StopWatch stopwatch_sensor_lux;
 StopWatch stopwatch_sensor_mag;
 StopWatch stopwatch_sensor_gps;
 StopWatch stopwatch_sensor_tof;
-
 StopWatch stopwatch_touch_poll;
+
 SensorFilter<float> graph_array_cpu_time(96, FilteringStrategy::MOVING_MED);
 SensorFilter<float> graph_array_frame_rate(96, FilteringStrategy::RAW);
 
@@ -1084,7 +1085,6 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
     if (0 == StringBuilder::strcasecmp(cmd, "info")) {
       if (1 < args->count()) {
         switch ((SensorID) s_id) {
-          case SensorID::MAGNETOMETER:   magneto.printDebug(text_return);  break;
           case SensorID::BARO:           baro.printDebug(text_return);     break;
           case SensorID::LIGHT:          i2c1.printDebug(text_return);     break;
           case SensorID::UV:             uv.printDebug(text_return);       break;
@@ -1105,7 +1105,6 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
     else if (0 == StringBuilder::strcasecmp(cmd, "init")) {
       if (1 < args->count()) {
         switch ((SensorID) s_id) {
-          case SensorID::MAGNETOMETER:   ret_local = magneto.init(&i2c1, &spi0);   break;
           case SensorID::BARO:           ret_local = baro.init();                  break;
           case SensorID::LUX:            ret_local = tsl2561.init();               break;
           case SensorID::UV:             ret_local = uv.init();                    break;
