@@ -62,6 +62,7 @@ uAppSynthBox::~uAppSynthBox() {}
 */
 int8_t uAppSynthBox::_lc_on_preinit() {
   int8_t ret = 1;
+  for (uint8_t i = 0; i < 96; i++) {   fft_bars_shown[i] = 0;   }
   redraw_app_window();
   return ret;
 }
@@ -113,6 +114,7 @@ int8_t uAppSynthBox::_process_user_input() {
   int8_t ret = 0;
 
   if (_slider_current != _slider_pending) {
+    redraw_app_window();
     FB->setCursor(64, 0);
     FB->setTextColor(YELLOW, BLACK);
     if (_slider_pending <= 7) {
@@ -281,27 +283,33 @@ void uAppSynthBox::_redraw_window() {
   else if (_slider_current <= 52) {
   }
   else {
-    const float SCALER_PIX   = 52;
-    const int   SHOWN_DECAY  = 1;
+    const uint16_t BANNER_HEIGHT = 12;
+    const uint16_t SHOWN_DECAY   = 1;
+    const uint16_t Y_RANGE       = (FB->y() - BANNER_HEIGHT);
+    const float    SCALER_PIX    = (float) Y_RANGE;
+
     float fft_bins[96];
-    for (uint8_t i = 0; i < 96; i++) {
+    for (uint16_t i = 0; i < 96; i++) {
+      // Only take one channel.
       fft_bins[i] = fft256_1.read(BIN_INDICIES[i << 1], BIN_INDICIES[(i << 1) + 1]);
     }
-    for (uint8_t i = 0; i < 96; i++) {
-      uint8_t scaled_val = fft_bins[i] * SCALER_PIX;
-      uint y_real  = (FB->y()-12) - scaled_val;
-      uint h_real  = (FB->y()-12) - scaled_val;
-      FB->drawFastVLine(i, 11, FB->y()-12, BLACK);
+    for (uint16_t i = 0; i < 96; i++) {
+      uint16_t scaled_val = (uint16_t) strict_min(fft_bins[i] * SCALER_PIX, 1.0f);
+      uint16_t y_real     = BANNER_HEIGHT + (Y_RANGE - scaled_val) - 1;
+
+      FB->drawFastVLine(i, BANNER_HEIGHT, (Y_RANGE - scaled_val), BLACK);
       if (scaled_val >= fft_bars_shown[i]) {
         fft_bars_shown[i] = scaled_val;
-        FB->drawFastVLine(i, y_real, h_real, GREEN);
+        if (0 < scaled_val) {
+          FB->drawFastVLine(i, (BANNER_HEIGHT + (Y_RANGE - scaled_val)), scaled_val, WHITE);
+        }
       }
       else {
         if (fft_bars_shown[i] > 0) fft_bars_shown[i] = fft_bars_shown[i] - SHOWN_DECAY;
-        uint y_decay = (FB->y()-12) - fft_bars_shown[i];
-        uint h_decay = y_decay - h_real;
-        FB->drawFastVLine(i, y_decay, h_decay, RED);
-        FB->drawFastVLine(i, y_real, h_real, WHITE);
+        uint y_decay = (Y_RANGE - fft_bars_shown[i]);
+        uint h_decay = y_decay - scaled_val;
+        //FB->drawFastVLine(i, y_decay, h_decay, RED);
+        //FB->drawFastVLine(i, y_real, scaled_val, GREEN);
       }
     }
   }

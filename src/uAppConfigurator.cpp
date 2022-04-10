@@ -98,3 +98,5 @@ void uAppConfigurator::_redraw_window() {
   const uint8_t TEXT_OFFSET = 56;
   FB->fillRect(0, 11, FB->x()-1, FB->y()-12, 0);
 }
+
+ 

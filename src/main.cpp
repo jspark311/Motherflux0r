@@ -73,14 +73,14 @@ AudioConnection          patchCord16(ampL, 0, i2s_dac, 0);
 
 float volume_left_output  = 0.1;
 float volume_right_output = 0.1;
-float volume_pink_noise   = 1.0;
+float volume_pink_noise   = 0.75;
 float mix_synth_to_fft    = 0.0;
 float mix_queueL_to_fft   = 0.0;
 float mix_queueR_to_fft   = 0.0;
-float mix_noise_to_fft    = 1.0;
+float mix_noise_to_fft    = 0.99;
 float mix_synth_to_line   = 0.0;
 float mix_queue_to_line   = 0.0;
-float mix_noise_to_line   = 1.0;
+float mix_noise_to_line   = 0.99;
 
 UsrConfRecord user_conf;
 CalConfRecord cal_conf;
@@ -94,7 +94,7 @@ CalConfRecord cal_conf;
 TripleAxisTerminus     mag_vect(SpatialSense::MAG, callback_3axis);   // The magnetic field vector.
 TripleAxisCompass      compass(callback_3axis);
 TripleAxisFork         mag_fork(&compass, &mag_vect);
-TripleAxisSingleFilter mag_filter(SpatialSense::MAG, &mag_fork, FilteringStrategy::MOVING_AVG, 2, 0);
+TripleAxisSingleFilter mag_filter(SpatialSense::MAG, &mag_fork, FilteringStrategy::MOVING_AVG, 360, 0);
 
 // Inertial pipeline
 TripleAxisTerminus     down(SpatialSense::ACC, callback_3axis);  // The tilt sensor's best-estimate of "down".
@@ -727,6 +727,22 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+int callback_spi_debug(StringBuilder* text_return, StringBuilder* args) {
+  int ret = -1;
+  if (0 < args->count()) {
+    int bus_id = args->position_as_int(0);
+    args->drop_position(0);
+    switch (bus_id) {
+      case 0:   ret = spi0.console_handler(text_return, args);  break;
+      default:
+        text_return->concatf("Unsupported bus: %d\n", bus_id);
+        break;
+    }
+  }
+  return ret;
+}
+
+
 int callback_i2c_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = -1;
   if (0 < args->count()) {
@@ -1126,7 +1142,6 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
     if (0 == StringBuilder::strcasecmp(cmd, "refresh")) {
       if (1 < args->count()) {
         switch ((SensorID) s_id) {
-          // case SensorID::MAGNETOMETER:   magneto.printDebug(text_return);  break;
           case SensorID::BARO:              ret_local = baro.refresh();     break;
           // case SensorID::LIGHT:          i2c1.printDebug(text_return);     break;
           // case SensorID::UV:             uv.printDebug(text_return);       break;
@@ -1146,7 +1161,6 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
     else if (0 == StringBuilder::strcasecmp(cmd, "poll")) {
       if (1 < args->count()) {
         switch ((SensorID) s_id) {
-          case SensorID::MAGNETOMETER:   ret_local = magneto.poll();   break;
           case SensorID::BARO:           ret_local = baro.poll();                  break;
           case SensorID::LUX:            ret_local = tsl2561.poll();               break;
           case SensorID::UV:             ret_local = uv.poll();                    break;
@@ -1165,14 +1179,11 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
         text_return->concatf("Sensor %d poll() returned %d\n", s_id, ret_local);
       }
     }
-    else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
-    }
     else if (0 == StringBuilder::strcasecmp(cmd, "enable")) {
       if (1 < args->count()) {
         bool s_en = (1 < args->count()) ? (1 == args->position_as_int(1)) : true;
         bool en   = false;
         switch ((SensorID) s_id) {
-          case SensorID::MAGNETOMETER:  magneto.power(s_en);    en = magneto.power();     break;
           case SensorID::BARO:          en = baro.enabled();            break;
           case SensorID::LUX:           tsl2561.enabled(s_en);  en = tsl2561.enabled();   break;
           case SensorID::UV:            uv.enabled(s_en);       en = uv.enabled();        break;
@@ -1539,6 +1550,7 @@ void setup() {
   console.defineCommand("touch",       ParsingConsole::tcodes_str_4, "SX8634 tools", "", 0, callback_touch_tools);
   console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("disp",        'd', ParsingConsole::tcodes_uint_1, "Display test", "", 1, callback_display_test);
+  console.defineCommand("spi",         '\0', ParsingConsole::tcodes_str_3, "SPI debug.", "", 1, callback_spi_debug);
   console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
   console.defineCommand("log",         ParsingConsole::tcodes_uint_3, "Logger tools", "", 0, callback_logger_tools);
   console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);

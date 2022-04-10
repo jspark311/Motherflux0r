@@ -6,6 +6,7 @@
 #include <Image/Image.h>
 #include <FlagContainer.h>
 #include <ManuvrDrivers.h>
+#include "Storage/DataRecords.h"
 
 #ifndef __U_APP_H_
 #define __U_APP_H_
@@ -60,6 +61,18 @@ extern SSD1331 display;
 #define UAPP_FLAG_PRESS_CANCEL     0x80000000  //
 
 
+/* Modal IDs for the UI. */
+#define UAPP_MODAL_NONE                 0x00   // Zero implies no active modal.
+#define UAPP_MODAL_TRICORDER_MAG        0x01
+#define UAPP_MODAL_TRICORDER_IMU        0x02
+#define UAPP_MODAL_TRICORDER_GPS        0x03
+#define UAPP_MODAL_TRICORDER_THERMOPILE 0x04
+#define UAPP_MODAL_TRICORDER_LIGHT      0x05
+#define UAPP_MODAL_TRICORDER_ATMO       0x06
+#define UAPP_MODAL_TRICORDER_RANGING    0x07
+
+
+
 /*******************************************************************************
 *******************************************************************************/
 class uApp {
@@ -73,10 +86,13 @@ class uApp {
     inline bool isActive() {     return _uapp_flag(UAPP_FLAG_IS_ACTIVE);  };
     inline const char* getAppIDString() {   return _UA_NAME;    };
 
+    inline void    modal(uint8_t m) {      _modal_id = m;       };
+    inline uint8_t modal() {               return _modal_id;    };
+
     static uApp* appActive();
     static uApp* drawnApp();
     static uApp* previousApp();
-    static void setAppActive(AppID);
+    static void setAppActive(AppID, uint8_t modal = 0);
 
 
   protected:
@@ -87,6 +103,7 @@ class uApp {
     uint16_t      _slider_pending  = 0;
     uint16_t      _buttons_current = 0;
     uint16_t      _buttons_pending = 0;
+    uint8_t       _modal_id        = UAPP_MODAL_NONE;
 
     uApp(const char* _n, Image* img) : _UA_NAME(_n), FB(img) {};
     virtual ~uApp() {};
@@ -168,6 +185,22 @@ class uAppBoot : public uApp {
 };
 
 
+class uAppRoot : public uApp {
+  public:
+    uAppRoot();
+    ~uAppRoot();
+
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
+    int8_t _process_user_input();
+    void   _redraw_window();
+};
+
+
+
 class uAppTricorder : public uApp {
   public:
     uAppTricorder();
@@ -180,7 +213,25 @@ class uAppTricorder : public uApp {
     int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
+
+  private:
+    int8_t _pui_magnetometer();
+    int8_t _pui_thermal_field();
+    int8_t _pui_imu();
+    int8_t _pui_baro();
+    int8_t _pui_gps();
+    int8_t _pui_photometry();
+    int8_t _pui_tof();
+
+    void _render_magnetometer();
+    void _render_thermal_field();
+    void _render_imu();
+    void _render_baro();
+    void _render_gps();
+    void _render_photometry();
+    void _render_tof();
 };
+
 
 
 class uAppLocation : public uApp {
@@ -231,23 +282,6 @@ class uAppMeta : public uApp {
 };
 
 
-class uAppRoot : public uApp {
-  public:
-    uAppRoot();
-    ~uAppRoot();
-
-  protected:
-    AppID app_page = AppID::TRICORDER;
-
-    int8_t _lc_on_preinit();
-    int8_t _lc_on_active();
-    int8_t _lc_on_teardown();
-    int8_t _lc_on_inactive();
-    int8_t _process_user_input();
-    void   _redraw_window();
-};
-
-
 class uAppSynthBox : public uApp {
   public:
     uAppSynthBox();
@@ -285,6 +319,9 @@ class uAppConfigurator : public uApp {
     uAppConfigurator();
     ~uAppConfigurator();
 
+    void setActiveConf(const ConfKey K) {   _active_conf = K;  };
+
+
   protected:
     int8_t _lc_on_preinit();
     int8_t _lc_on_active();
@@ -292,6 +329,9 @@ class uAppConfigurator : public uApp {
     int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
+
+  private:
+    ConfKey _active_conf = ConfKey::INVALID;
 };
 
 

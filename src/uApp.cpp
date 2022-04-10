@@ -29,7 +29,7 @@ uApp* uApp::drawnApp() {       return (uApp*) drawn_app_ptr;      }
 uApp* uApp::previousApp() {    return (uApp*) previous_app_ptr;   }
 
 
-void  uApp::setAppActive(AppID new_app) {
+void  uApp::setAppActive(AppID new_app, uint8_t modal) {
   switch (new_app) {
     case AppID::APP_BOOT:       pending_app_ptr = &app_boot;           break;
     case AppID::APP_SELECT:     pending_app_ptr = &app_root;           break;
@@ -44,6 +44,7 @@ void  uApp::setAppActive(AppID new_app) {
     case AppID::HOT_STANDBY:    pending_app_ptr = &app_standby;        break;
     case AppID::SUSPEND:        pending_app_ptr = &app_standby;        break;
   }
+  pending_app_ptr->modal(modal);
 }
 
 /*******************************************************************************
