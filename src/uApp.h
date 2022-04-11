@@ -71,6 +71,13 @@ extern SSD1331 display;
 #define UAPP_MODAL_TRICORDER_ATMO       0x06
 #define UAPP_MODAL_TRICORDER_RANGING    0x07
 
+#define UAPP_MODAL_COMMS_WIFI           0x01
+#define UAPP_MODAL_COMMS_BLUETOOTH      0x02
+#define UAPP_MODAL_COMMS_LORA           0x03
+#define UAPP_MODAL_COMMS_CONSOLE        0x04
+#define UAPP_MODAL_COMMS_MLINK          0x05
+#define UAPP_MODAL_COMMS_SERIAL         0x06
+
 
 
 /*******************************************************************************
@@ -215,6 +222,8 @@ class uAppTricorder : public uApp {
     void   _redraw_window();
 
   private:
+    uint8_t _sub_modal = UAPP_MODAL_NONE;
+
     int8_t _pui_magnetometer();
     int8_t _pui_thermal_field();
     int8_t _pui_imu();

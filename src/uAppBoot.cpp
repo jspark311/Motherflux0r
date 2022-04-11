@@ -68,7 +68,7 @@ typedef struct {
 // Items on the init list should be in order of desired initialization.
 const UAppInitPoint INIT_LIST[] = {
   {"Display",          UAPP_BOOT_FLAG_INIT_DISPLAY       },
-  {"Touchpad",         UAPP_BOOT_FLAG_INIT_MAG_GPIO      },
+  {"SX1503",           UAPP_BOOT_FLAG_INIT_MAG_GPIO      },
   {"NV Storage",       UAPP_BOOT_FLAG_INIT_STORAGE       },
   {"Conf Load",        UAPP_BOOT_FLAG_INIT_CONF_LOADED   },
   {"USB",              UAPP_BOOT_FLAG_INIT_LUX           },
@@ -349,7 +349,6 @@ void uAppBoot::_redraw_window() {
             ret_local = touch->deviceReady();
             if (ret_local) {
               touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
-              touch->setMode(SX8634OpMode::ACTIVE);
             }
           }
           break;
@@ -390,7 +389,10 @@ void uAppBoot::_redraw_window() {
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE:
-          ret_local = (_init_sent_flags.raw == (_init_done_flags.raw | UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE));
+          if (_init_sent_flags.raw == (_init_done_flags.raw | UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE)) {
+            ret_local = (0 == touch->setMode(SX8634OpMode::ACTIVE));
+            c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Setting touch to ACTIVE returned %d.", ret_local);
+          }
           break;
         default:  return;  // TODO: Failure
       }

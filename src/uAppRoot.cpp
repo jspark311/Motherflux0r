@@ -151,6 +151,7 @@ int8_t uAppRoot::_process_user_input() {
 
   if (_slider_current != _slider_pending) {
     _modal_id = MAX_SEL_INDICIES - (MAX_SEL_INDICIES * ((float) _slider_pending/60.0));
+    _modal_id = strict_min(_modal_id, (MAX_SEL_INDICIES-1));
     _slider_current = _slider_pending;
     ret = 1;
   }

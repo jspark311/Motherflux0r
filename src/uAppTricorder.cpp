@@ -100,95 +100,6 @@ int8_t uAppTricorder::_lc_on_inactive() {
 int8_t uAppTricorder::_process_user_input() {
   int8_t ret = 1;
 
-  //switch (_modal_id) {
-  //  case UAPP_MODAL_TRICORDER_MAG:         return _pui_magnetometer();
-  //  case UAPP_MODAL_TRICORDER_IMU:         return _pui_imu();
-  //  case UAPP_MODAL_TRICORDER_GPS:         return _pui_gps();
-  //  case UAPP_MODAL_TRICORDER_THERMOPILE:  return _pui_thermal_field();
-  //  case UAPP_MODAL_TRICORDER_LIGHT:       return _pui_photometry();
-  //  case UAPP_MODAL_TRICORDER_ATMO:        return _pui_baro();
-  //  default:  break;
-  //}
-
-  if (_slider_current != _slider_pending) {
-    FB->fill(BLACK);
-    FB->setTextSize(0);
-    FB->setCursor(0, 0);
-    if (_slider_pending <= 7) {
-      _modal_id = UAPP_MODAL_TRICORDER_ATMO;
-      if (_render_lock_range()) {
-        FB->setTextColor(0x03E0, BLACK);
-        FB->writeString("Pressure (Pa)");
-      }
-      else {
-        FB->setTextColor(0x3EE3, BLACK);
-        FB->writeString("RelH%");
-        FB->setTextColor(WHITE, BLACK);
-        FB->writeString(" / ");
-        FB->setTextColor(0x83D0, BLACK);
-        FB->writeString("Temp  ");
-      }
-    }
-    else if (_slider_pending <= 15) {
-      _modal_id = UAPP_MODAL_TRICORDER_IMU;
-      FB->setTextColor(YELLOW, BLACK);
-      FB->writeString("IMU");
-    }
-    else if (_slider_pending <= 22) {
-      _modal_id = UAPP_MODAL_TRICORDER_RANGING;
-      FB->setTextColor(0x8235, BLACK);
-      FB->writeString("Distance (mm)");
-    }
-    else if (_slider_pending <= 30) {
-      _modal_id = UAPP_MODAL_TRICORDER_LIGHT;
-      if (_render_lock_range()) {
-        FB->setTextColor(YELLOW, BLACK);
-        FB->writeString("ANA");
-        FB->setTextColor(WHITE, BLACK);
-        FB->writeString(" / ");
-        FB->setTextColor(0xF140, BLACK);
-        FB->writeString("Lux");
-        FB->setTextColor(WHITE, BLACK);
-        FB->writeString(" / ");
-        FB->setTextColor(RED, BLACK);
-        FB->writeString("IR");
-      }
-      else {
-        FB->setTextColor(0x791F, BLACK);
-        FB->writeString("UVa");
-        FB->setTextColor(WHITE, BLACK);
-        FB->writeString(" / ");
-        FB->setTextColor(0xF80F, BLACK);
-        FB->writeString("UVb");
-        FB->setTextColor(WHITE, BLACK);
-        FB->writeString(" / ");
-        FB->setTextColor(MAGENTA, BLACK);
-        FB->writeString("UVI");
-      }
-    }
-    else if (_slider_pending <= 37) {
-      FB->setTextColor(WHITE, BLACK);
-      FB->writeString("Batt ");
-      FB->setTextColor(COLOR_BATT_VOLTAGE, BLACK);
-      FB->writeString("V");
-      FB->setTextColor(WHITE, BLACK);
-      FB->writeString(" / ");
-      FB->setTextColor(COLOR_BATT_CURRENT, BLACK);
-      FB->writeString("I");
-    }
-    else if (_slider_pending <= 45) {
-      _modal_id = UAPP_MODAL_TRICORDER_GPS;
-      redraw_app_window();
-    }
-    else if (_slider_pending <= 52) {
-      _modal_id = UAPP_MODAL_TRICORDER_THERMOPILE;
-    }
-    else {
-      _modal_id = UAPP_MODAL_TRICORDER_MAG;
-    }
-    _slider_current = _slider_pending;
-  }
-
   if (_buttons_current != _buttons_pending) {
     uint16_t diff = _buttons_current ^ _buttons_pending;
     if (diff & 0x0001) {   // Cancel
@@ -222,8 +133,103 @@ int8_t uAppTricorder::_process_user_input() {
         _render_lock_range(!_render_lock_range());
       }
     }
-    _buttons_current = _buttons_pending;
   }
+
+  if (UAPP_MODAL_NONE != _modal_id) {
+    switch (_modal_id) {
+      case UAPP_MODAL_TRICORDER_MAG:         ret = _pui_magnetometer();   break;
+      case UAPP_MODAL_TRICORDER_IMU:         ret = _pui_imu();            break;
+      case UAPP_MODAL_TRICORDER_GPS:         ret = _pui_gps();            break;
+      case UAPP_MODAL_TRICORDER_THERMOPILE:  ret = _pui_thermal_field();  break;
+      case UAPP_MODAL_TRICORDER_LIGHT:       ret = _pui_photometry();     break;
+      case UAPP_MODAL_TRICORDER_ATMO:        ret = _pui_baro();           break;
+      case UAPP_MODAL_TRICORDER_RANGING:     ret = _pui_tof();            break;
+      default:  break;
+    }
+  }
+  else {
+    if (_slider_current != _slider_pending) {
+      FB->fill(BLACK);
+      FB->setTextSize(0);
+      FB->setCursor(0, 0);
+      if (_slider_pending <= 7) {
+        _modal_id = UAPP_MODAL_TRICORDER_ATMO;
+        if (_render_lock_range()) {
+          FB->setTextColor(0x03E0, BLACK);
+          FB->writeString("Pressure (Pa)");
+        }
+        else {
+          FB->setTextColor(0x3EE3, BLACK);
+          FB->writeString("RelH%");
+          FB->setTextColor(WHITE, BLACK);
+          FB->writeString(" / ");
+          FB->setTextColor(0x83D0, BLACK);
+          FB->writeString("Temp  ");
+        }
+      }
+      else if (_slider_pending <= 15) {
+        _modal_id = UAPP_MODAL_TRICORDER_IMU;
+        FB->setTextColor(YELLOW, BLACK);
+        FB->writeString("IMU");
+      }
+      else if (_slider_pending <= 22) {
+        _modal_id = UAPP_MODAL_TRICORDER_RANGING;
+        FB->setTextColor(0x8235, BLACK);
+        FB->writeString("Distance (mm)");
+      }
+      else if (_slider_pending <= 30) {
+        _modal_id = UAPP_MODAL_TRICORDER_LIGHT;
+        if (_render_lock_range()) {
+          FB->setTextColor(YELLOW, BLACK);
+          FB->writeString("ANA");
+          FB->setTextColor(WHITE, BLACK);
+          FB->writeString(" / ");
+          FB->setTextColor(0xF140, BLACK);
+          FB->writeString("Lux");
+          FB->setTextColor(WHITE, BLACK);
+          FB->writeString(" / ");
+          FB->setTextColor(RED, BLACK);
+          FB->writeString("IR");
+        }
+        else {
+          FB->setTextColor(0x791F, BLACK);
+          FB->writeString("UVa");
+          FB->setTextColor(WHITE, BLACK);
+          FB->writeString(" / ");
+          FB->setTextColor(0xF80F, BLACK);
+          FB->writeString("UVb");
+          FB->setTextColor(WHITE, BLACK);
+          FB->writeString(" / ");
+          FB->setTextColor(MAGENTA, BLACK);
+          FB->writeString("UVI");
+        }
+      }
+      else if (_slider_pending <= 37) {
+        FB->setTextColor(WHITE, BLACK);
+        FB->writeString("Batt ");
+        FB->setTextColor(COLOR_BATT_VOLTAGE, BLACK);
+        FB->writeString("V");
+        FB->setTextColor(WHITE, BLACK);
+        FB->writeString(" / ");
+        FB->setTextColor(COLOR_BATT_CURRENT, BLACK);
+        FB->writeString("I");
+      }
+      else if (_slider_pending <= 45) {
+        _modal_id = UAPP_MODAL_TRICORDER_GPS;
+        redraw_app_window();
+      }
+      else if (_slider_pending <= 52) {
+        _modal_id = UAPP_MODAL_TRICORDER_THERMOPILE;
+      }
+      else {
+        _modal_id = UAPP_MODAL_TRICORDER_MAG;
+      }
+      _slider_current = _slider_pending;
+    }
+  }
+
+  if (_buttons_current != _buttons_pending) _buttons_current = _buttons_pending;
+  if (_slider_current != _slider_pending)   _slider_current  = _slider_pending;
   return ret;
 }
 
@@ -254,6 +260,99 @@ void uAppTricorder::_redraw_window() {
   //   );
   // }
 }
+
+
+int8_t uAppTricorder::_pui_magnetometer() {
+  int8_t ret = 1;
+  if (_slider_current != _slider_pending) {
+    if (_slider_pending <= 7) {
+    }
+    else if (_slider_pending <= 15) {
+    }
+    else if (_slider_pending <= 22) {
+    }
+    else if (_slider_pending <= 30) {
+    }
+    else if (_slider_pending <= 37) {
+    }
+    else if (_slider_pending <= 45) {
+    }
+    else if (_slider_pending <= 52) {
+    }
+    else {
+    }
+  }
+  if (_buttons_current != _buttons_pending) {
+    uint16_t diff = _buttons_current ^ _buttons_pending;
+    // bool up_pressed   = (_buttons_current & 0x0002);
+    // bool down_pressed = (_buttons_current & 0x0010);
+    // _button_pressed_up(!down_pressed && up_pressed);
+    // _button_pressed_dn(down_pressed && !up_pressed);
+    if (diff & 0x0002) {   // Up
+      if (_buttons_pending & 0x0002) {
+        _cluttered_display(!_cluttered_display());
+      }
+    }
+    if (diff & 0x0004) {   // Accept
+      if (_buttons_pending & 0x0004) {   // Interpret an ok press as an app selection.
+      }
+    }
+    if (diff & 0x0008) {   // Right
+      if (_buttons_pending & 0x0008) {   // Text of actual value.
+        _render_text_value(!_render_text_value());
+      }
+    }
+    if (diff & 0x0010) {   // Down
+      if (_buttons_pending & 0x0010) {
+        _render_lock_range(!_render_lock_range());
+      }
+    }
+    if (diff & 0x0020) {   // Left
+      if (_buttons_pending & 0x0020) {   // Previous selection.
+      }
+    }
+    _buttons_current = _buttons_pending;
+    ret = 1;
+  }
+  return ret;
+}
+
+
+int8_t uAppTricorder::_pui_thermal_field() {
+  int8_t ret = 1;
+  return ret;
+}
+
+
+int8_t uAppTricorder::_pui_imu() {
+  int8_t ret = 1;
+  return ret;
+}
+
+
+int8_t uAppTricorder::_pui_baro() {
+  int8_t ret = 1;
+  return ret;
+}
+
+
+int8_t uAppTricorder::_pui_gps() {
+  int8_t ret = 1;
+  return ret;
+}
+
+
+int8_t uAppTricorder::_pui_photometry() {
+  int8_t ret = 1;
+  return ret;
+}
+
+
+int8_t uAppTricorder::_pui_tof() {
+  int8_t ret = 1;
+  return ret;
+}
+
 
 
 
@@ -293,10 +392,6 @@ void uAppTricorder::_render_magnetometer() {
       true, false, _render_text_value(),
       &graph_array_mag_strength_x, &graph_array_mag_strength_y, &graph_array_mag_strength_z
     );
-  }
-  else {
-    FB->setTextColor(YELLOW, BLACK);
-    FB->writeString("Awaiting data...");
   }
 }
 
@@ -389,10 +484,6 @@ void uAppTricorder::_render_thermal_field() {
         &graph_array_therm_mean
       );
     }
-  }
-  else {
-    FB->setTextColor(YELLOW, BLACK);
-    FB->writeString("Awaiting data...");
   }
 }
 
