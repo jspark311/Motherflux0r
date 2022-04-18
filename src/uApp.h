@@ -20,18 +20,19 @@
 * Types, defines, and externs
 *******************************************************************************/
 enum class AppID : uint8_t {
-  APP_BOOT     =  0,  // Should run once on startup.
-  APP_SELECT   =  1,  // For choosing the app.
-  TOUCH_TEST   =  2,  // For diagnostics of the touch pad.
-  CONFIGURATOR =  3,  // For tuning all the things.
-  DATA_MGMT    =  4,  // For managing recorded datasets.
-  SYNTH_BOX    =  5,  // Sound synthesis from data.
-  COMMS_TEST   =  6,  // Connecting to the outside world.
-  META         =  7,  // Shutdown/reboot/reflash, profiles.
-  TRICORDER    =  8,  // This is the primary purpose of the device.
-  LOCATOR      =  9,  // GPS and location tools.
-  HOT_STANDBY  = 10,  // Full operation with powered-down UI elements.
-  SUSPEND      = 11   // Minimal power without an obligatory reboot.
+  APP_BOOT = 0,   // Should run once on startup.
+  APP_SELECT,     // For choosing the app.
+  TOUCH_TEST,     // For diagnostics of the touch pad.
+  CONFIGURATOR,   // For tuning all the things.
+  DATA_MGMT,      // For managing recorded datasets.
+  SYNTH_BOX,      // Sound synthesis from data.
+  COMMS_TEST,     // Connecting to the outside world.
+  META,           // Shutdown/reboot/reflash, profiles.
+  TRICORDER,      // This is the primary purpose of the device.
+  MAGNETOMETER,   // The magnetometer detail uApp.
+  LOCATOR,        // GPS and location tools.
+  HOT_STANDBY,    // Full operation with powered-down UI elements.
+  SUSPEND         // Minimal power without an obligatory reboot.
 };
 
 /* Application lifecycle state machine positions. */
@@ -224,7 +225,6 @@ class uAppTricorder : public uApp {
   private:
     uint8_t _sub_modal = UAPP_MODAL_NONE;
 
-    int8_t _pui_magnetometer();
     int8_t _pui_thermal_field();
     int8_t _pui_imu();
     int8_t _pui_baro();
@@ -232,13 +232,27 @@ class uAppTricorder : public uApp {
     int8_t _pui_photometry();
     int8_t _pui_tof();
 
-    void _render_magnetometer();
     void _render_thermal_field();
     void _render_imu();
     void _render_baro();
     void _render_gps();
     void _render_photometry();
     void _render_tof();
+};
+
+
+class uAppMagnetometer : public uApp {
+  public:
+    uAppMagnetometer();
+    ~uAppMagnetometer();
+
+  protected:
+    int8_t _lc_on_preinit();
+    int8_t _lc_on_active();
+    int8_t _lc_on_teardown();
+    int8_t _lc_on_inactive();
+    int8_t _process_user_input();
+    void   _redraw_window();
 };
 
 

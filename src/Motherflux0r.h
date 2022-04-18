@@ -78,6 +78,7 @@
 #define CYAN            0xFF07
 #define MAGENTA         0x1FF8
 #define YELLOW          0xE0FF
+#define GREY            0x79EF
 #define WHITE           0xFFFF
 
 // For sanity, we use a common color scheme for 3-space axes.
@@ -87,6 +88,10 @@
 
 #define COLOR_BATT_VOLTAGE  0x03F2
 #define COLOR_BATT_CURRENT  0x7EF2
+
+#define COLOR_AIR_PRESSURE  0x03E0
+#define COLOR_AIR_HUMIDITY  0x3EE3
+#define COLOR_AIR_TEMP      0x83D0
 
 
 

@@ -1144,7 +1144,7 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
         switch ((SensorID) s_id) {
           case SensorID::BARO:              ret_local = baro.refresh();     break;
           // case SensorID::LIGHT:          i2c1.printDebug(text_return);     break;
-          // case SensorID::UV:             uv.printDebug(text_return);       break;
+           case SensorID::UV:               ret_local = uv.refresh();       break;
           // case SensorID::THERMOPILE:     grideye.printDebug(text_return);  break;
           // case SensorID::LUX:            tsl2561.printDebug(text_return);  break;
           // case SensorID::BATT_VOLTAGE:   grideye.printFrame(text_return);  break;
@@ -1716,7 +1716,7 @@ void loop() {
   uApp::appActive()->refresh();
   stopwatch_display.markStop();
   // For tracking framerate, convert from period in micros to hz...
-  graph_array_frame_rate.feedFilter(1000000.0 / 1+stopwatch_display.meanTime());
+  graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
 
   console.printToLog(&output);
   console_uart.poll();

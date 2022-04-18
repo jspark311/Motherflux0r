@@ -6,6 +6,8 @@
 #include "DRV425.h"
 
 /* Sensor representations */
+extern SX1503   sx1503;
+extern MCP356x  mag_adc;
 extern DRV425 magneto;
 extern SX1503 sx1503;
 extern TMP102 tmp102;

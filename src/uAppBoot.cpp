@@ -88,7 +88,7 @@ const UAppInitPoint INIT_LIST[] = {
 };
 
 uint16_t serial_timeout = 0;
-
+uint32_t touch_timeout  = 0;
 
 
 uAppBoot::uAppBoot() : uApp("Boot", (Image*) &display) {}
@@ -254,6 +254,9 @@ void uAppBoot::_redraw_window() {
           break;
         case UAPP_BOOT_FLAG_INIT_TOUCH:
           ret_local = (0 == touch->reset());
+          if (ret_local) {
+            touch_timeout = millis() + 300;
+          }
           break;
         case UAPP_BOOT_FLAG_INIT_IMU:
           ret_local = true;
@@ -349,6 +352,7 @@ void uAppBoot::_redraw_window() {
             ret_local = touch->deviceReady();
             if (ret_local) {
               touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
+              touch->setMode(SX8634OpMode::ACTIVE);
             }
           }
           break;
@@ -389,9 +393,15 @@ void uAppBoot::_redraw_window() {
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE:
-          if (_init_sent_flags.raw == (_init_done_flags.raw | UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE)) {
-            ret_local = (0 == touch->setMode(SX8634OpMode::ACTIVE));
-            c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Setting touch to ACTIVE returned %d.", ret_local);
+          if (SX8634OpMode::ACTIVE != touch->operationalMode()) {
+            if (touch_timeout < millis()) {
+              int tmp = touch->setMode(SX8634OpMode::ACTIVE);
+              touch_timeout = millis() + 300;
+              c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Setting touch to ACTIVE returned %d.", tmp);
+            }
+          }
+          else if (_init_sent_flags.raw == (_init_done_flags.raw | UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE)) {
+            ret_local = true;
           }
           break;
         default:  return;  // TODO: Failure

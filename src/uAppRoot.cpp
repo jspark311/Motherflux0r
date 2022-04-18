@@ -22,8 +22,8 @@ const uapp_root_selection SELECTIONS[] = {
   /* Tricorder group */
   { .title    = (char*) "Magnetometer",
     .icon_id  = ICON_MAGNET,
-    .app_id   = AppID::TRICORDER,
-    .modal_id = UAPP_MODAL_TRICORDER_MAG },
+    .app_id   = AppID::MAGNETOMETER,
+    .modal_id = UAPP_MODAL_NONE },
   { .title    = (char*) "Inertial    ",
     .icon_id  = ICON_IMU,
     .app_id   = AppID::TRICORDER,
@@ -44,7 +44,6 @@ const uapp_root_selection SELECTIONS[] = {
     .icon_id  = ICON_RH,
     .app_id   = AppID::TRICORDER,
     .modal_id = UAPP_MODAL_TRICORDER_ATMO },
-
   { .title    = (char*) "Synth Box   ",
     .icon_id  = ICON_SOUND,
     .app_id   = AppID::SYNTH_BOX,

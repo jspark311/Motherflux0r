@@ -5,6 +5,7 @@
 /* Application tracking and interrupts... */
 uAppBoot app_boot;
 uAppTricorder app_tricorder;
+uAppMagnetometer app_magnetometer;
 uAppMeta app_meta;
 uAppTouchTest app_touch_test;
 uAppRoot app_root;
@@ -40,6 +41,7 @@ void  uApp::setAppActive(AppID new_app, uint8_t modal) {
     case AppID::SYNTH_BOX:      pending_app_ptr = &app_synthbox;       break;
     case AppID::COMMS_TEST:     pending_app_ptr = &app_comms;          break;
     case AppID::TRICORDER:      pending_app_ptr = &app_tricorder;      break;
+    case AppID::MAGNETOMETER:   pending_app_ptr = &app_magnetometer;   break;
     case AppID::LOCATOR:        pending_app_ptr = &app_locator;        break;
     case AppID::HOT_STANDBY:    pending_app_ptr = &app_standby;        break;
     case AppID::SUSPEND:        pending_app_ptr = &app_standby;        break;
