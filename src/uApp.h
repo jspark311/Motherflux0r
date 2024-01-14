@@ -1,15 +1,12 @@
 /*
 *                                                  ---J. Ian Lindsay  2020.02.29
 */
-#include <Arduino.h>
-#include <StopWatch.h>
-#include <Image/Image.h>
-#include <FlagContainer.h>
-#include <ManuvrDrivers.h>
-#include "Storage/DataRecords.h"
 
 #ifndef __U_APP_H_
 #define __U_APP_H_
+
+#include <Arduino.h>
+#include "Motherflux0r.h"
 
 // TODO: Might make this a config or load-contingent value.
 #define APP_POLLING_PERIOD        20    // App runs at ~50fps.
@@ -342,7 +339,7 @@ class uAppConfigurator : public uApp {
     uAppConfigurator();
     ~uAppConfigurator();
 
-    void setActiveConf(const ConfKey K) {   _active_conf = K;  };
+    void setActiveConf(const UsrConfKey K) {   _active_conf = K;  };
 
 
   protected:
@@ -354,7 +351,7 @@ class uAppConfigurator : public uApp {
     void   _redraw_window();
 
   private:
-    ConfKey _active_conf = ConfKey::INVALID;
+    UsrConfKey _active_conf = UsrConfKey::INVALID;
 };
 
 

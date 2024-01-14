@@ -1,7 +1,7 @@
-#include <SensorFilter.h>
-#include <TripleAxisPipe.h>
-#include <TripleAxisCompass.h>
-#include <ManuvrDrivers.h>
+#include "SensorFilter.h"
+#include "Pipes/TripleAxisPipe/TripleAxisPipe.h"
+#include "Pipes/TripleAxisPipe/TripleAxisCompass.h"
+#include "ManuvrDrivers.h"
 #include "ICM20948.h"
 #include "DRV425.h"
 
@@ -53,3 +53,4 @@ extern TripleAxisFork         imu_fork;
 
 
 int8_t init_sensor_memory();
+ 

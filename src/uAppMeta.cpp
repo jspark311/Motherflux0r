@@ -153,19 +153,61 @@ void uAppMeta::_redraw_window() {
   }
   else if (_slider_current <= 15) {
     if (graph_array_frame_rate.dirty()) {
-      draw_graph_obj(
-        0, 10, 96, 45, CYAN,
-        true, _cluttered_display(), _render_text_value(),
-        &graph_array_frame_rate
-      );
+      ImageGraph<float> graph(96, 45);
+      graph.fg_color            = 0xFFFFFFFF;
+
+      const uint32_t  DATA_SIZE_FPS = graph_array_frame_rate.windowSize();
+      const uint32_t  LAST_SIDX_FPS = graph_array_frame_rate.lastIndex();
+      const uint32_t  DATA_IDX_FPS  = (1 + LAST_SIDX_FPS + strict_abs_delta(DATA_SIZE_FPS, (uint32_t) 96)) % DATA_SIZE_FPS;
+      const float*    F_MEM_PTR_FPS = graph_array_frame_rate.memPtr();
+      float tmp_data_fps[DATA_SIZE_FPS];
+      for (uint32_t i = 0; i < DATA_SIZE_FPS; i++) {
+        tmp_data_fps[i] = *(F_MEM_PTR_FPS + ((i + LAST_SIDX_FPS) % DATA_SIZE_FPS));
+      }
+
+      graph.trace0.color        = CYAN;
+      graph.trace0.dataset      = tmp_data_fps;
+      graph.trace0.data_len     = DATA_SIZE_FPS;
+      graph.trace0.enabled      = true;
+      graph.trace0.autoscale_x  = false;
+      graph.trace0.autoscale_y  = true;
+      graph.trace0.show_x_range = false;
+      graph.trace0.show_y_range = _cluttered_display();
+      graph.trace0.show_value   = _render_text_value();
+      graph.trace0.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
+      graph.trace0.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
+      graph.trace0.offset_x     = DATA_IDX_FPS;
+
+      const uint32_t  DATA_SIZE_CPU = graph_array_cpu_time.windowSize();
+      const uint32_t  LAST_SIDX_CPU = graph_array_cpu_time.lastIndex();
+      const uint32_t  DATA_IDX_CPU  = (1 + LAST_SIDX_CPU + strict_abs_delta(DATA_SIZE_CPU, (uint32_t) 96)) % DATA_SIZE_CPU;
+      const float*    F_MEM_PTR_CPU = graph_array_cpu_time.memPtr();
+      float tmp_data_cpu[DATA_SIZE_CPU];
+      for (uint32_t i = 0; i < DATA_SIZE_CPU; i++) {
+        tmp_data_cpu[i] = *(F_MEM_PTR_CPU + ((i + LAST_SIDX_CPU) % DATA_SIZE_CPU));
+      }
+
+      graph.trace1.color        = CYAN;
+      graph.trace1.dataset      = tmp_data_cpu;
+      graph.trace1.data_len     = DATA_SIZE_CPU;
+      graph.trace1.enabled      = true;
+      graph.trace1.autoscale_x  = false;
+      graph.trace1.autoscale_y  = true;
+      graph.trace1.show_x_range = false;
+      graph.trace1.show_y_range = _cluttered_display();
+      graph.trace1.show_value   = _render_text_value();
+      graph.trace1.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
+      graph.trace1.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
+      graph.trace1.offset_x     = DATA_IDX_CPU;
+
+      graph.drawGraph(FB, 0, 10);
+
       FB->setTextSize(0);
       FB->setCursor(0, 56);
-      FB->setTextColor(WHITE);
-      FB->writeString("Framerate:  ");
       FB->setTextColor(CYAN, BLACK);
-      tmp_val_str.clear();
-      tmp_val_str.concat((uint) graph_array_frame_rate.value());
-      FB->writeString(&tmp_val_str);
+      FB->writeString("FPS ");
+      FB->setTextColor(0xFE, BLACK);
+      FB->writeString("CPU");
     }
   }
   else if (_slider_current <= 22) {
@@ -240,19 +282,5 @@ void uAppMeta::_redraw_window() {
   }
   else {
     // CPU load metrics
-    if (graph_array_cpu_time.dirty()) {
-      draw_graph_obj(
-        0, 10, 96, 45, 0xFE00,
-        true, _cluttered_display(), _render_text_value(),
-        &graph_array_cpu_time
-      );
-      FB->setTextSize(0);
-      FB->setCursor(0, 56);
-      FB->setTextColor(WHITE);
-      FB->writeString("Load:  ");
-      FB->setTextColor(GREEN, BLACK);
-      tmp_val_str.concat(graph_array_cpu_time.value());
-      FB->writeString(&tmp_val_str);
-    }
   }
 }

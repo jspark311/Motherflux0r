@@ -1,44 +1,6 @@
-#include <CppPotpourri.h>
-#include <SensorFilter.h>
-#include <SPIAdapter.h>
-#include <I2CAdapter.h>
-
-#include <Audio.h>
-
 #include "Motherflux0r.h"
 #include "uApp.h"
 #include "SensorGlue.h"
-
-extern SX8634* touch;
-
-extern SPIAdapter spi0;
-extern I2CAdapter i2c0;
-extern I2CAdapter i2c1;
-
-extern ManuvrPMU pmu;
-
-/* Audio objects... */
-extern float volume_left_output;
-extern float volume_right_output;
-extern float volume_pink_noise;
-extern float mix_synth_to_fft;
-extern float mix_queueL_to_fft;
-extern float mix_queueR_to_fft;
-extern float mix_noise_to_fft;
-extern float mix_synth_to_line;
-extern float mix_queue_to_line;
-extern float mix_noise_to_line;
-extern AudioSynthNoisePink      pinkNoise;
-extern AudioSynthWaveformSine   sineL;
-extern AudioSynthWaveformSine   sineR;
-extern AudioPlayQueue           queueL;
-extern AudioPlayQueue           queueR;
-extern AudioMixer4              mixerL;
-extern AudioMixer4              mixerR;
-extern AudioMixer4              mixerFFT;
-extern AudioAmplifier           ampR;
-extern AudioAmplifier           ampL;
-extern AudioAnalyzeFFT256       fft256_1;
 
 #define UAPP_BOOT_FLAG_INIT_DISPLAY         0x00000001
 #define UAPP_BOOT_FLAG_INIT_LUX             0x00000002
@@ -428,7 +390,7 @@ void uAppBoot::_redraw_window() {
     i++;
   }
 
-  if (wrap_accounted_delta(_last_init_sent, millis()) >= UAPP_BOOT_INIT_TIMEOUT) {
+  if (millis_since(_last_init_sent) >= UAPP_BOOT_INIT_TIMEOUT) {
     for (uint8_t n = 0; n < INIT_LIST_LEN; n++) {
       if (!_init_sent_flags.value(INIT_LIST[n].flag_mask)) {
         _init_sent_flags.set(INIT_LIST[n].flag_mask);

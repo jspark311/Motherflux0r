@@ -1,15 +1,32 @@
 #include <inttypes.h>
 #include <stdint.h>
+
+/* CppPotpourri */
 #include <CppPotpourri.h>
 #include <StringBuilder.h>
 #include <SensorFilter.h>
 #include <Image/Image.h>
-#include <TripleAxisCompass.h>
+#include <Image/ImageUtils.h>
+
+#include <Console/C3PConsole.h>
+#include <M2MLink/M2MLink.h>
+#include <BusQueue/SPIAdapter.h>
+#include <BusQueue/I2CAdapter.h>
+#include <BusQueue/UARTAdapter.h>
+#include <Pipes/BufferAccepter/GPSWrapper/GPSWrapper.h>
+#include <Pipes/TripleAxisPipe/TripleAxisPipe.h>
+#include <Pipes/TripleAxisPipe/TripleAxisCompass.h>
 #include <ManuvrDrivers.h>
+#include <Storage/RecordTypes/ConfRecord.h>
 #include <Composites/ManuvrPMU/ManuvrPMU-r2.h>
 
-#include "Storage/DataRecords.h"
+/* This project */
 #include "CommPeer.h"
+#include "SensorGlue.h"
+
+/* Teensyduino Audio library */
+#include <Audio.h>
+
 
 #ifndef __MOTHERFLUX0R_H__
 #define __MOTHERFLUX0R_H__
@@ -102,20 +119,42 @@
 #define DATA_RELAY_FLAG_             0x80000000   //
 
 
-
 /*******************************************************************************
-* Display related flags
+* DataRecords
+* The program has a set of configurations that it defines and loads at runtime.
+* This names the record types and their possible keys.
 *******************************************************************************/
-#define GRAPH_FLAG_LOCK_RANGE_V             0x00800000   // Lock the V range.
-#define GRAPH_FLAG_TEXT_RANGE_V             0x01000000   // Text overlay for axis values.
-#define GRAPH_FLAG_TEXT_VALUE               0x02000000   // Text overlay for current value.
-#define GRAPH_FLAG_PARTIAL_REDRAW           0x04000000   // Partial redraw
-#define GRAPH_FLAG_FULL_REDRAW              0x08000000   // Full redraw
-#define GRAPH_FLAG_DRAW_RULE_H              0x10000000   //
-#define GRAPH_FLAG_DRAW_RULE_V              0x20000000   //
-#define GRAPH_FLAG_DRAW_TICKS_H             0x40000000   //
-#define GRAPH_FLAG_DRAW_TICKS_V             0x80000000   //
+enum class CalConfKey : uint8_t {
+  CAL_MAG_HARD_IRON,           // Vector3
+  CAL_MAG_SOFT_IRON,           // Vector3
+  CAL_MAG_ORIENTATION,         // Vector3
+  CAL_IMU_ORIENTATION,         // Vector3
+  CAL_THERMAL_THRESHOLD_LOW,   // int8
+  CAL_THERMAL_THRESHOLD_HIGH,  // int8
+  CAL_BATTERY_THRESHOLD_LOW,   // Float
+  CAL_BATTERY_THRESHOLD_HIGH,  // Float
+  CAL_DATE,                    // uint64
+  INVALID
+};
 
+enum class UsrConfKey : uint8_t {
+  USR_UNIT_LOCKED,
+  USR_VIB_LEVEL,
+  USR_TIMEOUT_IDLE,
+  USR_TIMEOUT_SHUTDOWN,
+  USR_BLUETOOTH_ENABLED,
+  USR_UNITS,
+  USR_VOLUME,
+  USR_DISP_BRIGHTNESS,
+  USR_LONGPRESS_THRESHOLD,
+  USR_APP_POLLING_PERIOD,
+  USR_TYPEMATIC_PERIOD,
+  USR_SERIAL_BAUD_RATE,
+  USR_MAG_OVERSAMPLE,
+  USR_MAG_FILTER_DEPTH,
+  USR_MAG_BANDWIDTH,
+  INVALID
+};
 
 
 /*******************************************************************************
@@ -136,17 +175,6 @@ enum class SensorID : uint8_t {
 };
 
 
-enum class DataVis : uint8_t {
-  NONE          = 0,  // A time-series graph.
-  GRAPH         = 1,  // A time-series graph.
-  VECTOR        = 2,  // A projected 3-space vector.
-  COMPASS       = 3,  // A compass render.
-  FIELD         = 4,  // A 2d array.
-  TEXT          = 5   // Prefer alphanumeric readout.
-};
-
-
-
 
 /*******************************************************************************
 * Function prototypes
@@ -156,9 +184,7 @@ void vibrateOn(uint32_t duration, uint16_t intensity = 4095);
 void timeoutCheckVibLED();
 
 const char* const getSensorIDString(SensorID);
-const char* const getDataVisString(DataVis);
 void listAllSensors(StringBuilder*);
-
 
 float FindE(int bands, int bins);
 void  printFFTBins(StringBuilder*);
@@ -167,68 +193,18 @@ uint16_t* bitmapPointer(unsigned int idx);
 /* Display helper routines */
 void render_button_icon(uint8_t sym, int x, int y, uint16_t color);
 
+// TODO: Nasty shim. Shouldn't be needed.
 void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color0, uint16_t color1, uint16_t color2,
-  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
-  SensorFilter<float>* filt0, SensorFilter<float>* filt1, SensorFilter<float>* filt2
+  Image*,
+  PixUInt x, PixUInt y, PixUInt w, PixUInt h, uint32_t color,
+  bool opt1, bool opt2, bool opt3,
+  SensorFilter<float>*
 );
 
-void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color0, uint16_t color1,
-  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
-  SensorFilter<float>* filt0, SensorFilter<float>* filt1
-);
-
-void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
-  SensorFilter<float>* filt
-);
-
-void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
-  SensorFilter<uint32_t>* filt
-);
-
-void draw_progress_bar_horizontal(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_base, bool draw_val, float percent
-);
-
-void draw_progress_bar_vertical(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_base, bool draw_val, float percent
-);
-
-void draw_compass(
-  int x, int y, int w, int h,
-  bool scale_needle, bool draw_val, float bearing_field, float bearing_true_north
-);
-
-void draw_3vector(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_axes, bool draw_val, float vx, float vy, float vz
-);
-
-void draw_data_square_field(
-  int x, int y, int w, int h,
-  uint32_t flags,
-  float* range_min, float* range_max,
-  SensorFilter<float>* filt
-);
-
-void draw_data_view_selector(
-  int x, int y, int w, int h,
-  DataVis opt0, DataVis opt1, DataVis opt2, DataVis opt3, DataVis opt4, DataVis opt5,
-  DataVis selected
-);
-
-void draw_3sphere(
-  int x, int y, int w, int h,
-  bool opaque,
-  int meridians, int parallels,
-  float euler_about_x, float euler_about_y   // TODO: A quat would be cleaner.
+void draw_graph_obj(Image* FB,
+  PixUInt x, PixUInt y, PixUInt w, PixUInt h, uint32_t color1, uint32_t color2, uint32_t color3,
+  bool opt1, bool opt2, bool opt3,
+  SensorFilter<float>* filter1, SensorFilter<float>* filter2, SensorFilter<float>* filter3
 );
 
 
@@ -249,5 +225,44 @@ void draw_3sphere(
 #define BUTTON_RIGHT 253  // Drawn with code
 #define BUTTON_UP    254  // Drawn with code
 #define BUTTON_DOWN  255  // Drawn with code
+
+
+
+/*******************************************************************************
+* Externed singleton resources
+*******************************************************************************/
+extern ConfRecordValidation<CalConfKey> cal_conf;
+extern ConfRecordValidation<UsrConfKey> usr_conf;
+
+extern SPIAdapter spi0;
+extern I2CAdapter i2c0;
+extern I2CAdapter i2c1;
+
+extern SSD1331 display;
+extern SX8634* touch;
+extern ManuvrPMU pmu;
+
+/* Audio objects... */
+extern float volume_left_output;
+extern float volume_right_output;
+extern float volume_pink_noise;
+extern float mix_synth_to_fft;
+extern float mix_queueL_to_fft;
+extern float mix_queueR_to_fft;
+extern float mix_noise_to_fft;
+extern float mix_synth_to_line;
+extern float mix_queue_to_line;
+extern float mix_noise_to_line;
+extern AudioSynthNoisePink      pinkNoise;
+extern AudioSynthWaveformSine   sineL;
+extern AudioSynthWaveformSine   sineR;
+extern AudioPlayQueue           queueL;
+extern AudioPlayQueue           queueR;
+extern AudioMixer4              mixerL;
+extern AudioMixer4              mixerR;
+extern AudioMixer4              mixerFFT;
+extern AudioAmplifier           ampR;
+extern AudioAmplifier           ampL;
+extern AudioAnalyzeFFT256       fft256_1;
 
 #endif    // __MOTHERFLUX0R_H__

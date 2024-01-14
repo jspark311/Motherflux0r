@@ -59,7 +59,7 @@ void  uApp::setAppActive(AppID new_app, uint8_t modal) {
 int8_t uApp::refresh() {
   int8_t ret = 0;
   uint32_t now = millis();
-  if (wrap_accounted_delta(_last_draw, now) >= APP_POLLING_PERIOD) {
+  if (millis_since(_last_draw) >= APP_POLLING_PERIOD) {
     _stopwatch.markStart();
     switch (_lc_current_position()) {
       case AppLifecycle::UNINITIALIZED:

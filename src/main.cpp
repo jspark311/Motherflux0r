@@ -4,19 +4,8 @@
 #include <math.h>
 #include <StringBuilder.h>
 #include <SensorFilter.h>
-#include <ParsingConsole.h>
-#include <TripleAxisPipe.h>
-#include <GPSWrapper.h>
-#include <StopWatch.h>
 #include <C3PLogger.h>
-#include <Image/Image.h>
-#include <ManuvrLink/ManuvrLink.h>
-#include <cbor-cpp/cbor.h>
 #include <uuid.h>
-
-#include <SPIAdapter.h>
-#include <I2CAdapter.h>
-#include <UARTAdapter.h>
 
 #include <Audio.h>
 #include <SD.h>
@@ -81,9 +70,6 @@ float mix_noise_to_fft    = 0.99;
 float mix_synth_to_line   = 0.0;
 float mix_queue_to_line   = 0.0;
 float mix_noise_to_line   = 0.99;
-
-UsrConfRecord user_conf;
-CalConfRecord cal_conf;
 
 
 /*******************************************************************************
@@ -172,18 +158,18 @@ C3PLogger c3p_log_obj(
 );
 
 
-ManuvrLinkOpts link_opts(
+M2MLinkOpts link_opts(
   100,   // ACK timeout is 100ms.
   2000,  // Send a KA every 2s.
   2048,  // MTU for this link is 2 kibi.
   TCode::CBOR,   // Payloads should be CBOR encoded.
   // This side of the link will send a KA while IDLE, and
   //   allows remote log write.
-  (MANUVRLINK_FLAG_SEND_KA | MANUVRLINK_FLAG_ALLOW_LOG_WRITE)
+  (M2MLINK_FLAG_SEND_KA | M2MLINK_FLAG_ALLOW_LOG_WRITE)
 );
 
 /* This object will contain our relationship with the Comm unit. */
-ManuvrLink* m_link = nullptr;
+M2MLink* m_link = nullptr;
 
 
 
@@ -356,17 +342,6 @@ extern uAppConfigurator app_config;
 extern uAppComms app_comms;
 extern uAppDataMgmt app_data_mgmt;
 
-/* First stab at WakeLock... */
-WakeLock* wakelock_tof         = nullptr;
-WakeLock* wakelock_mag         = nullptr;
-WakeLock* wakelock_lux         = nullptr;
-WakeLock* wakelock_imu         = nullptr;
-WakeLock* wakelock_grideye     = nullptr;
-WakeLock* wakelock_uv          = nullptr;
-WakeLock* wakelock_baro        = nullptr;
-WakeLock* wakelock_gps         = nullptr;
-
-
 static bool     imu_irq_fired       = false;
 
 
@@ -380,14 +355,14 @@ void imu_isr_fxn() {         imu_irq_fired = true;        }
 /*******************************************************************************
 * Link callbacks
 *******************************************************************************/
-void link_callback_state(ManuvrLink* cb_link) {
+void link_callback_state(M2MLink* cb_link) {
   StringBuilder log;
-  log.concatf("Link (0x%x) entered state %s\n", cb_link->linkTag(), ManuvrLink::sessionStateStr(cb_link->getState()));
+  log.concatf("Link (0x%x) entered state %s\n", cb_link->linkTag(), M2MLink::sessionStateStr(cb_link->getState()));
   //printf("%s\n\n", (const char*) log.string());
 }
 
 
-void link_callback_message(uint32_t tag, ManuvrMsg* msg) {
+void link_callback_message(uint32_t tag, M2MMsg* msg) {
   StringBuilder log;
   KeyValuePair* kvps_rxd = nullptr;
   log.concatf("link_callback_message(0x%x): \n", tag, msg->uniqueId());
@@ -561,66 +536,67 @@ int8_t read_unit_settings() {
 
 /*******************************************************************************
 * Data aggregation and packaging
+* TODO: This must be handled closer to the nexus of concern. Use C3PType.
 *******************************************************************************/
 /*
 * All packets
 */
 void pack_cbor_comm_packet(cbor::encoder* pkt, CommPeer* peer) {
-  const uint8_t PROTO_VER = 0;
-  if (nullptr == peer) {
-    pkt->write_map(3);
-  }
-  else {
-    pkt->write_map(4);
-    peer->serializeCBOR(pkt, PROTO_VER);
-  }
-  pkt->write_string("comver");
-  pkt->write_int(PROTO_VER);   // The protocol version
-
-    pkt->write_string("orig");
-    pkt->write_map(4);
-      pkt->write_string("mod");
-      pkt->write_string("Motherflux0r");
-      pkt->write_string("ser");
-      pkt->write_int(1);
-      pkt->write_string("firm_ver");
-      pkt->write_string(TEST_PROG_VERSION);
-      pkt->write_string("ts");
-      pkt->write_tag(1);
-      pkt->write_int((uint) now());
-    pkt->write_string("pdu");
+//  const uint8_t PROTO_VER = 0;
+//  if (nullptr == peer) {
+//    pkt->write_map(3);
+//  }
+//  else {
+//    pkt->write_map(4);
+//    peer->serializeCBOR(pkt, PROTO_VER);
+//  }
+//  pkt->write_string("comver");
+//  pkt->write_int(PROTO_VER);   // The protocol version
+//
+//    pkt->write_string("orig");
+//    pkt->write_map(4);
+//      pkt->write_string("mod");
+//      pkt->write_string("Motherflux0r");
+//      pkt->write_string("ser");
+//      pkt->write_int(1);
+//      pkt->write_string("firm_ver");
+//      pkt->write_string(TEST_PROG_VERSION);
+//      pkt->write_string("ts");
+//      pkt->write_tag(1);
+//      pkt->write_int((uint) now());
+//    pkt->write_string("pdu");
 }
 
 
 void package_sensor_data_cbor(StringBuilder* cbor_return) {
-  cbor::output_dynamic out;
-  cbor::encoder encoded(out);
-  encoded.write_map(2);
-    encoded.write_string("ds_ver");
-    encoded.write_int(0);
-
-    encoded.write_string("origin");
-    encoded.write_map(4);
-      encoded.write_string("model");
-      encoded.write_string("Motherflux0r");
-      encoded.write_string("ser");
-      encoded.write_int(1);
-      encoded.write_string("fm_ver");
-      encoded.write_string(TEST_PROG_VERSION);
-      encoded.write_string("ts");
-      encoded.write_tag(1);
-      encoded.write_int((uint) now());
-
-    encoded.write_string("meta");
-    encoded.write_map(2);
-      encoded.write_string("build_data");
-      encoded.write_tag(1);
-      encoded.write_int(1584023014);
-      encoded.write_string("cal_date");
-      encoded.write_tag(1);
-      encoded.write_int(1584035000);
-
-  cbor_return->concat(out.data(), out.size());
+//  cbor::output_dynamic out;
+//  cbor::encoder encoded(out);
+//  encoded.write_map(2);
+//    encoded.write_string("ds_ver");
+//    encoded.write_int(0);
+//
+//    encoded.write_string("origin");
+//    encoded.write_map(4);
+//      encoded.write_string("model");
+//      encoded.write_string("Motherflux0r");
+//      encoded.write_string("ser");
+//      encoded.write_int(1);
+//      encoded.write_string("fm_ver");
+//      encoded.write_string(TEST_PROG_VERSION);
+//      encoded.write_string("ts");
+//      encoded.write_tag(1);
+//      encoded.write_int((uint) now());
+//
+//    encoded.write_string("meta");
+//    encoded.write_map(2);
+//      encoded.write_string("build_data");
+//      encoded.write_tag(1);
+//      encoded.write_int(1584023014);
+//      encoded.write_string("cal_date");
+//      encoded.write_tag(1);
+//      encoded.write_int(1584035000);
+//
+//  cbor_return->concat(out.data(), out.size());
 }
 
 
@@ -643,11 +619,13 @@ int8_t callback_3axis(SpatialSense s, Vector3f* dat, Vector3f* err, uint32_t seq
       ret = -1;
       break;
     case SpatialSense::MAG:
-      ret = 0;
-      Vector3f* mag_fv = mag_filter.getData();
-      graph_array_mag_strength_x.feedFilter(mag_fv->x);
-      graph_array_mag_strength_y.feedFilter(mag_fv->y);
-      graph_array_mag_strength_z.feedFilter(mag_fv->z);
+      {
+        Vector3f* mag_fv = mag_filter.getData();
+        graph_array_mag_strength_x.feedFilter(mag_fv->x);
+        graph_array_mag_strength_y.feedFilter(mag_fv->y);
+        graph_array_mag_strength_z.feedFilter(mag_fv->z);
+        ret = 0;
+      }
       break;
     case SpatialSense::UNITLESS:
     case SpatialSense::ACC:
@@ -708,6 +686,11 @@ int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) 
   return magneto.console_handler(text_return, args);
 }
 
+int callback_pmu_tools(StringBuilder* text_return, StringBuilder* args) {
+  return pmu.console_handler(text_return, args);
+}
+
+
 
 int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = -1;
@@ -715,7 +698,7 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
   // We interdict if the command is something specific to this application.
   if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
     // Send a description request message.
-    KeyValuePair a((uint32_t) millis(), "time_ms");
+    KeyValuePair a("time_ms", (uint32_t) millis());
     a.append((uint32_t) randomUInt32(), "rand");
     int8_t ret_local = m_link->send(&a, true);
     text_return->concatf("Description request send() returns ID %u\n", ret_local);
@@ -770,7 +753,7 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
 
   if (0 == StringBuilder::strcasecmp(conf_group_str, "usr")) {
     rec_type_str = (char*) "Usr";
-    conf_rec = &user_conf;
+    conf_rec = &usr_conf;
     switch (args->count()) {
       case 3:
         text_return->concatf(
@@ -779,7 +762,7 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
         );
         break;
       default:
-        conf_rec->printConf(text_return, (1 < args->count()) ? key : nullptr);
+        conf_rec->printConfRecord(text_return, (1 < args->count()) ? key : nullptr);
         break;
     }
   }
@@ -794,7 +777,7 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
         );
         break;
       default:
-        conf_rec->printConf(text_return, (1 < args->count()) ? key : nullptr);
+        conf_rec->printConfRecord(text_return, (1 < args->count()) ? key : nullptr);
         break;
     }
   }
@@ -816,7 +799,7 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
       }
       if (0 == ret) {
         if (0 == StringBuilder::strcasecmp(key, "usr")) {
-          ret = user_conf.serialize(&ser_out, fmt);
+          ret = usr_conf.serialize(&ser_out, fmt);
           rec_type_str = (char*) "Usr";
         }
         else if (0 == StringBuilder::strcasecmp(key, "cal")) {
@@ -842,14 +825,14 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
     if (2 == args->count()) {
       ConfRecord* crec = nullptr;
       if (0 == StringBuilder::strcasecmp(key, "usr")) {
-        crec = (ConfRecord*) &user_conf;
+        crec = (ConfRecord*) &usr_conf;
       }
       else if (0 == StringBuilder::strcasecmp(key, "cal")) {
         crec = (ConfRecord*) &cal_conf;
       }
 
       if (nullptr != crec) {
-        text_return->concatf("Saving %s returned %d.\n", key, crec->save(key));
+        //text_return->concatf("Saving %s returned %d.\n", key, crec->save(key));
       }
     }
     else {
@@ -860,14 +843,14 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
     if (2 == args->count()) {
       ConfRecord* crec = nullptr;
       if (0 == StringBuilder::strcasecmp(key, "usr")) {
-        crec = (ConfRecord*) &user_conf;
+        crec = (ConfRecord*) &usr_conf;
       }
       else if (0 == StringBuilder::strcasecmp(key, "cal")) {
         crec = (ConfRecord*) &cal_conf;
       }
 
       if (nullptr != crec) {
-        text_return->concatf("Loading %s returned %d.\n", key, crec->load(key));
+        //text_return->concatf("Loading %s returned %d.\n", key, crec->load(key));
       }
     }
     else {
@@ -925,68 +908,13 @@ int callback_display_test(StringBuilder* text_return, StringBuilder* args) {
         text_return->concat("SPI_HAS_TRANSFER_ASYNC is NOT set.\n");
       #endif
       break;
-    case 2:
-      display.fill(BLACK);
-      draw_progress_bar_vertical(0, 0, 12, 63, CYAN, true, false, 0.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_vertical(0, 0, 12, 63, CYAN, false, false, (i * 0.01));
-      }
-
-      draw_progress_bar_vertical(14, 0, 7, 63, BLUE, true, false, 1.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_vertical(14, 0, 7, 63, BLUE, false, false, 1.0 - (i * 0.01));
-      }
-
-      draw_progress_bar_vertical(23, 0, 7, 31, YELLOW, true, false, 0.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_vertical(23, 0, 7, 31, YELLOW, false, false, (i * 0.01));
-      }
-
-      draw_progress_bar_vertical(23, 33, 7, 31, RED, true, false, 0.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_vertical(23, 33, 7, 31, RED, false, false, (i * 0.01));
-      }
-
-      draw_progress_bar_vertical(32, 0, 30, 63, GREEN, true, false, 0.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_vertical(32, 0, 30, 63, GREEN, false, true, (i * 0.01));
-      }
-      break;
-
-    case 3:    // Progress bar test
-      display.fill(BLACK);
-      draw_progress_bar_horizontal(0, 14, 95, 7, CYAN, true, false, 0.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_horizontal(0, 14, 95, 7, CYAN, false, false, (i * 0.01));
-      }
-
-      draw_progress_bar_horizontal(0, 0, 95, 12, BLUE, true, false, 1.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_horizontal(0, 0, 95, 12, BLUE, false, false, 1.0-(i * 0.01));
-      }
-
-      draw_progress_bar_horizontal(0, 23, 46, 7, YELLOW, true, false, 0.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_horizontal(0, 23, 46, 7, YELLOW, false, false, (i * 0.01));
-      }
-
-      draw_progress_bar_horizontal(48, 23, 46, 7, RED, true, false, 0.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_horizontal(48, 23, 46, 7, RED, false, false, (i * 0.01));
-      }
-
-      draw_progress_bar_horizontal(0, 34, 95, 14, GREEN, true, false, 0.0);
-      for (uint8_t i = 0; i <= 100; i++) {
-        draw_progress_bar_horizontal(0, 34, 95, 14, GREEN, false, true, (i * 0.01));
-      }
-      break;
     case 4:    // Vector display test
       display.fill(BLACK);
-      draw_3vector(0, 0, 50, 50, RED,    true,  false, 1.0, 0.0, 0.0);
-      draw_3vector(0, 0, 50, 50, GREEN,  false, false, 0.0, 1.0, 0.0);
-      draw_3vector(0, 0, 50, 50, BLUE,   false, false, 0.0, 0.0, 1.0);
-      draw_3vector(0, 0, 50, 50, YELLOW, false, false, 1.0, 1.0, 0.0);
-      draw_3vector(0, 0, 50, 50, CYAN,   false, false, 0.13, 0.65, 0.0);
+      // draw_3vector(0, 0, 50, 50, RED,    true,  false, 1.0, 0.0, 0.0);
+      // draw_3vector(0, 0, 50, 50, GREEN,  false, false, 0.0, 1.0, 0.0);
+      // draw_3vector(0, 0, 50, 50, BLUE,   false, false, 0.0, 0.0, 1.0);
+      // draw_3vector(0, 0, 50, 50, YELLOW, false, false, 1.0, 1.0, 0.0);
+      // draw_3vector(0, 0, 50, 50, CYAN,   false, false, 0.13, 0.65, 0.0);
       break;
     default:
       return -1;
@@ -1544,30 +1472,31 @@ void setup() {
   graph_array_cpu_time.init();
   graph_array_frame_rate.init();
 
-  console.defineCommand("help",        '?',  ParsingConsole::tcodes_str_1, "Prints help to console.", "[<specific command>]", 0, callback_help);
-  console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
+  console.defineCommand("help",        '?',  "Prints help to console.", "[<specific command>]", 0, callback_help);
+  console.defineCommand("console",     '\0', "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
   platform.configureConsole(&console);
-  console.defineCommand("touch",       ParsingConsole::tcodes_str_4, "SX8634 tools", "", 0, callback_touch_tools);
-  console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
-  console.defineCommand("disp",        'd', ParsingConsole::tcodes_uint_1, "Display test", "", 1, callback_display_test);
-  console.defineCommand("spi",         '\0', ParsingConsole::tcodes_str_3, "SPI debug.", "", 1, callback_spi_debug);
-  console.defineCommand("i2c",         '\0', ParsingConsole::tcodes_uint_3, "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
-  console.defineCommand("log",         ParsingConsole::tcodes_uint_3, "Logger tools", "", 0, callback_logger_tools);
-  console.defineCommand("led",         ParsingConsole::tcodes_uint_3, "LED Test", "", 1, callback_led_test);
-  console.defineCommand("vib",         'v', ParsingConsole::tcodes_uint_2, "Vibrator test", "", 0, callback_vibrator_test);
-  console.defineCommand("aout",        ParsingConsole::tcodes_str_4, "Mix volumes for the headphones.", "", 4, callback_aout_mix);
-  console.defineCommand("fft",         ParsingConsole::tcodes_str_4, "Mix volumes for the FFT.", "", 4, callback_fft_mix);
-  console.defineCommand("synth",       ParsingConsole::tcodes_str_4, "Synth parameters.", "", 2, callback_synth_set);
-  console.defineCommand("sensor",      's', ParsingConsole::tcodes_str_4, "Sensor tools", "", 0, callback_sensor_tools);
-  console.defineCommand("mag",         'M', ParsingConsole::tcodes_str_4,  "Magnetometer tools", "[info|gpio|adc]", 0, callback_magnetometer_fxns);
-  console.defineCommand("sfi",         ParsingConsole::tcodes_uint_1, "Sensor filter info.", "", 0, callback_sensor_filter_info);
-  console.defineCommand("mfi",         ParsingConsole::tcodes_uint_1, "Meta filter info.", "", 1, callback_meta_filter_info);
-  console.defineCommand("sfs",         ParsingConsole::tcodes_uint_3, "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
-  console.defineCommand("mfs",         ParsingConsole::tcodes_uint_3, "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
-  console.defineCommand("app",         'a', ParsingConsole::tcodes_uint_1, "Select active application.", "", 0, callback_active_app);
-  console.defineCommand("aprof",       ParsingConsole::tcodes_uint_1, "Dump application profiler.", "", 0, callback_print_app_profiler);
-  console.defineCommand("vol",         ParsingConsole::tcodes_float_1, "Audio volume.", "", 0, callback_audio_volume);
-  console.defineCommand("conf",        'c',  ParsingConsole::tcodes_str_3, "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
+  console.defineCommand("touch",       '\0', "SX8634 tools", "", 0, callback_touch_tools);
+  console.defineCommand("link",        'l',  "Linked device tools.", "", 0, callback_link_tools);
+  console.defineCommand("disp",        'd',  "Display test", "", 1, callback_display_test);
+  console.defineCommand("spi",         '\0', "SPI debug.", "", 1, callback_spi_debug);
+  console.defineCommand("i2c",         '\0', "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
+  console.defineCommand("log",         '\0', "Logger tools", "", 0, callback_logger_tools);
+  console.defineCommand("led",         '\0', "LED Test", "", 1, callback_led_test);
+  console.defineCommand("vib",         'v',  "Vibrator test", "", 0, callback_vibrator_test);
+  console.defineCommand("aout",        '\0', "Mix volumes for the headphones.", "", 4, callback_aout_mix);
+  console.defineCommand("fft",         '\0', "Mix volumes for the FFT.", "", 4, callback_fft_mix);
+  console.defineCommand("synth",       '\0', "Synth parameters.", "", 2, callback_synth_set);
+  console.defineCommand("sensor",      's',  "Sensor tools", "", 0, callback_sensor_tools);
+  console.defineCommand("mag",         'M',  "Magnetometer tools", "[info|gpio|adc]", 0, callback_magnetometer_fxns);
+  console.defineCommand("sfi",         '\0', "Sensor filter info.", "", 0, callback_sensor_filter_info);
+  console.defineCommand("mfi",         '\0', "Meta filter info.", "", 1, callback_meta_filter_info);
+  console.defineCommand("sfs",         '\0', "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
+  console.defineCommand("mfs",         '\0', "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
+  console.defineCommand("app",         'a',  "Select active application.", "", 0, callback_active_app);
+  console.defineCommand("aprof",       '\0', "Dump application profiler.", "", 0, callback_print_app_profiler);
+  console.defineCommand("vol",         '\0', "Audio volume.", "", 0, callback_audio_volume);
+  console.defineCommand("conf",        'c',  "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
+  console.defineCommand("pmu",         'p',  "PMU tools", "[info|punch|charging|aux|reset|init|refresh|verbosity]", 1, callback_pmu_tools);
   console.init();
 
   StringBuilder ptc("Motherflux0r ");
@@ -1578,7 +1507,6 @@ void setup() {
   mag_adc.setReferenceRange(3.6, 0.0);
   mag_adc.setMCLKFrequency(19660800.0);   // 19.6608 MHz
 
-  pmu.configureConsole(&console);
   pmu.attachCallback(battery_state_callback);
 
   touch = new SX8634(&_touch_opts);
@@ -1593,20 +1521,8 @@ void setup() {
   grideye.assignBusInstance(&i2c1);
   // tof.assignBusInstance(&i2c1);
 
-  wakelock_tof     = nullptr;
-  wakelock_mag     = magneto.getWakeLock();
-  wakelock_lux     = nullptr;
-  wakelock_imu     = nullptr;
-  wakelock_grideye = nullptr;
-  wakelock_uv      = nullptr;
-  wakelock_baro    = nullptr;
-  wakelock_gps     = nullptr;
-
-  wakelock_mag->referenceCounted(false);
-
   config_time = millis();
 }
-
 
 
 
@@ -1631,7 +1547,6 @@ void loop() {
   StringBuilder output;
   const uint8_t RX_BUF_LEN = 64;
   uint8_t ser_buffer[RX_BUF_LEN];
-  uint8_t rx_len = 0;
   memset(ser_buffer, 0, RX_BUF_LEN);
 
   //last_interaction = millis();

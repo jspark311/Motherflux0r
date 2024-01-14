@@ -3,20 +3,8 @@
 */
 
 #include <CppPotpourri.h>
-#include <SensorFilter.h>
-#include <GPSWrapper.h>
-#include "SensorGlue.h"
 #include "uApp.h"
 #include "Motherflux0r.h"
-
-extern WakeLock* wakelock_tof;
-extern WakeLock* wakelock_mag;
-extern WakeLock* wakelock_lux;
-extern WakeLock* wakelock_imu;
-extern WakeLock* wakelock_grideye;
-extern WakeLock* wakelock_uv;
-extern WakeLock* wakelock_baro;
-extern WakeLock* wakelock_gps;
 
 // Thermopile constants
 const float THERM_TEMP_MAX = 150.0;
@@ -46,8 +34,8 @@ int8_t uAppTricorder::_lc_on_preinit() {
   int8_t ret = 1;
   FB->fill(BLACK);
   redraw_app_window();
-  if (nullptr != wakelock_tof) {   wakelock_tof->acquire();   }
-  if (nullptr != wakelock_mag) {   wakelock_mag->acquire();   }
+  // if (nullptr != wakelock_tof) {   wakelock_tof->acquire();   }
+  // if (nullptr != wakelock_mag) {   wakelock_mag->acquire();   }
   return ret;
 }
 
@@ -72,8 +60,8 @@ int8_t uAppTricorder::_lc_on_active() {
 */
 int8_t uAppTricorder::_lc_on_teardown() {
   int8_t ret = 1;
-  if (nullptr != wakelock_tof) {   wakelock_tof->release();   }
-  if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
+  // if (nullptr != wakelock_tof) {   wakelock_tof->release();   }
+  // if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
   return ret;
 }
 
@@ -109,8 +97,8 @@ int8_t uAppTricorder::_process_user_input() {
           ret = 1;
         }
         else {
-          if (nullptr != wakelock_tof) {   wakelock_tof->release();   }
-          if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
+          // if (nullptr != wakelock_tof) {   wakelock_tof->release();   }
+          // if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
           uApp::setAppActive(AppID::APP_SELECT);
           ret = -1;
         }
@@ -195,7 +183,7 @@ void uAppTricorder::_redraw_window() {
 
 
   // if (graph_array_batt_voltage.dirty() && graph_array_batt_current.dirty()) {
-  //   draw_graph_obj(
+  //   draw_graph_obj(FB,
   //     0, 10, 96, 37, COLOR_BATT_VOLTAGE, COLOR_BATT_CURRENT,
   //     true, _cluttered_display(), _render_text_value(),
   //     &graph_array_batt_voltage, &graph_array_batt_current
@@ -455,7 +443,7 @@ void uAppTricorder::_render_thermal_field() {
       float pix_deviation = abs(MIDPOINT_T - graph_array_therm_mean.value());
       uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (therm_field_max - MIDPOINT_T));
       uint16_t color = ((uint16_t) pix_intensity) << ((graph_array_therm_mean.value() <= MIDPOINT_T) ? 8 : 3);
-      draw_graph_obj(
+      draw_graph_obj(FB,
         0, TEXT_OFFSET, 95, 63-TEXT_OFFSET, color,
         true, true, true,
         &graph_array_therm_mean
@@ -528,7 +516,7 @@ void uAppTricorder::_render_baro() {
     FB->setTextColor(0x83D0, BLACK);
     FB->writeString("Temp  ");
     if (graph_array_air_temp.dirty()) {
-      draw_graph_obj(
+      draw_graph_obj(FB,
         0, 10, 96, 37, COLOR_AIR_TEMP, COLOR_AIR_HUMIDITY, COLOR_AIR_PRESSURE,
         true, _cluttered_display(), _render_text_value(),
         &graph_array_air_temp, &graph_array_humidity, &graph_array_pressure
@@ -563,7 +551,7 @@ void uAppTricorder::_render_photometry() {
     FB->setTextColor(RED, BLACK);
     FB->writeString("IR");
     graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
-    draw_graph_obj(
+    draw_graph_obj(FB,
       0, 10, 96, 53, YELLOW, 0xF140, RED,
       true, _cluttered_display(), _render_text_value(),
       &graph_array_ana_light, &graph_array_visible, &graph_array_broad_ir
@@ -581,7 +569,7 @@ void uAppTricorder::_render_photometry() {
     FB->setTextColor(MAGENTA, BLACK);
     FB->writeString("UVI");
     if (graph_array_uva.dirty()) {
-      draw_graph_obj(
+      draw_graph_obj(FB,
         0, 10, 96, 53, 0x791F, 0xF80F, MAGENTA,
         true, _cluttered_display(), _render_text_value(),
         &graph_array_uva, &graph_array_uvb, &graph_array_uvi
@@ -598,7 +586,7 @@ void uAppTricorder::_render_tof() {
   FB->writeString("Distance (mm)");
   display.drawFastHLine(0, 9, display.x(), 0xFFFF);
   if (graph_array_time_of_flight.dirty()) {
-    draw_graph_obj(
+    draw_graph_obj(FB,
       0, 10, 96, 53, 0x8235,
       true, _cluttered_display(), _render_text_value(),
       &graph_array_time_of_flight

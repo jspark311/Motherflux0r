@@ -10,7 +10,7 @@ MCU                = cortex-m7
 CPU_SPEED          = 600000000
 OPTIMIZATION       = -O2 -g
 C_STANDARD         = gnu99
-CPP_STANDARD       = gnu++14
+CPP_STANDARD       = gnu++17
 
 
 ###########################################################################
@@ -42,9 +42,9 @@ export MAKE    = $(shell which make)
 ###########################################################################
 CXXFLAGS     = -felide-constructors -fno-exceptions -fno-rtti -MMD
 CXXFLAGS    += -fpermissive -fno-threadsafe-statics
-CXXFLAGS    += -DCONFIG_MANUVR_CBOR
-CXXFLAGS    += -DCONFIG_MANUVR_IMG_SUPPORT
-CXXFLAGS    += -DCONFIG_MANUVR_M2M_SUPPORT
+CXXFLAGS    += -DCONFIG_C3P_CBOR
+CXXFLAGS    += -DCONFIG_C3P_IMG_SUPPORT
+CXXFLAGS    += -DCONFIG_C3P_M2M_SUPPORT
 
 CFLAGS       = -Wall -nostdlib
 CFLAGS      += -DF_CPU=$(CPU_SPEED)
@@ -135,9 +135,6 @@ SOURCES_CPP += src/uAppTouchTest.cpp
 SOURCES_CPP += src/uAppTricorder.cpp
 SOURCES_CPP += src/uAppLocation.cpp
 SOURCES_CPP += src/uApp/uAppMagnetometer.cpp
-SOURCES_CPP += src/Storage/CalConfRecord.cpp
-SOURCES_CPP += src/Storage/ConfRecord.cpp
-SOURCES_CPP += src/Storage/UsrConfRecord.cpp
 
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/HardwareSerial2.cpp
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/AudioStream.cpp
@@ -178,36 +175,41 @@ SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/yield.cpp
 
 SOURCES_CPP += lib/CppPotpourri/src/AbstractPlatform.cpp
 SOURCES_CPP += lib/CppPotpourri/src/EnumeratedTypeCodes.cpp
-SOURCES_CPP += lib/CppPotpourri/src/ParsingConsole.cpp
-SOURCES_CPP += lib/CppPotpourri/src/GPSWrapper.cpp
-SOURCES_CPP += lib/CppPotpourri/src/I2CDevice.cpp
-SOURCES_CPP += lib/CppPotpourri/src/I2CBusOp.cpp
-SOURCES_CPP += lib/CppPotpourri/src/BusQueue.cpp
 SOURCES_CPP += lib/CppPotpourri/src/CppPotpourri.cpp
-SOURCES_CPP += lib/CppPotpourri/src/I2CAdapter.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Quaternion.cpp
-SOURCES_CPP += lib/CppPotpourri/src/SPIAdapter.cpp
-SOURCES_CPP += lib/CppPotpourri/src/SPIBusOp.cpp
-SOURCES_CPP += lib/CppPotpourri/src/SensorDatum.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Meta/Bikeshed/SensorWrapper.cpp
 SOURCES_CPP += lib/CppPotpourri/src/SensorFilter.cpp
-SOURCES_CPP += lib/CppPotpourri/src/SensorManager.cpp
-SOURCES_CPP += lib/CppPotpourri/src/SensorWrapper.cpp
-SOURCES_CPP += lib/CppPotpourri/src/StopWatch.cpp
-SOURCES_CPP += lib/CppPotpourri/src/Storage.cpp
 SOURCES_CPP += lib/CppPotpourri/src/StringBuilder.cpp
-SOURCES_CPP += lib/CppPotpourri/src/TripleAxisCompass.cpp
-SOURCES_CPP += lib/CppPotpourri/src/TripleAxisPipe.cpp
-SOURCES_CPP += lib/CppPotpourri/src/UARTAdapter.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Battery.cpp
-SOURCES_CPP += lib/CppPotpourri/src/WakeLock.cpp
 SOURCES_CPP += lib/CppPotpourri/src/uuid.cpp
-SOURCES_CPP += lib/CppPotpourri/src/KeyValuePair.cpp
-SOURCES_CPP += lib/CppPotpourri/src/ManuvrLink/ManuvrLink.cpp
-SOURCES_CPP += lib/CppPotpourri/src/ManuvrLink/ManuvrMsg.cpp
-SOURCES_CPP += lib/CppPotpourri/src/ManuvrLink/ManuvrMsgHdr.cpp
+SOURCES_CPP += lib/CppPotpourri/src/BusQueue/BusQueue.cpp
+SOURCES_CPP += lib/CppPotpourri/src/BusQueue/I2CDevice.cpp
+SOURCES_CPP += lib/CppPotpourri/src/BusQueue/I2CBusOp.cpp
+SOURCES_CPP += lib/CppPotpourri/src/BusQueue/I2CAdapter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/BusQueue/SPIAdapter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/BusQueue/SPIBusOp.cpp
+SOURCES_CPP += lib/CppPotpourri/src/BusQueue/UARTAdapter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/M2MLink/M2MLink.cpp
+SOURCES_CPP += lib/CppPotpourri/src/M2MLink/M2MMsg.cpp
+SOURCES_CPP += lib/CppPotpourri/src/M2MLink/M2MMsgHdr.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Identity/Identity.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Identity/IdentityUUID.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Storage/RecordTypes/ConfRecord.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Storage/SimpleDataRecord.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Console/C3PConsole.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Pipes/BufferAccepter/GPSWrapper/GPSWrapper.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Pipes/TripleAxisPipe/TripleAxisCompass.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Pipes/TripleAxisPipe/TripleAxisPipe.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Pipes/BufferAccepter/BufferAccepter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Pipes/BufferAccepter/Base64/C3P_B64.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Pipes/BufferAccepter/LineCoDec/LineCoDec.cpp
+SOURCES_CPP += lib/CppPotpourri/src/C3PValue/C3PType.cpp
+SOURCES_CPP += lib/CppPotpourri/src/C3PValue/C3PValue.cpp
+SOURCES_CPP += lib/CppPotpourri/src/C3PValue/KeyValuePair.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Image/Image.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Image/ImageUtils/ImageUtils.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Image/ImageUtils/ImageGraph.cpp
+SOURCES_CPP += lib/CppPotpourri/src/Image/ImageUtils/BlobPlotter.cpp
 SOURCES_CPP += lib/CppPotpourri/src/cbor-cpp/cbor.cpp
 
 SOURCES_CPP += lib/ManuvrDrivers/src/AMG88xx/AMG88xx.cpp

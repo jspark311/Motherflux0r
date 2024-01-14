@@ -4,30 +4,6 @@
 #include "uApp.h"
 #include "Motherflux0r.h"
 
-extern float volume_left_output;
-extern float volume_right_output;
-extern float volume_pink_noise;
-extern float mix_synth_to_fft;
-extern float mix_queueL_to_fft;
-extern float mix_queueR_to_fft;
-extern float mix_noise_to_fft;
-extern float mix_synth_to_line;
-extern float mix_queue_to_line;
-extern float mix_noise_to_line;
-
-extern AudioSynthNoisePink      pinkNoise;
-extern AudioSynthWaveformSine   sineL;
-extern AudioSynthWaveformSine   sineR;
-extern AudioPlayQueue           queueL;
-extern AudioPlayQueue           queueR;
-extern AudioMixer4              mixerL;
-extern AudioMixer4              mixerR;
-extern AudioMixer4              mixerFFT;
-extern AudioAmplifier           ampR;
-extern AudioAmplifier           ampL;
-extern AudioAnalyzeFFT256       fft256_1;
-
-
 static const uint16_t BIN_INDICIES[] = {
   0,   0,   1,   1,   2,   2,   3,   3,   4,   4,   5,   5,   6,   6,   7,   7,
   8,   8,   9,   9,   10,  10,  11,  11,  12,  12,  13,  13,  14,  14,  15,  15,
@@ -112,6 +88,7 @@ int8_t uAppSynthBox::_lc_on_inactive() {
 */
 int8_t uAppSynthBox::_process_user_input() {
   int8_t ret = 0;
+  UIGfxWrapper gfx(FB);
 
   if (_slider_current != _slider_pending) {
     redraw_app_window();
@@ -119,23 +96,23 @@ int8_t uAppSynthBox::_process_user_input() {
     FB->setTextColor(YELLOW, BLACK);
     if (_slider_pending <= 7) {
       FB->writeString("Vol  ");
-      draw_progress_bar_vertical(0,  11, 27, 52, GREEN, true, true, volume_left_output);
-      draw_progress_bar_vertical(29, 11, 27, 52, GREEN, true, true, volume_right_output);
-      draw_progress_bar_vertical(58, 11, 27, 52, GREEN, true, true, volume_pink_noise);
+      gfx.drawProgressBarV(0,  11, 27, 52, GREEN, true, true, volume_left_output);
+      gfx.drawProgressBarV(29, 11, 27, 52, GREEN, true, true, volume_right_output);
+      gfx.drawProgressBarV(58, 11, 27, 52, GREEN, true, true, volume_pink_noise);
     }
     else if (_slider_pending <= 15) {
       FB->writeString("Mix F");
-      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, true, true, mix_queueL_to_fft);
-      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, true, true, mix_queueR_to_fft);
-      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, true, true, mix_noise_to_fft);
-      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, true, true, 0.0);
+      gfx.drawProgressBarV(0,  11, 22, 52, GREEN, true, true, mix_queueL_to_fft);
+      gfx.drawProgressBarV(23, 11, 22, 52, GREEN, true, true, mix_queueR_to_fft);
+      gfx.drawProgressBarV(46, 11, 22, 52, GREEN, true, true, mix_noise_to_fft);
+      gfx.drawProgressBarV(69, 11, 22, 52, GREEN, true, true, 0.0);
     }
     else if (_slider_pending <= 22) {
       FB->writeString("Mix O");
-      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, true, true, mix_synth_to_line);
-      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, true, true, mix_queue_to_line);
-      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, true, true, mix_noise_to_line);
-      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, true, true, 0.0);
+      gfx.drawProgressBarV(0,  11, 22, 52, GREEN, true, true, mix_synth_to_line);
+      gfx.drawProgressBarV(23, 11, 22, 52, GREEN, true, true, mix_queue_to_line);
+      gfx.drawProgressBarV(46, 11, 22, 52, GREEN, true, true, mix_noise_to_line);
+      gfx.drawProgressBarV(69, 11, 22, 52, GREEN, true, true, 0.0);
     }
     else if (_slider_pending <= 30) {
       FB->writeString("DTMF ");
@@ -204,6 +181,7 @@ int8_t uAppSynthBox::_process_user_input() {
 * sineR.phase(0);
 */
 void uAppSynthBox::_redraw_window() {
+  UIGfxWrapper gfx(FB);
   if (_slider_current <= 7) {
     if (_button_pressed_up() || _button_pressed_dn()) {
       if (_button_pressed_dn()) {
@@ -221,9 +199,9 @@ void uAppSynthBox::_redraw_window() {
       ampL.gain(volume_left_output);
       ampR.gain(volume_right_output);
       pinkNoise.amplitude(volume_pink_noise);
-      draw_progress_bar_vertical(0,  11, 27, 52, GREEN, false, true, volume_left_output);
-      draw_progress_bar_vertical(29, 11, 27, 52, GREEN, false, true, volume_right_output);
-      draw_progress_bar_vertical(58, 11, 27, 52, GREEN, false, true, volume_pink_noise);
+      gfx.drawProgressBarV(0,  11, 27, 52, GREEN, false, true, volume_left_output);
+      gfx.drawProgressBarV(29, 11, 27, 52, GREEN, false, true, volume_right_output);
+      gfx.drawProgressBarV(58, 11, 27, 52, GREEN, false, true, volume_pink_noise);
     }
   }
   else if (_slider_current <= 15) {
@@ -242,10 +220,10 @@ void uAppSynthBox::_redraw_window() {
       mixerFFT.gain(1, mix_queueR_to_fft);
       mixerFFT.gain(2, mix_noise_to_fft);
       mixerFFT.gain(3, 0.0);
-      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, false, true, mix_queueL_to_fft);
-      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, false, true, mix_queueR_to_fft);
-      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, false, true, mix_noise_to_fft);
-      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, false, true, 0.0);
+      gfx.drawProgressBarV(0,  11, 22, 52, GREEN, false, true, mix_queueL_to_fft);
+      gfx.drawProgressBarV(23, 11, 22, 52, GREEN, false, true, mix_queueR_to_fft);
+      gfx.drawProgressBarV(46, 11, 22, 52, GREEN, false, true, mix_noise_to_fft);
+      gfx.drawProgressBarV(69, 11, 22, 52, GREEN, false, true, 0.0);
     }
   }
   else if (_slider_current <= 22) {
@@ -268,10 +246,10 @@ void uAppSynthBox::_redraw_window() {
       mixerR.gain(1, mix_noise_to_line);
       mixerR.gain(2, mix_synth_to_line);
       mixerR.gain(3, 0.0);
-      draw_progress_bar_vertical(0,  11, 22, 52, GREEN, false, true, mix_synth_to_line);
-      draw_progress_bar_vertical(23, 11, 22, 52, GREEN, false, true, mix_queue_to_line);
-      draw_progress_bar_vertical(46, 11, 22, 52, GREEN, false, true, mix_noise_to_line);
-      draw_progress_bar_vertical(69, 11, 22, 52, GREEN, false, true, 0.0);
+      gfx.drawProgressBarV(0,  11, 22, 52, GREEN, false, true, mix_synth_to_line);
+      gfx.drawProgressBarV(23, 11, 22, 52, GREEN, false, true, mix_queue_to_line);
+      gfx.drawProgressBarV(46, 11, 22, 52, GREEN, false, true, mix_noise_to_line);
+      gfx.drawProgressBarV(69, 11, 22, 52, GREEN, false, true, 0.0);
     }
   }
   else if (_slider_current <= 30) {

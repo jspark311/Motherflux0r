@@ -2,16 +2,62 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <math.h>
-#include <CppPotpourri.h>
-#include <Image/Image.h>
 
-
-extern SSD1331 display;
 
 static uint32_t off_time_vib      = 0;      // millis() when vibrator should be disabled.
 static uint32_t off_time_led_r    = 0;      // millis() when LED_R should be disabled.
 static uint32_t off_time_led_g    = 0;      // millis() when LED_G should be disabled.
 static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be disabled.
+
+
+/*******************************************************************************
+* The program has a set of configurations that it defines and loads at runtime.
+* This defines everything required to handle that conf fluidly and safely.
+*******************************************************************************/
+const EnumDef<CalConfKey> CAL_CONF_KEY_LIST[] = {
+  { CalConfKey::CAL_MAG_HARD_IRON,          "mag_hard_iron",          0, (uint8_t) TCode::VECT_3_FLOAT   },
+  { CalConfKey::CAL_MAG_SOFT_IRON,          "mag_soft_iron",          0, (uint8_t) TCode::VECT_3_FLOAT   },
+  { CalConfKey::CAL_MAG_ORIENTATION,        "mag_orientation",        0, (uint8_t) TCode::VECT_3_FLOAT   },
+  { CalConfKey::CAL_IMU_ORIENTATION,        "imu_orientation",        0, (uint8_t) TCode::VECT_3_FLOAT   },
+  { CalConfKey::CAL_THERMAL_THRESHOLD_LOW,  "thermal_threshold_low",  0, (uint8_t) TCode::INT8           },
+  { CalConfKey::CAL_THERMAL_THRESHOLD_HIGH, "thermal_threshold_high", 0, (uint8_t) TCode::INT8           },
+  { CalConfKey::CAL_BATTERY_THRESHOLD_LOW,  "battery_threshold_low",  0, (uint8_t) TCode::FLOAT          },
+  { CalConfKey::CAL_BATTERY_THRESHOLD_HIGH, "battery_threshold_high", 0, (uint8_t) TCode::FLOAT          },
+  { CalConfKey::CAL_DATE,                   "date",                   0, (uint8_t) TCode::UINT64         },
+  { CalConfKey::INVALID, "INVALID", (ENUM_FLAG_MASK_INVALID_CATCHALL), (uint8_t) TCode::NONE}
+};
+
+const EnumDef<UsrConfKey> USR_CONF_KEY_LIST[] = {
+  { UsrConfKey::USR_UNIT_LOCKED,          "unit_locked",           0, (uint8_t) TCode::BOOLEAN  },
+  { UsrConfKey::USR_VIB_LEVEL,            "vib_level",             0, (uint8_t) TCode::UINT8    },
+  { UsrConfKey::USR_TIMEOUT_IDLE,         "timeout_idle",          0, (uint8_t) TCode::UINT32   },
+  { UsrConfKey::USR_TIMEOUT_SHUTDOWN,     "timeout_shutdown",      0, (uint8_t) TCode::UINT32   },
+  { UsrConfKey::USR_BLUETOOTH_ENABLED,    "bluetooth_enabled",     0, (uint8_t) TCode::INT8     },
+  { UsrConfKey::USR_UNITS,                "units",                 0, (uint8_t) TCode::UINT8    },
+  { UsrConfKey::USR_VOLUME,               "volume",                0, (uint8_t) TCode::UINT8    },
+  { UsrConfKey::USR_DISP_BRIGHTNESS,      "disp_brightness",       0, (uint8_t) TCode::UINT8    },
+  { UsrConfKey::USR_LONGPRESS_THRESHOLD,  "longpress_threshold",   0, (uint8_t) TCode::UINT32   },
+  { UsrConfKey::USR_APP_POLLING_PERIOD,   "app_polling_period",    0, (uint8_t) TCode::UINT32   },
+  { UsrConfKey::USR_TYPEMATIC_PERIOD,     "typematic_period",      0, (uint8_t) TCode::UINT32   },
+  { UsrConfKey::USR_SERIAL_BAUD_RATE,     "serial_baud_rate",      0, (uint8_t) TCode::UINT32   },
+  { UsrConfKey::USR_MAG_OVERSAMPLE,       "mag_oversample",        0, (uint8_t) TCode::UINT16   },
+  { UsrConfKey::USR_MAG_FILTER_DEPTH,     "mag_filter_depth",      0, (uint8_t) TCode::UINT16   },
+  { UsrConfKey::USR_MAG_BANDWIDTH,        "mag_bandwidth",         0, (uint8_t) TCode::UINT32   },
+  { UsrConfKey::INVALID, "INVALID", (ENUM_FLAG_MASK_INVALID_CATCHALL), (uint8_t) TCode::NONE}
+};
+
+const EnumDefList<CalConfKey> CAL_CONF_LIST(
+  CAL_CONF_KEY_LIST, (sizeof(CAL_CONF_KEY_LIST) / sizeof(CAL_CONF_KEY_LIST[0])),
+  "CalConfKey"
+);
+const EnumDefList<UsrConfKey> USR_CONF_LIST(
+  USR_CONF_KEY_LIST, (sizeof(USR_CONF_KEY_LIST) / sizeof(USR_CONF_KEY_LIST[0])),
+  "UsrConfKey"  // Doesn't _need_ to be the enum name...
+);
+
+ConfRecordValidation<CalConfKey> cal_conf(0, &CAL_CONF_LIST);
+ConfRecordValidation<UsrConfKey> usr_conf(0, &USR_CONF_LIST);
+
 
 
 /*******************************************************************************
@@ -74,19 +120,6 @@ const char* const getSensorIDString(SensorID e) {
     case SensorID::TOF:           return "ToF";
     case SensorID::BATT_VOLTAGE:  return "BATT_VOLTAGE";
     case SensorID::LUX:           return "LUX";
-  }
-  return "UNKNOWN";
-}
-
-
-const char* const getDataVisString(DataVis e) {
-  switch (e) {
-    case DataVis::NONE:       return "NONE";
-    case DataVis::GRAPH:      return "GRAPH";
-    case DataVis::VECTOR:     return "VECTOR";
-    case DataVis::COMPASS:    return "COMPASS";
-    case DataVis::FIELD:      return "FIELD";
-    case DataVis::TEXT:       return "TEXT";
   }
   return "UNKNOWN";
 }
@@ -238,489 +271,115 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
 
 
 
-/*******************************************************************************
-* Functions for rendering cartesian graphs
-* TODO: This is getting to the point where it should be encapsulated.
-*******************************************************************************/
+void draw_graph_obj(Image* FB,
+  PixUInt x, PixUInt y, PixUInt w, PixUInt h, uint32_t color,
+  bool opt1, bool opt2, bool opt3,
+  SensorFilter<float>* filter
+)
+{
+  ImageGraph<float> graph(w, h);
+  graph.fg_color = 0xFFFFFFFF;
 
-/*
-* Draws the frame of graph, and returns inlay size via parameters.
-*/
-void _draw_graph_obj_frame(
-  int* x, int* y, int* w, int* h, uint16_t color, uint32_t flags
-) {
-  const int INSET_X = (flags & GRAPH_FLAG_DRAW_TICKS_V) ? 3 : 1;
-  const int INSET_Y = (flags & GRAPH_FLAG_DRAW_TICKS_H) ? 3 : 1;
-  if (flags & GRAPH_FLAG_FULL_REDRAW) {   // Draw the basic frame and axes?
-    display.fillRect(*x, *y, *w, *h, BLACK);
-    display.drawFastVLine(*x+(INSET_X - 1), *y, *h - (INSET_Y - 1), color);
-    display.drawFastHLine(*x+(INSET_X - 1), (*y + *h) - (INSET_Y - 1), *w - (INSET_X - 1), color);
+  const uint32_t  DATA_SIZE = filter->windowSize();
+  const uint32_t  LAST_SIDX = filter->lastIndex();
+  const uint32_t  DATA_IDX  = (1 + LAST_SIDX + strict_abs_delta(DATA_SIZE, (uint32_t) w)) % DATA_SIZE;
+  const float*    F_MEM_PTR = filter->memPtr();
+  float tmp_data[DATA_SIZE];
+  for (uint32_t i = 0; i < DATA_SIZE; i++) {
+    tmp_data[i] = *(F_MEM_PTR + ((i + LAST_SIDX) % DATA_SIZE));
   }
-  else if (flags & GRAPH_FLAG_PARTIAL_REDRAW) {
-    display.fillRect(*x+(INSET_X - 1), *y, *w - (INSET_X - 1), *h - (INSET_Y - 1), BLACK);
-  }
-  *x = *x + INSET_X;
-  *w = *w - INSET_X;
-  *h = *h - INSET_Y;
+
+  graph.trace0.color        = color;
+  graph.trace0.dataset      = tmp_data;
+  graph.trace0.data_len     = DATA_SIZE;
+  graph.trace0.enabled      = true;
+  graph.trace0.autoscale_x  = false;
+  graph.trace0.autoscale_y  = true;
+  graph.trace0.show_x_range = false;
+  graph.trace0.show_y_range = opt1;
+  graph.trace0.show_value   = opt2;
+  graph.trace0.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
+  graph.trace0.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
+  graph.trace0.offset_x     = DATA_IDX;
+
+  graph.drawGraph(FB, x, y);
 }
 
 
-/*
-*
-*/
-void _draw_graph_obj_text_overlay(
-  int x, int y, int w, int h, uint16_t color, uint32_t flags,
-  float v_max, float v_min, float v_scale, float last_datum
-) {
-  StringBuilder tmp_val_str;
-  if (flags & GRAPH_FLAG_TEXT_RANGE_V) {
-    display.setCursor(x+1, y);
-    display.setTextColor(WHITE);
-    tmp_val_str.concatf("%.2f", v_max);
-    display.writeString(&tmp_val_str);
-    tmp_val_str.clear();
-    display.setCursor(x+1, (y+h) - 8);
-    tmp_val_str.concatf("%.2f", v_min);
-    display.writeString(&tmp_val_str);
-  }
-  if (flags & GRAPH_FLAG_TEXT_VALUE) {
-    uint8_t tmp = last_datum / v_scale;
-    //display.fillCircle(x+w, tmp+y, 1, color);
-    display.setCursor(x, strict_min((uint16_t) ((y+h)-tmp), (uint16_t) (h-1)));
-    display.setTextColor(color);
-    tmp_val_str.clear();
-    tmp_val_str.concatf("%.2f", last_datum);
-    display.writeString(&tmp_val_str);
-  }
-}
+void draw_graph_obj(Image* FB,
+  PixUInt x, PixUInt y, PixUInt w, PixUInt h, uint32_t color1, uint32_t color2, uint32_t color3,
+  bool opt1, bool opt2, bool opt3,
+  SensorFilter<float>* filter1, SensorFilter<float>* filter2, SensorFilter<float>* filter3
+)
+{
+  ImageGraph<float> graph(w, h);
+  graph.fg_color = 0xFFFFFFFF;
 
-
-/*
-* Given a data array, and parameters for the graph, draw the data to the
-*   display.
-*/
-void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color, uint32_t flags,
-  float* dataset, uint32_t data_len
-) {
-  //display.setAddrWindow(x, y, w, h);
-  _draw_graph_obj_frame(&x, &y, &w, &h, WHITE, flags);
-
-  if (w < (int32_t) data_len) {
-    dataset += (data_len - w);
-    data_len = w;
-  }
-
-  float v_max = 0.0;
-  float v_min = 0.0;
-  for (uint32_t i = 0; i < data_len; i++) {
-    float tmp = *(dataset + i);
-    v_max = strict_max(v_max, tmp);
-    v_min = strict_min(v_min, tmp);
-  }
-  //float h_scale = data_len / w;
-  float v_scale = (v_max - v_min) / h;
-
-  if (flags & GRAPH_FLAG_DRAW_RULE_V) {
-  }
-  if (flags & GRAPH_FLAG_DRAW_RULE_H) {
-  }
-  if (flags & GRAPH_FLAG_DRAW_TICKS_V) {
-  }
-  if (flags & GRAPH_FLAG_DRAW_TICKS_H) {
-  }
-
-  for (uint32_t i = 0; i < data_len; i++) {
-    uint8_t tmp = *(dataset + i) / v_scale;
-    display.setPixel(i + x, (y+h)-tmp, color);
-  }
-
-  float last_datum = *(dataset + (data_len-1));
-  _draw_graph_obj_text_overlay(x, y, w, h, color, flags, v_max, v_min, v_scale, last_datum);
-  //display.endWrite();
-}
-
-
-
-/*
-* Given a filter object, and parameters for the graph, draw the data to the
-*   display.
-*/
-void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color0, uint16_t color1, uint16_t color2,
-  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
-  SensorFilter<float>* filt0, SensorFilter<float>* filt1, SensorFilter<float>* filt2
-) {
-  const uint16_t DATA_SIZE_0 = filt0->windowSize();
-  const uint16_t LAST_SIDX_0 = filt0->lastIndex();
-  const uint16_t DATA_SIZE_1 = filt1->windowSize();
-  const uint16_t LAST_SIDX_1 = filt1->lastIndex();
-  const uint16_t DATA_SIZE_2 = filt2->windowSize();
-  const uint16_t LAST_SIDX_2 = filt2->lastIndex();
-  const float*   F_MEM_0     = filt0->memPtr();
-  const float*   F_MEM_1     = filt1->memPtr();
-  const float*   F_MEM_2     = filt2->memPtr();
-  float tmp_data_0[DATA_SIZE_0];
+  const uint32_t  DATA_SIZE_1 = filter1->windowSize();
+  const uint32_t  LAST_SIDX_1 = filter1->lastIndex();
+  const uint32_t  DATA_IDX_1  = (1 + LAST_SIDX_1 + strict_abs_delta(DATA_SIZE_1, (uint32_t) w)) % DATA_SIZE_1;
+  const float*    F_MEM_PTR_1 = filter1->memPtr();
   float tmp_data_1[DATA_SIZE_1];
+  for (uint32_t i = 0; i < DATA_SIZE_1; i++) {
+    tmp_data_1[i] = *(F_MEM_PTR_1 + ((i + LAST_SIDX_1) % DATA_SIZE_1));
+  }
+
+  const uint32_t  DATA_SIZE_2 = filter2->windowSize();
+  const uint32_t  LAST_SIDX_2 = filter2->lastIndex();
+  const uint32_t  DATA_IDX_2  = (1 + LAST_SIDX_2 + strict_abs_delta(DATA_SIZE_2, (uint32_t) w)) % DATA_SIZE_2;
+  const float*    F_MEM_PTR_2 = filter2->memPtr();
   float tmp_data_2[DATA_SIZE_2];
-  for (uint16_t i = 0; i < DATA_SIZE_0; i++) {
-    tmp_data_0[i] = *(F_MEM_0 + ((i + LAST_SIDX_0) % DATA_SIZE_0));
-  }
-  for (uint16_t i = 0; i < DATA_SIZE_1; i++) {
-    tmp_data_1[i] = *(F_MEM_1 + ((i + LAST_SIDX_1) % DATA_SIZE_1));
-  }
-  for (uint16_t i = 0; i < DATA_SIZE_2; i++) {
-    tmp_data_2[i] = *(F_MEM_2 + ((i + LAST_SIDX_2) % DATA_SIZE_2));
+  for (uint32_t i = 0; i < DATA_SIZE_2; i++) {
+    tmp_data_2[i] = *(F_MEM_PTR_2 + ((i + LAST_SIDX_2) % DATA_SIZE_2));
   }
 
-  uint32_t flags = GRAPH_FLAG_PARTIAL_REDRAW;
-  flags |= (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
-  flags |= (draw_v_ticks ? GRAPH_FLAG_TEXT_RANGE_V : 0);
-  flags |= (draw_h_ticks ? GRAPH_FLAG_TEXT_VALUE : 0);
-  draw_graph_obj(x, y, w, h, color0, flags, tmp_data_0, (uint32_t) DATA_SIZE_0);
-  flags &= ~(GRAPH_FLAG_PARTIAL_REDRAW | GRAPH_FLAG_FULL_REDRAW);
-  draw_graph_obj(x, y, w, h, color1, flags, tmp_data_1, (uint32_t) DATA_SIZE_1);
-  draw_graph_obj(x, y, w, h, color2, flags, tmp_data_2, (uint32_t) DATA_SIZE_2);
-}
-
-
-
-/*
-* Given a filter object, and parameters for the graph, draw the data to the
-*   display.
-*/
-void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color0, uint16_t color1,
-  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
-  SensorFilter<float>* filt0, SensorFilter<float>* filt1
-) {
-  const uint16_t DATA_SIZE_0 = filt0->windowSize();
-  const uint16_t LAST_SIDX_0 = filt0->lastIndex();
-  const uint16_t DATA_SIZE_1 = filt1->windowSize();
-  const uint16_t LAST_SIDX_1 = filt1->lastIndex();
-  const float*   F_MEM_0     = filt0->memPtr();
-  const float*   F_MEM_1     = filt1->memPtr();
-  float tmp_data_0[DATA_SIZE_0];
-  float tmp_data_1[DATA_SIZE_1];
-  for (uint16_t i = 0; i < DATA_SIZE_0; i++) {
-    tmp_data_0[i] = *(F_MEM_0 + ((i + LAST_SIDX_0) % DATA_SIZE_0));
-  }
-  for (uint16_t i = 0; i < DATA_SIZE_1; i++) {
-    tmp_data_1[i] = *(F_MEM_1 + ((i + LAST_SIDX_1) % DATA_SIZE_1));
+  const uint32_t  DATA_SIZE_3 = filter3->windowSize();
+  const uint32_t  LAST_SIDX_3 = filter3->lastIndex();
+  const uint32_t  DATA_IDX_3  = (1 + LAST_SIDX_3 + strict_abs_delta(DATA_SIZE_3, (uint32_t) w)) % DATA_SIZE_3;
+  const float*    F_MEM_PTR_3 = filter3->memPtr();
+  float tmp_data_3[DATA_SIZE_3];
+  for (uint32_t i = 0; i < DATA_SIZE_3; i++) {
+    tmp_data_3[i] = *(F_MEM_PTR_3 + ((i + LAST_SIDX_3) % DATA_SIZE_3));
   }
 
-  uint32_t flags = GRAPH_FLAG_PARTIAL_REDRAW;
-  flags |= (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
-  flags |= (draw_v_ticks ? GRAPH_FLAG_TEXT_RANGE_V : 0);
-  flags |= (draw_h_ticks ? GRAPH_FLAG_TEXT_VALUE : 0);
-  draw_graph_obj(x, y, w, h, color0, flags, tmp_data_0, (uint32_t) DATA_SIZE_0);
-  flags &= ~(GRAPH_FLAG_PARTIAL_REDRAW | GRAPH_FLAG_FULL_REDRAW);
-  draw_graph_obj(x, y, w, h, color1, flags, tmp_data_1, (uint32_t) DATA_SIZE_1);
-}
+  graph.trace0.color        = color1;
+  graph.trace0.dataset      = tmp_data_1;
+  graph.trace0.data_len     = DATA_SIZE_1;
+  graph.trace0.enabled      = true;
+  graph.trace0.autoscale_x  = false;
+  graph.trace0.autoscale_y  = true;
+  graph.trace0.show_x_range = false;
+  graph.trace0.show_y_range = opt1;
+  graph.trace0.show_value   = opt2;
+  graph.trace0.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
+  graph.trace0.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
+  graph.trace0.offset_x     = DATA_IDX_1;
 
+  graph.trace1.color        = color2;
+  graph.trace1.dataset      = tmp_data_2;
+  graph.trace1.data_len     = DATA_SIZE_2;
+  graph.trace1.enabled      = true;
+  graph.trace1.autoscale_x  = false;
+  graph.trace1.autoscale_y  = true;
+  graph.trace1.show_x_range = false;
+  graph.trace1.show_y_range = opt1;
+  graph.trace1.show_value   = opt2;
+  graph.trace1.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
+  graph.trace1.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
+  graph.trace1.offset_x     = DATA_IDX_2;
 
+  graph.trace2.color        = color3;
+  graph.trace2.dataset      = tmp_data_3;
+  graph.trace2.data_len     = DATA_SIZE_3;
+  graph.trace2.enabled      = true;
+  graph.trace2.autoscale_x  = false;
+  graph.trace2.autoscale_y  = true;
+  graph.trace2.show_x_range = false;
+  graph.trace2.show_y_range = opt1;
+  graph.trace2.show_value   = opt2;
+  graph.trace2.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
+  graph.trace2.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
+  graph.trace2.offset_x     = DATA_IDX_3;
 
-/*
-* Given a filter object, and parameters for the graph, draw the data to the
-*   display.
-*/
-void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
-  SensorFilter<float>* filt
-) {
-  const uint16_t DATA_SIZE = filt->windowSize();
-  const uint16_t LAST_SIDX = filt->lastIndex();
-  const float*   F_MEM_PTR = filt->memPtr();
-  float tmp_data[DATA_SIZE];
-  for (uint16_t i = 0; i < DATA_SIZE; i++) {
-    tmp_data[i] = *(F_MEM_PTR + ((i + LAST_SIDX) % DATA_SIZE));
-  }
-
-  uint32_t flags = (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
-  flags |= (draw_v_ticks ? GRAPH_FLAG_TEXT_RANGE_V : 0);
-  flags |= (draw_h_ticks ? GRAPH_FLAG_TEXT_VALUE : 0);
-  draw_graph_obj(x, y, w, h, color, flags, tmp_data, (uint32_t) DATA_SIZE);
-}
-
-
-/*
-* Given a filter object, and parameters for the graph, draw the data to the
-*   display.
-*/
-void draw_graph_obj(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_base, bool draw_v_ticks, bool draw_h_ticks,
-  SensorFilter<uint32_t>* filt
-) {
-  const uint16_t  DATA_SIZE = filt->windowSize();
-  const uint16_t  LAST_SIDX = filt->lastIndex();
-  const uint32_t* F_MEM_PTR = filt->memPtr();
-  float tmp_data[DATA_SIZE];
-  for (uint16_t i = 0; i < DATA_SIZE; i++) {
-    tmp_data[i] = *(F_MEM_PTR + ((i + LAST_SIDX) % DATA_SIZE));
-  }
-  uint32_t flags = (draw_base ? GRAPH_FLAG_FULL_REDRAW : 0);
-  flags |= (draw_v_ticks ? GRAPH_FLAG_TEXT_RANGE_V : 0);
-  flags |= (draw_h_ticks ? GRAPH_FLAG_TEXT_VALUE : 0);
-  draw_graph_obj(x, y, w, h, color, flags, tmp_data, (uint32_t) DATA_SIZE);
-}
-
-
-
-/*
-* Displays a progress bar that runs left to right.
-* @param percent is in the range [0.0, 1.0]
-*/
-void draw_progress_bar_horizontal(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_base, bool draw_val, float percent
-) {
-  if (draw_base) {   // Clear the way.
-    display.fillRect(x, y, w, h, BLACK);
-  }
-  uint8_t pix_width = percent * (w-2);
-  int blackout_x = x+1+pix_width;
-  int blackout_w = (w+2)-pix_width;
-
-  display.fillRoundRect(blackout_x, y+1, blackout_w, h-2, 3, BLACK);
-  display.fillRoundRect(x+1, y+1, pix_width, h-2, 3, color);
-  display.drawRoundRect(x, y, w, h, 3, WHITE);
-
-  if (draw_val && ((h-4) >= 7)) {
-    // If we have space to do so, and the application requested it, draw the
-    //   progress value in the middle of the bar.
-    int txt_x = x+3;
-    int txt_y = y+3;
-    StringBuilder temp_str;
-    temp_str.concatf("%d%%", (int) (percent*100));
-    display.setTextSize(0);
-    display.setCursor(txt_x, txt_y);
-    display.setTextColor(WHITE);
-    display.writeString((char*) temp_str.string());
-  }
-}
-
-
-/*
-* Displays a progress bar that runs bottom to top.
-* @param percent is in the range [0.0, 1.0]
-*/
-void draw_progress_bar_vertical(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_base, bool draw_val, float percent
-) {
-  if (draw_base) {   // Clear the way.
-    display.fillRect(x, y, w, h, BLACK);
-  }
-  uint8_t pix_height = percent * (h-2);
-  int blackout_h = y+(h-1)-pix_height;
-  display.fillRoundRect(x+1, y+1, w-2, blackout_h, 3, BLACK);
-  display.fillRoundRect(x+1, (y+h-1)-pix_height, w-2, pix_height, 3, color);
-  display.drawRoundRect(x, y, w, h, 3, WHITE);
-
-  if (draw_val && ((w-4) >= 15)) {
-    // If we have space to do so, and the application requested it, draw the
-    //   progress value in the middle of the bar.
-    int txt_x = x+2;
-    // If there is not space under the line, draw above it.
-    int txt_y = (9 < pix_height) ? ((y+2+h)-pix_height) : ((y+h)-(pix_height+8));
-    StringBuilder temp_str;
-    temp_str.concatf("%d%%", (int) (percent*100));
-    display.setTextSize(0);
-    display.setCursor(txt_x, txt_y);
-    display.setTextColor(WHITE);
-    display.writeString((char*) temp_str.string());
-  }
-}
-
-
-/*
-*/
-void draw_compass(
-  int x, int y, int w, int h,
-  bool scale_needle, bool draw_val, float bearing_field, float bearing_true_north
-) {
-  int origin_x = x + (w >> 1);
-  int origin_y = y + (h >> 1);
-  int maximal_extent = (strict_min((int16_t) w, (int16_t) h) >> 1) - 1;
-  const int NEEDLE_WIDTH = maximal_extent >> 3;
-  display.fillCircle(origin_x, origin_y, maximal_extent, BLACK);
-  display.drawCircle(origin_x, origin_y, maximal_extent, WHITE);
-  int displacement_x = cos(bearing_field * (PI/180.0)) * maximal_extent;
-  int displacement_y = sin(bearing_field * (PI/180.0)) * maximal_extent;
-  int displacement_tri_x = cos((bearing_field + 90.0) * (PI/180.0)) * NEEDLE_WIDTH;
-  int displacement_tri_y = sin((bearing_field + 90.0) * (PI/180.0)) * NEEDLE_WIDTH;
-
-  int needle_tip_n_x = displacement_x + origin_x;
-  int needle_tip_n_y = displacement_y + origin_y;
-  int needle_tip_s_x = (displacement_x * -1) + origin_x;
-  int needle_tip_s_y = (displacement_y * -1) + origin_y;
-  int needle_x1 = displacement_tri_x + origin_x;
-  int needle_y1 = displacement_tri_y + origin_y;
-  int needle_x2 = (displacement_tri_x * -1) + origin_x;
-  int needle_y2 = (displacement_tri_y * -1) + origin_y;
-  display.drawLine(origin_x, origin_y, needle_tip_s_x, needle_tip_s_y, WHITE);
-  display.drawLine(origin_x, origin_y, needle_tip_n_x, needle_tip_n_y, RED);
-  //display.fillTriangle(needle_tip_s_x, needle_tip_s_y, needle_x1, needle_y1, needle_x2, needle_y2, WHITE);
-  //display.fillTriangle(needle_tip_n_x, needle_tip_n_y, needle_x1, needle_y1, needle_x2, needle_y2, RED);
-}
-
-
-/*
-* Given a vector object, and parameters for the graph, draw the data to the
-*   display. The given vector must be normalized.
-*/
-void draw_3vector(
-  int x, int y, int w, int h, uint16_t color,
-  bool draw_axes, bool draw_val, float vx, float vy, float vz
-) {
-  const int PERSPECTIVE_SCALE = 1;
-  int origin_x = x + (w >> 1);
-  int origin_y = y + (h >> 1);
-  if (draw_axes) {   // Draw the axes? The origin is in the middle of the field.
-    display.drawFastVLine(origin_x, y, h, WHITE);
-    display.drawFastHLine(x, origin_y, w, WHITE);
-    display.drawLine(x, (y+h), w, y, WHITE);
-    // Only 1/8 of a cube (all vector components are positive).
-    //display.drawFastVLine(x, y, h, WHITE);
-    //display.drawFastHLine(x, (y+h), w, WHITE);
-    //display.drawLine(x, (y+h), w>>1, y>>1, WHITE);
-  }
-  // Project the vector onto the x/y plane.
-  // To give a sense of depth, we use a triangle where only a line is required.
-  // We want the y-axis to be northward on the display. So we have to change the
-  //   sign of that component.
-  Vector3<int> projected(vx * (w >> 1), vy*(h >> 1) * -1, 0);   // TODO: z is unimplemented
-  int x1 = origin_x + projected.x - PERSPECTIVE_SCALE;
-  int y1 = origin_y + projected.y;
-  int x2 = origin_x + projected.x;
-  int y2 = origin_y + projected.y - PERSPECTIVE_SCALE;
-  display.fillTriangle(origin_x, origin_y, x1, y1, x2, y2, color);
-}
-
-
-/*
-* Draw the given data as a plane.
-*/
-void draw_data_square_field(
-  int x, int y, int w, int h,
-  uint32_t flags,
-  float* range_min, float* range_max,
-  SensorFilter<float>* filt
-) {
-  const bool lock_range_to_absolute = (flags & GRAPH_FLAG_LOCK_RANGE_V) ? true : false;
-  const uint16_t MIN_ELEMENTS = strict_min((uint16_t) filt->windowSize(), (uint16_t) w * h);
-  const uint8_t PIXEL_SIZE    = h / MIN_ELEMENTS;
-  const float TEMP_RANGE = *range_max - *range_min;
-  const float BINSIZE_T  = TEMP_RANGE / (PIXEL_SIZE * 8);  // Space of display gives scale size.
-  const float MIDPOINT_T = TEMP_RANGE / 2.0;
-  float* dataset = filt->memPtr();
-
-  //display.setAddrWindow(x, y, w, h);
-  for (uint8_t i = 0; i < MIN_ELEMENTS; i++) {
-    uint x = (i & 0x07) * PIXEL_SIZE;
-    uint y = (i >> 3) * PIXEL_SIZE;
-    float pix_deviation = abs(MIDPOINT_T - dataset[i]);
-    uint8_t pix_intensity = BINSIZE_T * (pix_deviation / (*range_max - MIDPOINT_T));
-    uint16_t color = (dataset[i] <= MIDPOINT_T) ? pix_intensity : (pix_intensity << 11);
-    display.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE, color);
-  }
-  //display.endWrite();
-}
-
-
-
-/*
-* Draw the data view selector widget.
-*/
-void draw_data_view_selector(
-  int x, int y, int w, int h,
-  DataVis opt0, DataVis opt1, DataVis opt2, DataVis opt3, DataVis opt4, DataVis opt5,
-  DataVis selected
-) {
-  uint16_t offset = 0;
-  //display.setAddrWindow(x, y, w, h);
-  display.setTextSize(0);
-  display.drawFastVLine(x, y, h, WHITE);
-  display.drawFastHLine(x, y, w, WHITE);
-  display.setCursor(x+2, y+2);
-  display.setTextColor(BLACK, WHITE);
-  display.writeString("VIS");
-  offset += 9;
-  display.drawFastHLine(x, y + offset, w, WHITE);
-
-  if (DataVis::NONE != opt0) {
-    if (selected == opt0) {
-      display.setTextColor(BLACK, YELLOW);
-    }
-    else {
-      display.setTextColor(YELLOW, BLACK);
-    }
-    display.setCursor(x+2, y+offset+2);
-    display.writeString(getDataVisString(opt0));
-    offset += 10;
-    display.drawFastHLine(x, y + offset, w, WHITE);
-  }
-  if (DataVis::NONE != opt1) {
-    if (selected == opt1) {
-      display.setTextColor(BLACK, YELLOW);
-    }
-    else {
-      display.setTextColor(YELLOW, BLACK);
-    }
-    display.setCursor(x+2, y+offset+2);
-    display.writeString(getDataVisString(opt1));
-    offset += 10;
-    display.drawFastHLine(x, y + offset, w, WHITE);
-  }
-  if (DataVis::NONE != opt2) {
-    if (selected == opt2) {
-      display.setTextColor(BLACK, YELLOW);
-    }
-    else {
-      display.setTextColor(YELLOW, BLACK);
-    }
-    display.setCursor(x+2, y+offset+2);
-    display.writeString(getDataVisString(opt2));
-    offset += 10;
-    display.drawFastHLine(x, y + offset, w, WHITE);
-  }
-  if (DataVis::NONE != opt3) {
-    if (selected == opt3) {
-      display.setTextColor(BLACK, YELLOW);
-    }
-    else {
-      display.setTextColor(YELLOW, BLACK);
-    }
-    display.setCursor(x+2, y+offset+2);
-    display.writeString(getDataVisString(opt3));
-    offset += 10;
-    display.drawFastHLine(x, y + offset, w, WHITE);
-  }
-  if (DataVis::NONE != opt4) {
-    if (selected == opt4) {
-      display.setTextColor(BLACK, YELLOW);
-    }
-    else {
-      display.setTextColor(YELLOW, BLACK);
-    }
-    display.setCursor(x+2, y+offset+2);
-    display.writeString(getDataVisString(opt4));
-    offset += 10;
-    display.drawFastHLine(x, y + offset, w, WHITE);
-  }
-  if (DataVis::NONE != opt5) {
-    if (selected == opt5) {
-      display.setTextColor(BLACK, YELLOW);
-    }
-    else {
-      display.setTextColor(YELLOW, BLACK);
-    }
-    display.setCursor(x+2, y+offset+2);
-    display.writeString(getDataVisString(opt5));
-    offset += 10;
-    display.drawFastHLine(x, y + offset, w, WHITE);
-  }
-  //display.endWrite();
+  graph.drawGraph(FB, x, y);
 }

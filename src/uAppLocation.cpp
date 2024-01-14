@@ -1,13 +1,5 @@
-#include <CppPotpourri.h>
-#include <SensorFilter.h>
-#include <GPSWrapper.h>
-#include "SensorGlue.h"
-#include "uApp.h"
 #include "Motherflux0r.h"
-
-extern WakeLock* wakelock_mag;
-extern WakeLock* wakelock_baro;
-extern WakeLock* wakelock_gps;
+#include "uApp.h"
 
 
 uAppLocation::uAppLocation() : uApp("Locator", (Image*) &display) {}
@@ -30,7 +22,7 @@ int8_t uAppLocation::_lc_on_preinit() {
   int8_t ret = 1;
   FB->fill(BLACK);
   redraw_app_window();
-  if (nullptr != wakelock_gps) {   wakelock_gps->acquire();   }
+  //if (nullptr != wakelock_gps) {   wakelock_gps->acquire();   }
   return ret;
 }
 
@@ -55,7 +47,7 @@ int8_t uAppLocation::_lc_on_active() {
 */
 int8_t uAppLocation::_lc_on_teardown() {
   int8_t ret = 1;
-  if (nullptr != wakelock_gps) {   wakelock_gps->release();   }
+  //if (nullptr != wakelock_gps) {   wakelock_gps->release();   }
   return ret;
 }
 
@@ -108,7 +100,7 @@ int8_t uAppLocation::_process_user_input() {
     uint16_t diff = _buttons_current ^ _buttons_pending;
     if (diff & 0x0001) {   // Interpret a cancel press as a return to APP_SELECT.
       uApp::setAppActive(AppID::APP_SELECT);
-      if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
+      //if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
       ret = -1;
     }
     if (diff & 0x0002) {   // Cluttered display toggle.

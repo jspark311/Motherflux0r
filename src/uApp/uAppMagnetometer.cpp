@@ -1,16 +1,8 @@
 /**
 * This uApp is carved up according to sensor.
 */
-
-#include <CppPotpourri.h>
-#include <SensorFilter.h>
-#include <GPSWrapper.h>
-#include "SensorGlue.h"
-#include "uApp.h"
-#include "Motherflux0r.h"
-
-extern WakeLock* wakelock_mag;
-extern WakeLock* wakelock_imu;
+#include "../Motherflux0r.h"
+#include "../uApp.h"
 
 #define UAPP_SUBMODAL_TRICORDER_MAG_GRAPH  0x00
 #define UAPP_SUBMODAL_TRICORDER_COMPASS    0x01
@@ -38,7 +30,7 @@ int8_t uAppMagnetometer::_lc_on_preinit() {
   int8_t ret = 1;
   FB->fill(BLACK);
   redraw_app_window();
-  if (nullptr != wakelock_mag) {   wakelock_mag->acquire();   }
+  //if (nullptr != wakelock_mag) {   wakelock_mag->acquire();   }
   return ret;
 }
 
@@ -63,7 +55,7 @@ int8_t uAppMagnetometer::_lc_on_active() {
 */
 int8_t uAppMagnetometer::_lc_on_teardown() {
   int8_t ret = 1;
-  if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
+  //if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
   return ret;
 }
 
@@ -99,7 +91,7 @@ int8_t uAppMagnetometer::_process_user_input() {
           ret = 1;
         }
         else {
-          if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
+          //if (nullptr != wakelock_mag) {   wakelock_mag->release();   }
           uApp::setAppActive(AppID::APP_SELECT);
           ret = -1;
         }
@@ -238,6 +230,7 @@ void uAppMagnetometer::_redraw_window() {
   const uint8_t GRAPH_HEIGHT   = 53;
   StringBuilder tmp_val_str;
   FB->setTextSize(0);
+  UIGfxWrapper gfx(FB);
 
   switch (_modal_id) {
     case UAPP_SUBMODAL_TRICORDER_MAG_STATS:
@@ -302,7 +295,7 @@ void uAppMagnetometer::_redraw_window() {
         float bearing_mag = 0.0;
         compass.getBearing(HeadingType::TRUE_NORTH, &bearing_north);
         compass.getBearing(HeadingType::MAGNETIC_NORTH, &bearing_mag);
-        draw_compass(0, TOP_MARGIN, COMPASS_SIZE, COMPASS_SIZE, false, _render_text_value(), bearing_mag, bearing_north);
+        gfx.drawCompass(0, TOP_MARGIN, COMPASS_SIZE, COMPASS_SIZE, false, _render_text_value(), bearing_mag, bearing_north);
         FB->setTextColor(WHITE, BLACK);
         FB->setCursor(36, 14);
         FB->writeString("Mag:");
@@ -343,7 +336,7 @@ void uAppMagnetometer::_redraw_window() {
         tmp_val_str.clear();
         tmp_val_str.concatf("%.4f uT   ", mag_vect_ptr->length());
         FB->writeString(&tmp_val_str);
-        draw_graph_obj(
+        draw_graph_obj(FB,
           GRAPH_H_OFFSET, TOP_MARGIN, GRAPH_WIDTH, GRAPH_HEIGHT,
           COLOR_X_AXIS, COLOR_Y_AXIS, COLOR_Z_AXIS,
           true, false, _render_text_value(),
