@@ -45,6 +45,7 @@ CXXFLAGS    += -fpermissive -fno-threadsafe-statics
 CXXFLAGS    += -DCONFIG_C3P_CBOR
 CXXFLAGS    += -DCONFIG_C3P_IMG_SUPPORT
 CXXFLAGS    += -DCONFIG_C3P_M2M_SUPPORT
+CXXFLAGS    += -DCONFIG_C3P_I2CADAPTER_ENABLE_CONSOLE
 
 CFLAGS       = -Wall -nostdlib
 CFLAGS      += -DF_CPU=$(CPU_SPEED)
@@ -174,6 +175,7 @@ SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/usb_inst.cpp
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/yield.cpp
 
 SOURCES_CPP += lib/CppPotpourri/src/AbstractPlatform.cpp
+SOURCES_CPP += lib/CppPotpourri/src/AsyncSequencer.cpp
 SOURCES_CPP += lib/CppPotpourri/src/EnumeratedTypeCodes.cpp
 SOURCES_CPP += lib/CppPotpourri/src/CppPotpourri.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Quaternion.cpp
@@ -210,6 +212,9 @@ SOURCES_CPP += lib/CppPotpourri/src/Image/Image.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Image/ImageUtils/ImageUtils.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Image/ImageUtils/ImageGraph.cpp
 SOURCES_CPP += lib/CppPotpourri/src/Image/ImageUtils/BlobPlotter.cpp
+SOURCES_CPP += lib/CppPotpourri/src/TimerTools/StopWatch.cpp
+SOURCES_CPP += lib/CppPotpourri/src/TimerTools/C3PScheduler.cpp
+SOURCES_CPP += lib/CppPotpourri/src/TimerTools/C3PTrace.cpp
 SOURCES_CPP += lib/CppPotpourri/src/cbor-cpp/cbor.cpp
 
 SOURCES_CPP += lib/ManuvrDrivers/src/AMG88xx/AMG88xx.cpp

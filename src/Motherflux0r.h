@@ -4,6 +4,7 @@
 /* CppPotpourri */
 #include <CppPotpourri.h>
 #include <StringBuilder.h>
+#include <AsyncSequencer.h>
 #include <SensorFilter.h>
 #include <Image/Image.h>
 #include <Image/ImageUtils.h>
@@ -227,12 +228,37 @@ void draw_graph_obj(Image* FB,
 #define BUTTON_DOWN  255  // Drawn with code
 
 
+/*******************************************************************************
+* Hardware checklist definitions
+*******************************************************************************/
+// These checks happen once on on every runtime.
+#define CHKLST_BOOT_BUS_SPI0         0x00000001  // SPI is operational.
+#define CHKLST_BOOT_BUS_I2C0         0x00000002  // I2C is operational.
+#define CHKLST_BOOT_BUS_I2C1         0x00000004  // I2C is operational.
+#define CHKLST_BOOT_TOUCH            0x00000008  // The config for the touch board was written.
+#define CHKLST_BOOT_DISPLAY          0x00000010  // The display is initialized.
+#define CHKLST_BOOT_MAG_GPIO         0x00000020  //
+#define CHKLST_BOOT_MAG_ADC          0x00000040  //
+#define CHKLST_BOOT_AUDIO_STACK      0x00000080  //
+#define CHKLST_BOOT_INIT_BARO        0x00000100  //
+#define CHKLST_BOOT_INIT_UV          0x00000200  //
+#define CHKLST_BOOT_INIT_GRIDEYE     0x00000400  //
+
+// Cyclic hardware states and their dependencies.
+//#define CHKLST_CYC_  0x00000001  //
+//#define CHKLST_CYC_  0x00000002  //
+//#define CHKLST_CYC_  0x08000004  //
+//#define CHKLST_CYC_  0x00000008  //
+
 
 /*******************************************************************************
 * Externed singleton resources
 *******************************************************************************/
 extern ConfRecordValidation<CalConfKey> cal_conf;
 extern ConfRecordValidation<UsrConfKey> usr_conf;
+
+extern AsyncSequencer checklist_boot;    // Hardware state checklist.
+extern AsyncSequencer checklist_cyclic;  // Hardware state checklist.
 
 extern SPIAdapter spi0;
 extern I2CAdapter i2c0;

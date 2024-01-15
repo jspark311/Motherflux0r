@@ -172,38 +172,19 @@ void uAppBoot::_redraw_window() {
           ret_local = (0 == tsl2561.init());
           break;
         case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
-          mag_filter.init();
-          magneto.attachPipe(&mag_filter);   // Connect the driver to its pipeline.
-          ret_local = (0 == magneto.init(&i2c1, &spi0));
+          checklist_boot.requestSteps(CHKLST_BOOT_MAG_GPIO);
+          ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_BARO:
-          ret_local = (0 == baro.init());
+          checklist_boot.requestSteps(CHKLST_BOOT_INIT_BARO);
+          ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_GRIDEYE:
-          ret_local = (0 == grideye.init(&i2c1));
+          checklist_boot.requestSteps(CHKLST_BOOT_INIT_GRIDEYE);
+          ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_AUDIO:
-          sineL.amplitude(1.0);
-          sineL.frequency(440);
-          sineL.phase(0);
-          sineR.amplitude(0.8);
-          sineR.frequency(660);
-          sineR.phase(0);
-          mixerFFT.gain(0, mix_queueL_to_fft);
-          mixerFFT.gain(1, mix_queueR_to_fft);
-          mixerFFT.gain(2, mix_noise_to_fft);
-          mixerFFT.gain(3, 0.0);
-          mixerL.gain(0, mix_queue_to_line);
-          mixerL.gain(1, mix_noise_to_line);
-          mixerL.gain(2, mix_synth_to_line);
-          mixerL.gain(3, 0.0);
-          mixerR.gain(0, mix_queue_to_line);
-          mixerR.gain(1, mix_noise_to_line);
-          mixerR.gain(2, mix_synth_to_line);
-          mixerR.gain(3, 0.0);
-          pinkNoise.amplitude(volume_pink_noise);
-          ampL.gain(volume_left_output);
-          ampR.gain(volume_right_output);
+          checklist_boot.requestSteps(CHKLST_BOOT_AUDIO_STACK);
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_TOF:
@@ -212,7 +193,8 @@ void uAppBoot::_redraw_window() {
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_UV:
-          ret_local = (0 == uv.init());
+          checklist_boot.requestSteps(CHKLST_BOOT_INIT_UV);
+          ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_TOUCH:
           ret_local = (0 == touch->reset());
@@ -236,8 +218,9 @@ void uAppBoot::_redraw_window() {
           ret_local = (0 == gps.init());
           break;
         case UAPP_BOOT_FLAG_INIT_MAG_ADC:
-          if (_init_done_flags.value(UAPP_BOOT_FLAG_INIT_MAG_GPIO)) {
-            ret_local = magneto.power();
+          if (checklist_boot.all_steps_have_passed(UAPP_BOOT_FLAG_INIT_MAG_GPIO)) {
+            checklist_boot.requestSteps(CHKLST_BOOT_MAG_ADC);
+            ret_local = true;
           }
           break;
         case UAPP_BOOT_FLAG_INIT_STORAGE:
@@ -278,23 +261,23 @@ void uAppBoot::_redraw_window() {
           }
           break;
         case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
-          if (sx1503.initialized()) {
+          if (checklist_boot.all_steps_have_passed(UAPP_BOOT_FLAG_INIT_MAG_GPIO)) {
             // TODO: This is just to prod the compass into returning a complete
             //   dataset. It's bogus until there is an IMU.
             Vector3f gravity(0.0, 0.0, 1.0);
             Vector3f gravity_err(0.002, 0.002, 0.002);
             compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
-            ret_local = magneto.power(true);
+            ret_local = true;
           }
           break;
         case UAPP_BOOT_FLAG_INIT_BARO:
-          ret_local = baro.initialized();
+          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_BARO);
           break;
         case UAPP_BOOT_FLAG_INIT_GRIDEYE:
-          ret_local = grideye.initialized();
+          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_GRIDEYE);
           break;
         case UAPP_BOOT_FLAG_INIT_AUDIO:
-          ret_local = true;
+          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_AUDIO_STACK);
           break;
         case UAPP_BOOT_FLAG_INIT_TOF:
           ret_local = true;
@@ -303,10 +286,7 @@ void uAppBoot::_redraw_window() {
           }
           break;
         case UAPP_BOOT_FLAG_INIT_UV:
-          if (uv.initialized()) {
-            //ret_local = (VEML6075Err::SUCCESS == uv.enabled(true));
-            ret_local = (VEML6075Err::SUCCESS == uv.setIntegrationTime(VEML6075IntTime::IT_100MS));
-          }
+          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_UV);
           break;
         case UAPP_BOOT_FLAG_INIT_TOUCH:
           if (touch->devFound()) {
@@ -345,8 +325,7 @@ void uAppBoot::_redraw_window() {
           ret_local = true;
           break;
         case UAPP_BOOT_FLAG_INIT_MAG_ADC:
-          //ret_local = magneto.configured();
-          ret_local = magneto.power();
+          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_MAG_ADC);
           break;
         case UAPP_BOOT_FLAG_INIT_STORAGE:
           ret_local = true;

@@ -383,3 +383,121 @@ void draw_graph_obj(Image* FB,
 
   graph.drawGraph(FB, x, y);
 }
+
+
+const DRV425Config DRV425_CONFIG;
+
+/*******************************************************************************
+* Checklist for moving out of the boot-up phase of the runtime.
+*******************************************************************************/
+const StepSequenceList CHECKLIST_BOOT[] = {
+  { .FLAG         = CHKLST_BOOT_BUS_SPI0,
+    .LABEL        = "INIT_SPI0",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_BUS_I2C0,
+    .LABEL        = "INIT_I2C0",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return (i2c0.busOnline() ? 1:0);  }
+  },
+  { .FLAG         = CHKLST_BOOT_BUS_I2C1,
+    .LABEL        = "INIT_I2C1",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return (i2c1.busOnline() ? 1:0);  }
+  },
+  { .FLAG         = CHKLST_BOOT_TOUCH,
+    .LABEL        = "INIT_TOUCH",
+    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DISPLAY,
+    .LABEL        = "INIT_DISPLAY",
+    .DEP_MASK     = (CHKLST_BOOT_BUS_SPI0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  { .FLAG         = CHKLST_BOOT_MAG_GPIO,
+    .LABEL        = "INIT_MAG_GPIO",
+    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C1),
+    .DISPATCH_FXN = []() { return (0 == sx1503.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return (sx1503.initialized() ? 1 : 0);  }
+  },
+  { .FLAG         = CHKLST_BOOT_MAG_ADC,
+    .LABEL        = "MAG_ADC",
+    .DEP_MASK     = (CHKLST_BOOT_MAG_GPIO),
+    .DISPATCH_FXN = []() {
+      if (!magneto.power()) return 0;
+      return (0 == mag_adc.init() ? 1 : 0);
+    },
+    .POLL_FXN     = []() { return (mag_adc.adcFound()  ? 1 : 0);  }
+  },
+  { .FLAG         = CHKLST_BOOT_AUDIO_STACK,
+    .LABEL        = "AUDIO_STACK",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() {
+      sineL.amplitude(1.0);
+      sineL.frequency(440);
+      sineL.phase(0);
+      sineR.amplitude(0.8);
+      sineR.frequency(660);
+      sineR.phase(0);
+      mixerFFT.gain(0, mix_queueL_to_fft);
+      mixerFFT.gain(1, mix_queueR_to_fft);
+      mixerFFT.gain(2, mix_noise_to_fft);
+      mixerFFT.gain(3, 0.0);
+      mixerL.gain(0, mix_queue_to_line);
+      mixerL.gain(1, mix_noise_to_line);
+      mixerL.gain(2, mix_synth_to_line);
+      mixerL.gain(3, 0.0);
+      mixerR.gain(0, mix_queue_to_line);
+      mixerR.gain(1, mix_noise_to_line);
+      mixerR.gain(2, mix_synth_to_line);
+      mixerR.gain(3, 0.0);
+      pinkNoise.amplitude(volume_pink_noise);
+      ampL.gain(volume_left_output);
+      ampR.gain(volume_right_output);
+      return 1;
+    },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_BARO,
+    .LABEL        = "INIT_BARO",
+    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C1),
+    .DISPATCH_FXN = []() { return (0 == baro.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return (baro.initialized() ? 1 : 0);  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_UV,
+    .LABEL        = "INIT_UV",
+    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C1),
+    .DISPATCH_FXN = []() { return (0 == uv.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() {
+      if (uv.initialized()) {
+        return ((VEML6075Err::SUCCESS == uv.setIntegrationTime(VEML6075IntTime::IT_100MS)) ? 1 : -1);
+      }
+      return 0;
+    }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_GRIDEYE,
+    .LABEL        = "INIT_GRIDEYE",
+    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C1),
+    .DISPATCH_FXN = []() { return (0 == grideye.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return (grideye.initialized() ? 1 : 0);  }
+  },
+};
+
+AsyncSequencer checklist_boot(CHECKLIST_BOOT, (sizeof(CHECKLIST_BOOT) / sizeof(CHECKLIST_BOOT[0])));
+
+
+/*******************************************************************************
+* Checklist for turning things on and off.
+*******************************************************************************/
+const StepSequenceList CHECKLIST_CYCLIC[] = {
+};
+
+AsyncSequencer checklist_cyclic(CHECKLIST_CYCLIC, (sizeof(CHECKLIST_CYCLIC) / sizeof(CHECKLIST_CYCLIC[0])));

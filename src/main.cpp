@@ -142,12 +142,11 @@ UARTOpts usb_comm_opts {
   .padding       = 0
 };
 
-
+SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 16);
 I2CAdapter i2c0(&i2c0_opts);
 I2CAdapter i2c1(&i2c1_opts);
-SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 8);
 
-UARTAdapter console_uart(0, 255, 255, 255, 255, 48, 256);
+UARTAdapter console_uart(0, 255, 255, 255, 255, 8192, 2048);
 UARTAdapter comm_unit_uart(1, COMM_RX_PIN, COMM_TX_PIN, 255, 255, 2048, 2048);
 UARTAdapter gps_uart(6, GPS_RX_PIN, GPS_TX_PIN, 255, 255, 48, 256);
 
@@ -185,7 +184,7 @@ const SSD13xxOpts disp_opts(
 );
 
 SSD1331 display(&disp_opts);
-
+MillisTimeout frame_rate_limiter(50);
 
 /*******************************************************************************
 * PMU
@@ -223,14 +222,37 @@ ManuvrPMU pmu(&charger_opts, &gas_gauge_opts, &powerplant_opts);
 
 
 /*******************************************************************************
-* Sensors
+* GPIO expander config
 *******************************************************************************/
+
 // This is the desired SX1503 GPIO state on init.
 #define SX1503_OUTPUT_PINS_0 ((uint8_t) ((1 << SX_PIN_ADC_OSC_EN) | (1 << SX_PIN_REGULATOR_EN)))
 #define SX1503_OUTPUT_PINS_1 ((uint8_t) (1 << (SX_PIN_BANDWIDTH & 0x07)))
 #define SX1503_INPUT_PINS_0  ((uint8_t) ~SX1503_OUTPUT_PINS_0)
 #define SX1503_INPUT_PINS_1  ((uint8_t) ~SX1503_OUTPUT_PINS_1)
 
+#define SX1503_INITIAL_VAL_0  0 //(SX1503_OUTPUT_PINS_0)
+#define SX1503_INITIAL_VAL_1  0 //((uint8_t) 0)
+
+uint8_t SX_CONFIG[SX1503_SERIALIZE_SIZE] = {
+  0x01,                              // Serialization format
+  DRV425_GPIO_IRQ_PIN, 255,          // IRQ and RESET pins. No reset pin.
+  0x00, 0x00,                        // Driver flags. Nothing special.
+  SX1503_INITIAL_VAL_1, SX1503_INITIAL_VAL_0, // Registers start here. Set initial output values.
+  SX1503_INPUT_PINS_1,  SX1503_INPUT_PINS_0,  // Direction registers. 1 implies input.
+  SX1503_INPUT_PINS_1,  SX1503_INPUT_PINS_0,  // All inputs have pull-ups.
+  0, 0,                                       // No pull-downs
+  SX1503_OUTPUT_PINS_1, SX1503_OUTPUT_PINS_0, // All inputs generate interrupts...
+  0xff, 0xff, 0xff, 0xff,                     // ...on both edges.
+  0x00, 0x00, 0x00, 0x00, 0x00,               // No use of the PLD feature.
+  0x00, 0x00, 0x00, 0x00, 0x00,               // No use of the PLD feature.
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00,         // No use of the PLD feature.
+  0x04                                        // No BOOST. IRQ autoclears on status read.
+};
+
+/*******************************************************************************
+* Sensors
+*******************************************************************************/
 
 const MCP356xConfig MCP3564_CONF_OBJ(
   0x00001700,  // DIFF_A,B,C and TEMP
@@ -252,22 +274,7 @@ const DRV425Config DRV425_CONFIG = {
   .ERR_1_PIN        = SX_PIN_ERR_1,
   .OVERRUN_1_PIN    = SX_PIN_OVERRUN_1,
   .ERR_2_PIN        = SX_PIN_ERR_2,
-  .OVERRUN_2_PIN    = SX_PIN_OVERRUN_2,
-  .SX_CONFIG        = {
-    0x01,                              // Serialization format
-    DRV425_GPIO_IRQ_PIN, 255,          // IRQ and RESET pins. No reset pin.
-    0x00, 0x00,                        // Driver flags. Nothing special.
-    0, 0,                              // Registers start here. Set initial output values.
-    SX1503_INPUT_PINS_1,  SX1503_INPUT_PINS_0,  // Direction registers. 1 implies input.
-    SX1503_INPUT_PINS_1,  SX1503_INPUT_PINS_0,  // All inputs have pull-ups.
-    0x00, 0x00,                                 // No pull-downs
-    SX1503_OUTPUT_PINS_1, SX1503_OUTPUT_PINS_0, // All inputs generate interrupts...
-    0xff, 0xff, 0xff, 0xff,                     // ...on both edges.
-    0x00, 0x00, 0x00, 0x00, 0x00,               // No use of the PLD feature.
-    0x00, 0x00, 0x00, 0x00, 0x00,               // No use of the PLD feature.
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,         // No use of the PLD feature.
-    0x04                                        // No BOOST. IRQ autoclears on status read.
-  }
+  .OVERRUN_2_PIN    = SX_PIN_OVERRUN_2
 };
 
 BME280Settings baro_settings(
@@ -289,7 +296,7 @@ static const SX8634Opts _touch_opts(
 SX8634* touch = nullptr;
 
 /* Sensor representations... */
-SX1503   sx1503(DRV425_CONFIG.SX_CONFIG, SX1503_SERIALIZE_SIZE);
+SX1503   sx1503(SX_CONFIG, SX1503_SERIALIZE_SIZE);
 MCP356x  mag_adc(DRV425_ADC_IRQ_PIN, DRV425_CS_PIN, 255, 1, &MCP3564_CONF_OBJ);
 DRV425   magneto(&sx1503, &mag_adc, &DRV425_CONFIG);
 
@@ -638,6 +645,14 @@ int8_t callback_3axis(SpatialSense s, Vector3f* dat, Vector3f* err, uint32_t seq
   return ret;
 }
 
+/*******************************************************************************
+* ADC callbacks
+*******************************************************************************/
+
+void callback_adc_value(uint8_t chan, double voltage) {
+  c3p_log(LOG_LEV_INFO, "main", "callback_adc_value(%u, %.5fV).", chan, voltage);
+}
+
 
 /*******************************************************************************
 * Touch callbacks
@@ -726,6 +741,7 @@ int callback_spi_debug(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+#if defined(CONFIG_C3P_I2CADAPTER_ENABLE_CONSOLE)
 int callback_i2c_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = -1;
   if (0 < args->count()) {
@@ -741,6 +757,7 @@ int callback_i2c_tools(StringBuilder* text_return, StringBuilder* args) {
   }
   return ret;
 }
+#endif
 
 
 int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
@@ -866,6 +883,7 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
 
 int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args) {
   if (args->count() > 0) {
+    app_boot.resetStopwatch();
     app_meta.resetStopwatch();
     app_touch_test.resetStopwatch();
     app_tricorder.resetStopwatch();
@@ -878,6 +896,7 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
     stopwatch_display.reset();
   }
   StopWatch::printDebugHeader(text_return);
+  app_boot.printStopwatch(text_return);
   app_meta.printStopwatch(text_return);
   app_touch_test.printStopwatch(text_return);
   app_tricorder.printStopwatch(text_return);
@@ -1347,6 +1366,12 @@ int callback_audio_volume(StringBuilder* text_return, StringBuilder* args) {
   return 0;
 }
 
+int callback_checklist_dump(StringBuilder* text_return, StringBuilder* args) {
+  checklist_boot.printDebug(text_return, "Boot Checklist");
+  checklist_cyclic.printDebug(text_return, "Cyclic Checklist");
+  return 0;
+}
+
 
 int callback_logger_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = 0;
@@ -1411,7 +1436,7 @@ void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
   //   ParsingConsole, so we don't use the BufferAccepter API.
   StringBuilder l_tmp;
   c3p_log_obj.fetchLog(&l_tmp);
-  console.printToLog(&l_tmp);
+  console_uart.pushBuffer(&l_tmp);
 }
 
 
@@ -1422,6 +1447,9 @@ void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
 void setup() {
   platform_init();
   boot_time = millis();
+  checklist_boot.resetSequencer();
+  checklist_cyclic.resetSequencer();
+  checklist_boot.requestSteps(CHKLST_BOOT_DISPLAY | CHKLST_BOOT_TOUCH);
   console_uart.init(&usb_comm_opts);
   console_uart.readCallback(&console);    // Attach the UART to console...
   console.setOutputTarget(&console_uart); // ...and console to UART.
@@ -1479,7 +1507,9 @@ void setup() {
   console.defineCommand("link",        'l',  "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("disp",        'd',  "Display test", "", 1, callback_display_test);
   console.defineCommand("spi",         '\0', "SPI debug.", "", 1, callback_spi_debug);
-  console.defineCommand("i2c",         '\0', "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
+  #if defined(CONFIG_C3P_I2CADAPTER_ENABLE_CONSOLE)
+    console.defineCommand("i2c",         '\0', "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
+  #endif
   console.defineCommand("log",         '\0', "Logger tools", "", 0, callback_logger_tools);
   console.defineCommand("led",         '\0', "LED Test", "", 1, callback_led_test);
   console.defineCommand("vib",         'v',  "Vibrator test", "", 0, callback_vibrator_test);
@@ -1497,15 +1527,24 @@ void setup() {
   console.defineCommand("vol",         '\0', "Audio volume.", "", 0, callback_audio_volume);
   console.defineCommand("conf",        'c',  "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
   console.defineCommand("pmu",         'p',  "PMU tools", "[info|punch|charging|aux|reset|init|refresh|verbosity]", 1, callback_pmu_tools);
+  console.defineCommand("hwstate",     '\0', "Hardware state checklists.", "", 0, callback_checklist_dump);
   console.init();
 
   StringBuilder ptc("Motherflux0r ");
   ptc.concat(TEST_PROG_VERSION);
   ptc.concat("\t Build date " __DATE__ " " __TIME__ "\n");
-  console.printToLog(&ptc);
+  console_uart.pushBuffer(&ptc);
+
+  sx1503.assignBusInstance(&i2c1);
 
   mag_adc.setReferenceRange(3.6, 0.0);
   mag_adc.setMCLKFrequency(19660800.0);   // 19.6608 MHz
+  mag_adc.setAdapter(&spi0);
+  mag_adc.valueCallback(callback_adc_value);
+  mag_adc.setCircuitSettleTime(10);
+
+  mag_filter.init();
+  magneto.attachPipe(&mag_filter);   // Connect the driver to its pipeline.
 
   pmu.attachCallback(battery_state_callback);
 
@@ -1521,6 +1560,10 @@ void setup() {
   grideye.assignBusInstance(&i2c1);
   // tof.assignBusInstance(&i2c1);
 
+  while (!console_uart.flushed()) {
+   console_uart.poll();
+  }
+
   config_time = millis();
 }
 
@@ -1531,23 +1574,27 @@ void setup() {
 *******************************************************************************/
 
 void spi_spin() {
+  uint8_t respin = 6;
   int8_t polling_ret = spi0.poll();
-  while (0 < polling_ret) {
+  while ((0 < polling_ret) & (respin > 0)) {
     polling_ret = spi0.poll();
   }
+  respin = 6;
   polling_ret = spi0.service_callback_queue();
-  while (0 < polling_ret) {
+  while ((0 < polling_ret) & (respin > 0)) {
     polling_ret = spi0.service_callback_queue();
   }
 }
 
 
 void loop() {
+  if (!checklist_boot.request_fulfilled()) {
+    if (0 < checklist_boot.poll()) {
+      // Actions were taken.
+    }
+  }
   stopwatch_main_loop_time.markStart();
   StringBuilder output;
-  const uint8_t RX_BUF_LEN = 64;
-  uint8_t ser_buffer[RX_BUF_LEN];
-  memset(ser_buffer, 0, RX_BUF_LEN);
 
   //last_interaction = millis();
   gps_uart.poll();
@@ -1575,20 +1622,36 @@ void loop() {
   uint32_t millis_now = millis();
   timeoutCheckVibLED();
 
-  /* Poll each sensor class. */
-  read_magnetometer_sensor();
 
-  stopwatch_sensor_baro.markStart();
-  if (0 < baro.poll()) {
-    read_baro_sensor();
+  /* Poll each sensor class. */
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_MAG_ADC | CHKLST_BOOT_MAG_GPIO)) {
+    //read_magnetometer_sensor();
   }
-  stopwatch_sensor_baro.markStop();
+
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_BUS_I2C1)) {
+    sx1503.poll();
+  }
+
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_BUS_SPI0)) {
+    mag_adc.poll();
+    read_magnetometer_sensor();
+  }
+
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_BARO)) {
+    stopwatch_sensor_baro.markStart();
+    if (0 < baro.poll()) {
+      read_baro_sensor();
+      stopwatch_sensor_baro.markStop();
+    }
+  }
 
   stopwatch_sensor_uv.markStart();
   if (0 < uv.poll()) {
-    read_uv_sensor();
+    if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_UV)) {
+      read_uv_sensor();
+      stopwatch_sensor_uv.markStop();
+    }
   }
-  stopwatch_sensor_uv.markStop();
 
   stopwatch_sensor_lux.markStart();
   if (0 < tsl2561.poll()) {
@@ -1596,12 +1659,14 @@ void loop() {
     stopwatch_sensor_lux.markStop();
   }
 
-  if (grideye.enabled()) {
-    stopwatch_sensor_grideye.markStart();
-    if (0 < grideye.poll()) {
-      read_thermopile_sensor();
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_GRIDEYE)) {
+    if (grideye.enabled()) {
+      stopwatch_sensor_grideye.markStart();
+      if (0 < grideye.poll()) {
+        read_thermopile_sensor();
+        stopwatch_sensor_grideye.markStop();
+      }
     }
-    stopwatch_sensor_grideye.markStop();
   }
 
   //if (tof_update_next <= millis_now) {
@@ -1626,12 +1691,14 @@ void loop() {
       break;
   }
 
-  millis_now = millis();
-  stopwatch_display.markStart();
-  uApp::appActive()->refresh();
-  stopwatch_display.markStop();
-  // For tracking framerate, convert from period in micros to hz...
-  graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
+  if (frame_rate_limiter.expired()) {
+    frame_rate_limiter.reset();
+    stopwatch_display.markStart();
+    uApp::appActive()->refresh();
+    stopwatch_display.markStop();
+    // For tracking framerate, convert from period in micros to hz...
+    graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
+  }
 
   console.printToLog(&output);
   console_uart.poll();
