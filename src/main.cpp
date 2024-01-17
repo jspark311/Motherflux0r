@@ -146,9 +146,9 @@ SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 16);
 I2CAdapter i2c0(&i2c0_opts);
 I2CAdapter i2c1(&i2c1_opts);
 
-UARTAdapter console_uart(0, 255, 255, 255, 255, 8192, 2048);
-UARTAdapter comm_unit_uart(1, COMM_RX_PIN, COMM_TX_PIN, 255, 255, 2048, 2048);
-UARTAdapter gps_uart(6, GPS_RX_PIN, GPS_TX_PIN, 255, 255, 48, 256);
+PlatformUART console_uart(0, 255, 255, 255, 255, 8192, 2048);
+PlatformUART comm_unit_uart(1, COMM_RX_PIN, COMM_TX_PIN, 255, 255, 2048, 2048);
+PlatformUART gps_uart(6, GPS_RX_PIN, GPS_TX_PIN, 255, 255, 48, 256);
 
 
 /* We use CppPotpourri's logging class, shunted to the serial port. */
@@ -185,6 +185,7 @@ const SSD13xxOpts disp_opts(
 
 SSD1331 display(&disp_opts);
 MillisTimeout frame_rate_limiter(50);
+
 
 /*******************************************************************************
 * PMU
@@ -254,7 +255,7 @@ uint8_t SX_CONFIG[SX1503_SERIALIZE_SIZE] = {
 * Sensors
 *******************************************************************************/
 
-const MCP356xConfig MCP3564_CONF_OBJ(
+MCP356xConfig MCP3564_CONF_OBJ(
   0x00001700,  // DIFF_A,B,C and TEMP
   0,           // No special flags
   MCP356xMode::CONTINUOUS,
@@ -349,13 +350,47 @@ extern uAppConfigurator app_config;
 extern uAppComms app_comms;
 extern uAppDataMgmt app_data_mgmt;
 
-static bool     imu_irq_fired       = false;
+// class TestPollable : public C3PPollable {
+//   public:
+//     TestPollable() {};
+//     ~TestPollable() {};
+//
+//     PollResult poll();
+// };
+//
+// PollResult TestPollable::poll() {
+//   c3p_log(LOG_LEV_WARN, "MAIN", "\nALIGNMENT_TEST\n");
+//   return PollResult::NO_ACTION;
+// }
+//
+// TestPollable test_pollable;
+
+/* Schedules... */
+// C3PScheduledPolling schedule_i2c0("i2c0_svc",    5109,  -1, false,  (C3PPollable*) &i2c0);
+// C3PScheduledPolling schedule_i2c1("i2c1_svc",    30109, -1, false,  (C3PPollable*) &i2c1);
+// C3PScheduledPolling schedule_spi0("spi0_svc",    1102,  -1, false,  (C3PPollable*) &spi0);
+// C3PScheduledPolling schedule_usb("usb_svc",      6083,  -1, false,  (C3PPollable*) &console_uart);
+// C3PScheduledPolling schedule_gps("gps_svc",      10083, -1, false,  (C3PPollable*) &gps_uart);
+// C3PScheduledPolling schedule_comms("comms_svc",  10983, -1, false,  (C3PPollable*) &comm_unit_uart);
+// C3PScheduledLambda schedule_ui {
+//   "ui_svc",
+//   100000,
+//   -1,      // Repeats forever if enabled.
+//   true,    // Enabled.
+//   []() {
+//     uApp::appActive()->refresh();
+//     //graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
+//     return 0;
+//   }
+// };
 
 
 
 /*******************************************************************************
 * ISRs
 *******************************************************************************/
+
+static bool     imu_irq_fired       = false;
 void imu_isr_fxn() {         imu_irq_fired = true;        }
 
 
@@ -882,7 +917,27 @@ int callback_conf_tools(StringBuilder* text_return, StringBuilder* args) {
 
 
 int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args) {
-  if (args->count() > 0) {
+  int8_t ret = 0;
+  char* cmd = args->position_trimmed(0);
+  if (0 == StringBuilder::strcasecmp(cmd, "app")) {
+    StopWatch::printDebugHeader(text_return);
+    app_boot.printStopwatch(text_return);
+    app_meta.printStopwatch(text_return);
+    app_touch_test.printStopwatch(text_return);
+    app_tricorder.printStopwatch(text_return);
+    app_root.printStopwatch(text_return);
+    app_synthbox.printStopwatch(text_return);
+    app_standby.printStopwatch(text_return);
+    app_config.printStopwatch(text_return);
+    app_comms.printStopwatch(text_return);
+    stopwatch_main_loop_time.printDebug("Main loop", text_return);
+    stopwatch_display.printDebug("Display", text_return);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "sch")) {
+    C3PScheduler::getInstance()->printDebug(text_return);
+  }
+
+  else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
     app_boot.resetStopwatch();
     app_meta.resetStopwatch();
     app_touch_test.resetStopwatch();
@@ -894,20 +949,12 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
     app_comms.resetStopwatch();
     stopwatch_main_loop_time.reset();
     stopwatch_display.reset();
+    text_return->concat("Profiler reset.\n");
   }
-  StopWatch::printDebugHeader(text_return);
-  app_boot.printStopwatch(text_return);
-  app_meta.printStopwatch(text_return);
-  app_touch_test.printStopwatch(text_return);
-  app_tricorder.printStopwatch(text_return);
-  app_root.printStopwatch(text_return);
-  app_synthbox.printStopwatch(text_return);
-  app_standby.printStopwatch(text_return);
-  app_config.printStopwatch(text_return);
-  app_comms.printStopwatch(text_return);
-  stopwatch_main_loop_time.printDebug("Main loop", text_return);
-  stopwatch_display.printDebug("Display", text_return);
-  return 0;
+  else {
+    ret = -1;
+  }
+  return ret;
 }
 
 
@@ -1440,7 +1487,6 @@ void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
 }
 
 
-
 /*******************************************************************************
 * Setup function
 *******************************************************************************/
@@ -1523,7 +1569,7 @@ void setup() {
   console.defineCommand("sfs",         '\0', "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
   console.defineCommand("mfs",         '\0', "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
   console.defineCommand("app",         'a',  "Select active application.", "", 0, callback_active_app);
-  console.defineCommand("aprof",       '\0', "Dump application profiler.", "", 0, callback_print_app_profiler);
+  console.defineCommand("prof",        'P',  "Dump application profiler.", "<app | sch>", 1, callback_print_app_profiler);
   console.defineCommand("vol",         '\0', "Audio volume.", "", 0, callback_audio_volume);
   console.defineCommand("conf",        'c',  "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
   console.defineCommand("pmu",         'p',  "PMU tools", "[info|punch|charging|aux|reset|init|refresh|verbosity]", 1, callback_pmu_tools);
@@ -1564,9 +1610,17 @@ void setup() {
    console_uart.poll();
   }
 
+
+  //C3PScheduler::getInstance()->addSchedule(&schedule_i2c0);
+  //C3PScheduler::getInstance()->addSchedule(&schedule_i2c1);
+  //C3PScheduler::getInstance()->addSchedule(&schedule_spi0);
+  //C3PScheduler::getInstance()->addSchedule(&schedule_usb);
+  //C3PScheduler::getInstance()->addSchedule(&schedule_gps);
+  //C3PScheduler::getInstance()->addSchedule(&schedule_comms);
+  //C3PScheduler::getInstance()->addSchedule(&schedule_ui);
+
   config_time = millis();
 }
-
 
 
 /*******************************************************************************
@@ -1574,35 +1628,33 @@ void setup() {
 *******************************************************************************/
 
 void spi_spin() {
-  uint8_t respin = 6;
-  int8_t polling_ret = spi0.poll();
-  while ((0 < polling_ret) & (respin > 0)) {
-    polling_ret = spi0.poll();
-  }
-  respin = 6;
-  polling_ret = spi0.service_callback_queue();
-  while ((0 < polling_ret) & (respin > 0)) {
-    polling_ret = spi0.service_callback_queue();
-  }
+  int respin = 16;
+  while ((respin-- > 0) && (PollResult::ACTION == spi0.poll())) {}
+  respin = 16;
+  while ((respin-- > 0) && (0 < spi0.service_callback_queue())) {}
 }
 
 
 void loop() {
+  C3PScheduler* scheduler = C3PScheduler::getInstance();
+  //scheduler->advanceScheduler();
+  //scheduler->serviceSchedules();
+
   if (!checklist_boot.request_fulfilled()) {
     if (0 < checklist_boot.poll()) {
       // Actions were taken.
     }
   }
   stopwatch_main_loop_time.markStart();
-  StringBuilder output;
-
   //last_interaction = millis();
-  gps_uart.poll();
-  comm_unit_uart.poll();
 
+  // Completely drain the SPI callback queue.
   spi_spin();
   i2c0.poll();
   i2c1.poll();
+  //last_interaction = millis();
+  gps_uart.poll();
+  comm_unit_uart.poll();
 
   stopwatch_touch_poll.markStart();
   int8_t t_res = touch->poll();
@@ -1637,21 +1689,21 @@ void loop() {
     read_magnetometer_sensor();
   }
 
-  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_BARO)) {
-    stopwatch_sensor_baro.markStart();
-    if (0 < baro.poll()) {
-      read_baro_sensor();
-      stopwatch_sensor_baro.markStop();
-    }
-  }
+  // if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_BARO)) {
+  //   stopwatch_sensor_baro.markStart();
+  //   if (0 < baro.poll()) {
+  //     read_baro_sensor();
+  //     stopwatch_sensor_baro.markStop();
+  //   }
+  // }
 
-  stopwatch_sensor_uv.markStart();
-  if (0 < uv.poll()) {
-    if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_UV)) {
-      read_uv_sensor();
-      stopwatch_sensor_uv.markStop();
-    }
-  }
+  // stopwatch_sensor_uv.markStart();
+  // if (0 < uv.poll()) {
+  //   if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_UV)) {
+  //     read_uv_sensor();
+  //     stopwatch_sensor_uv.markStop();
+  //   }
+  // }
 
   stopwatch_sensor_lux.markStart();
   if (0 < tsl2561.poll()) {
@@ -1659,15 +1711,15 @@ void loop() {
     stopwatch_sensor_lux.markStop();
   }
 
-  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_GRIDEYE)) {
-    if (grideye.enabled()) {
-      stopwatch_sensor_grideye.markStart();
-      if (0 < grideye.poll()) {
-        read_thermopile_sensor();
-        stopwatch_sensor_grideye.markStop();
-      }
-    }
-  }
+  // if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_GRIDEYE)) {
+  //   if (grideye.enabled()) {
+  //     stopwatch_sensor_grideye.markStart();
+  //     if (0 < grideye.poll()) {
+  //       read_thermopile_sensor();
+  //       stopwatch_sensor_grideye.markStop();
+  //     }
+  //   }
+  // }
 
   //if (tof_update_next <= millis_now) {
   //  stopwatch_sensor_tof.markStart();
@@ -1700,6 +1752,7 @@ void loop() {
     graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
   }
 
+  StringBuilder output;
   console.printToLog(&output);
   console_uart.poll();
   stopwatch_main_loop_time.markStop();

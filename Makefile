@@ -174,6 +174,11 @@ SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/usb_flightsim.cpp
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/usb_inst.cpp
 SOURCES_CPP += $(TEENSY_PATH)/cores/teensy4/yield.cpp
 
+SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/ConcretePlatform.cpp
+SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/I2CAdapter.cpp
+SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/SPIAdapter.cpp
+SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/UART.cpp
+
 SOURCES_CPP += lib/CppPotpourri/src/AbstractPlatform.cpp
 SOURCES_CPP += lib/CppPotpourri/src/AsyncSequencer.cpp
 SOURCES_CPP += lib/CppPotpourri/src/EnumeratedTypeCodes.cpp
@@ -322,15 +327,6 @@ SOURCES_CPP += $(TEENSY_PATH)/libraries/SerialFlash/SerialFlashDirectory.cpp
 SOURCES_CPP += $(TEENSY_PATH)/libraries/EEPROM/EEPROM.cpp
 SOURCES_CPP += $(TEENSY_PATH)/libraries/Time/DateStrings.cpp
 SOURCES_CPP += $(TEENSY_PATH)/libraries/Time/Time.cpp
-#SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/File.cpp
-#SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/SD.cpp
-#SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/utility/Sd2Card.cpp
-#SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/utility/SdFile.cpp
-#SOURCES_CPP += /home/ian/sketchbook/libraries/SD/src/utility/SdVolume.cpp
-SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/ConcretePlatform.cpp
-SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/I2CAdapter.cpp
-SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/SPIAdapter.cpp
-SOURCES_CPP += lib/ManuvrArduino/src/Teensy4/UART.cpp
 SOURCES_CPP += lib/teensy4_i2c/src/i2c_register_slave.cpp
 SOURCES_CPP += lib/teensy4_i2c/src/i2c_driver_wire.cpp
 SOURCES_CPP += lib/teensy4_i2c/src/imx_rt1060/imx_rt1060_i2c_driver.cpp

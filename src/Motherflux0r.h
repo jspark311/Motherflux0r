@@ -19,6 +19,7 @@
 #include <Pipes/TripleAxisPipe/TripleAxisCompass.h>
 #include <ManuvrDrivers.h>
 #include <Storage/RecordTypes/ConfRecord.h>
+#include <TimerTools/C3PScheduler.h>
 #include <Composites/ManuvrPMU/ManuvrPMU-r2.h>
 
 /* This project */
