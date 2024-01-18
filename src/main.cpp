@@ -261,7 +261,7 @@ MCP356xConfig MCP3564_CONF_OBJ(
   MCP356xMode::CONTINUOUS,
   MCP356xGain::GAIN_2,
   MCP356xBiasCurrent::NONE,
-  MCP356xOversamplingRatio::OSR_8192,
+  MCP356xOversamplingRatio::OSR_20480,
   MCP356xAMCLKPrescaler::OVER_2
 );
 
@@ -1495,7 +1495,8 @@ void setup() {
   boot_time = millis();
   checklist_boot.resetSequencer();
   checklist_cyclic.resetSequencer();
-  checklist_boot.requestSteps(CHKLST_BOOT_DISPLAY | CHKLST_BOOT_TOUCH);
+
+  checklist_boot.requestSteps(CHKLST_BOOT_MASK_BOOT_COMPLETE);
   console_uart.init(&usb_comm_opts);
   console_uart.readCallback(&console);    // Attach the UART to console...
   console.setOutputTarget(&console_uart); // ...and console to UART.
@@ -1653,15 +1654,37 @@ void loop() {
   i2c0.poll();
   i2c1.poll();
   //last_interaction = millis();
-  gps_uart.poll();
-  comm_unit_uart.poll();
 
-  stopwatch_touch_poll.markStart();
-  int8_t t_res = touch->poll();
-  if (0 < t_res) {
-    // Something changed in the hardware.
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_GPS)) {
+    gps_uart.poll();
   }
-  stopwatch_touch_poll.markStop();
+
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_COMMS)) {
+    comm_unit_uart.poll();
+  }
+
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_TOUCH_FOUND)) {
+    stopwatch_touch_poll.markStart();
+    int8_t t_res = touch->poll();
+    if (0 < t_res) {
+      // Something changed in the hardware.
+    }
+    stopwatch_touch_poll.markStop();
+  }
+
+  /* Run our async cleanup stuff. */
+  uint32_t millis_now = millis();
+  timeoutCheckVibLED();
+
+  /* Poll each sensor class. */
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_MAG_GPIO)) {
+    sx1503.poll();
+    if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_SPI0)) {
+      mag_adc.poll();
+      read_magnetometer_sensor();
+    }
+  }
+
 
   //if (imu_irq_fired) {
   //  imu_irq_fired = false;
@@ -1669,25 +1692,6 @@ void loop() {
   //  read_imu();
   //  stopwatch_sensor_imu.markStop();
   //}
-
-  /* Run our async cleanup stuff. */
-  uint32_t millis_now = millis();
-  timeoutCheckVibLED();
-
-
-  /* Poll each sensor class. */
-  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_MAG_ADC | CHKLST_BOOT_MAG_GPIO)) {
-    //read_magnetometer_sensor();
-  }
-
-  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_BUS_I2C1)) {
-    sx1503.poll();
-  }
-
-  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_BUS_SPI0)) {
-    mag_adc.poll();
-    read_magnetometer_sensor();
-  }
 
   // if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_BARO)) {
   //   stopwatch_sensor_baro.markStart();
@@ -1734,26 +1738,28 @@ void loop() {
       uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
-  switch (pmu.poll()) {
-    case 1:
-      graph_array_batt_voltage.feedFilter(pmu.battVoltage());
-      graph_array_batt_current.feedFilter(pmu.ltc294x.batteryCurrent());
-      break;
-    default:
-      break;
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_PMU_CHARGER | CHKLST_BOOT_INIT_PMU_GUAGE)) {
+    switch (pmu.poll()) {
+      case 1:
+        graph_array_batt_voltage.feedFilter(pmu.battVoltage());
+        graph_array_batt_current.feedFilter(pmu.ltc294x.batteryCurrent());
+        break;
+      default:
+        break;
+    }
   }
 
   if (frame_rate_limiter.expired()) {
     frame_rate_limiter.reset();
     stopwatch_display.markStart();
-    uApp::appActive()->refresh();
-    stopwatch_display.markStop();
-    // For tracking framerate, convert from period in micros to hz...
-    graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
+    if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_UI)) {
+      uApp::appActive()->refresh();
+      stopwatch_display.markStop();
+      // For tracking framerate, convert from period in micros to hz...
+      graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
+    }
   }
 
-  StringBuilder output;
-  console.printToLog(&output);
   console_uart.poll();
   stopwatch_main_loop_time.markStop();
   graph_array_cpu_time.feedFilter(stopwatch_main_loop_time.meanTime()/1000.0);

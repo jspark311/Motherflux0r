@@ -233,23 +233,88 @@ void draw_graph_obj(Image* FB,
 * Hardware checklist definitions
 *******************************************************************************/
 // These checks happen once on on every runtime.
-#define CHKLST_BOOT_BUS_SPI0         0x00000001  // SPI is operational.
-#define CHKLST_BOOT_BUS_I2C0         0x00000002  // I2C is operational.
-#define CHKLST_BOOT_BUS_I2C1         0x00000004  // I2C is operational.
-#define CHKLST_BOOT_TOUCH            0x00000008  // The config for the touch board was written.
-#define CHKLST_BOOT_DISPLAY          0x00000010  // The display is initialized.
-#define CHKLST_BOOT_MAG_GPIO         0x00000020  //
-#define CHKLST_BOOT_MAG_ADC          0x00000040  //
-#define CHKLST_BOOT_AUDIO_STACK      0x00000080  //
-#define CHKLST_BOOT_INIT_BARO        0x00000100  //
-#define CHKLST_BOOT_INIT_UV          0x00000200  //
-#define CHKLST_BOOT_INIT_GRIDEYE     0x00000400  //
+#define CHKLST_BOOT_INIT_SPI0        0x00000001  // SPI is operational.
+#define CHKLST_BOOT_INIT_I2C0        0x00000002  // I2C is operational.
+#define CHKLST_BOOT_INIT_I2C1        0x00000004  // I2C is operational.
+#define CHKLST_BOOT_INIT_TOUCH_FOUND 0x00000008  // The config for the touch board was written.
+#define CHKLST_BOOT_INIT_DISPLAY     0x00000010  // The display is initialized.
+#define CHKLST_BOOT_INIT_MAG_GPIO    0x00000020  // The magnetometer GPIO expander.
+#define CHKLST_BOOT_INIT_PMU_GUAGE   0x00000040  // Gas guage detection and setup.
+#define CHKLST_BOOT_INIT_PMU_CHARGER 0x00000080  // Battery changer chip.
+#define CHKLST_BOOT_INIT_CONF_LOAD   0x00000100  //
+#define CHKLST_BOOT_INIT_STORAGE     0x00000200  //
+#define CHKLST_BOOT_INIT_GPS         0x00000400  //
+#define CHKLST_BOOT_INIT_UI          0x00000800  //
+#define CHKLST_BOOT_INIT_COMMS       0x00001000  //
+#define CHKLST_BOOT_AUDIO_STACK      0x00002000  // Audio stack is allocated and running.
+#define CHKLST_BOOT_INIT_GPIO        0x00004000  // MCU-hosted GPIO pin quirks and initial pin setup.
+#define CHKLST_BOOT_INIT_CONSOLE     0x00008000  // Begin responding to console input.
+#define CHKLST_BOOT_INIT_TOUCH_READY 0x00010000  //
+//#define CHKLST_BOOT_INIT_          0x00020000  //
+//#define CHKLST_BOOT_INIT_          0x00040000  //
+//#define CHKLST_BOOT_INIT_          0x00080000  //
+#define CHKLST_BOOT_DEINIT_TOUCH     0x00100000  // Tear down the touch driver.
+#define CHKLST_BOOT_DEINIT_GPIO      0x00200000  // Safe any MCU GPIO pins.
+#define CHKLST_BOOT_DEINIT_UI        0x00400000  // Show any final shutdown message for the user.
+#define CHKLST_BOOT_DEINIT_SPI0      0x00800000  // Bus teardown.
+#define CHKLST_BOOT_DEINIT_I2C0      0x01000000  // Bus teardown.
+#define CHKLST_BOOT_DEINIT_I2C1      0x02000000  // Bus teardown.
+#define CHKLST_BOOT_DEINIT_PMU_SAFE  0x04000000  // Put the PMU into a self-managing state.
+#define CHKLST_BOOT_DEINIT_MAG_GPIO  0x08000000  // Release control of the magnetometer.
+#define CHKLST_BOOT_DEINIT_HANGUP    0x10000000  // Hangup on any open counterparties in the comms unit.
+#define CHKLST_BOOT_DEINIT_DISPLAY   0x20000000  // Write out final commands to the display.
+#define CHKLST_BOOT_DEINIT_UARTS     0x40000000  // Flush the UARTs before deiniting them.
+#define CHKLST_BOOT_DEINIT_CONF_SAVE 0x80000000  //
 
-// Cyclic hardware states and their dependencies.
-//#define CHKLST_CYC_  0x00000001  //
-//#define CHKLST_CYC_  0x00000002  //
-//#define CHKLST_CYC_  0x08000004  //
-//#define CHKLST_CYC_  0x00000008  //
+// Compounds of the boot checklist.
+#define CHKLST_BOOT_MASK_BOOT_COMPLETE ( \
+  CHKLST_BOOT_INIT_DISPLAY | CHKLST_BOOT_INIT_TOUCH_READY | CHKLST_BOOT_INIT_UI | \
+  CHKLST_BOOT_INIT_GPS | CHKLST_BOOT_INIT_CONSOLE | CHKLST_BOOT_INIT_COMMS | \
+  CHKLST_BOOT_INIT_PMU_GUAGE | CHKLST_BOOT_INIT_PMU_CHARGER | CHKLST_BOOT_INIT_CONF_LOAD | \
+  CHKLST_BOOT_INIT_MAG_GPIO | CHKLST_BOOT_AUDIO_STACK)
+
+
+/*
+* Cyclic hardware states and their dependencies. These Come up and down as
+*   demand dictates. The checklist is organized with each sensor having three
+*   distinct checks for async consideration:
+*
+* INIT:   The sensor is powered on, discovered, etc.
+* CONF:   The sensor is configured to operate as required.
+* DEINIT: The sensor (and its driver) are shutdown gracefully.
+*/
+#define CHKLST_CYC_BARO_INIT        0x00000001  // Baro and humidity
+#define CHKLST_CYC_BARO_CONF        0x00000002  //
+#define CHKLST_CYC_BARO_DEINIT      0x00000004  //
+#define CHKLST_CYC_UV_INIT          0x00000008  // Ultraviolet
+#define CHKLST_CYC_UV_CONF          0x00000010  //
+#define CHKLST_CYC_UV_DEINIT        0x00000020  //
+#define CHKLST_CYC_GRIDEYE_INIT     0x00000040  // Thermal cam
+#define CHKLST_CYC_GRIDEYE_CONF     0x00000080  //
+#define CHKLST_CYC_GRIDEYE_DEINIT   0x00000100  //
+#define CHKLST_CYC_MAG_ADC_INIT     0x00000200  // Magnetometer
+#define CHKLST_CYC_MAG_ADC_CONF     0x00000400  //
+#define CHKLST_CYC_MAG_ADC_DEINIT   0x00000800  //
+#define CHKLST_CYC_ANA_INIT         0x00001000  // TODO: ANA?
+#define CHKLST_CYC_ANA_CONF         0x00002000  //
+#define CHKLST_CYC_ANA_DEINIT       0x00004000  //
+#define CHKLST_CYC_LUX_INIT         0x00008000  // Lux and IR
+#define CHKLST_CYC_LUX_CONF         0x00010000  //
+#define CHKLST_CYC_LUX_DEINIT       0x00020000  //
+#define CHKLST_CYC_IMU_INIT         0x00040000  // Inertials
+#define CHKLST_CYC_IMU_CONF         0x00080000  //
+#define CHKLST_CYC_IMU_DEINIT       0x00100000  //
+#define CHKLST_CYC_TOF_INIT         0x00200000  // Time-of-flight depth sensor
+#define CHKLST_CYC_TOF_CONF         0x00400000  //
+#define CHKLST_CYC_TOF_DEINIT       0x00800000  //
+//#define CHKLST_CYC_CO2_INIT       0x01000000  // CO2 and particulates
+//#define CHKLST_CYC_CO2_CONF       0x02000000  //
+//#define CHKLST_CYC_CO2_DEINIT     0x04000000  //
+//#define CHKLST_CYC_SPECTRA_INIT   0x08000000  // Spectrometer
+//#define CHKLST_CYC_SPECTRA_CONF   0x10000000  //
+//#define CHKLST_CYC_SPECTRA_DEINIT 0x20000000  //
+//#define CHKLST_CYC_               0x40000000  //
+//#define CHKLST_CYC_               0x80000000  //
 
 
 /*******************************************************************************

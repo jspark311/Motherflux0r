@@ -2,56 +2,28 @@
 #include "uApp.h"
 #include "SensorGlue.h"
 
-#define UAPP_BOOT_FLAG_INIT_DISPLAY         0x00000001
-#define UAPP_BOOT_FLAG_INIT_LUX             0x00000002
-#define UAPP_BOOT_FLAG_INIT_MAG_GPIO        0x00000004
-#define UAPP_BOOT_FLAG_INIT_BARO            0x00000008
-#define UAPP_BOOT_FLAG_INIT_GRIDEYE         0x00000010
-#define UAPP_BOOT_FLAG_INIT_AUDIO           0x00000020
-#define UAPP_BOOT_FLAG_INIT_TOF             0x00000040
-#define UAPP_BOOT_FLAG_INIT_UV              0x00000080
-#define UAPP_BOOT_FLAG_INIT_TOUCH           0x00000100
-#define UAPP_BOOT_FLAG_INIT_IMU             0x00000200
-#define UAPP_BOOT_FLAG_INIT_USB             0x00000400
-#define UAPP_BOOT_FLAG_INIT_PMU_CHARGER     0x00000800
-#define UAPP_BOOT_FLAG_INIT_PMU_GUAGE       0x00001000
-#define UAPP_BOOT_FLAG_INIT_GPS             0x00002000
-#define UAPP_BOOT_FLAG_INIT_MAG_ADC         0x00004000
-#define UAPP_BOOT_FLAG_INIT_STORAGE         0x00008000
-#define UAPP_BOOT_FLAG_INIT_CONF_LOADED     0x00010000
 
-#define UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE   0x80000000
-
-typedef struct {
-  const char* const str;
-  const uint32_t flag_mask;
-} UAppInitPoint;
-
-// Items on the init list should be in order of desired initialization.
-const UAppInitPoint INIT_LIST[] = {
-  {"Display",          UAPP_BOOT_FLAG_INIT_DISPLAY       },
-  {"SX1503",           UAPP_BOOT_FLAG_INIT_MAG_GPIO      },
-  {"NV Storage",       UAPP_BOOT_FLAG_INIT_STORAGE       },
-  {"Conf Load",        UAPP_BOOT_FLAG_INIT_CONF_LOADED   },
-  {"USB",              UAPP_BOOT_FLAG_INIT_LUX           },
-  {"Barometer",        UAPP_BOOT_FLAG_INIT_BARO          },
-  {"GridEye",          UAPP_BOOT_FLAG_INIT_GRIDEYE       },
-  {"Audio",            UAPP_BOOT_FLAG_INIT_AUDIO         },
-  {"ToF",              UAPP_BOOT_FLAG_INIT_TOF           },
-  {"UVI",              UAPP_BOOT_FLAG_INIT_UV            },
-  {"Touchpad",         UAPP_BOOT_FLAG_INIT_TOUCH         },
-  {"Inertial",         UAPP_BOOT_FLAG_INIT_IMU           },
-  {"USB",              UAPP_BOOT_FLAG_INIT_USB           },
-  {"PMU Charger",      UAPP_BOOT_FLAG_INIT_PMU_CHARGER   },
-  {"PMU Guage",        UAPP_BOOT_FLAG_INIT_PMU_GUAGE     },
-  {"GPS",              UAPP_BOOT_FLAG_INIT_GPS           },
-  {"Magnetometer ADC", UAPP_BOOT_FLAG_INIT_MAG_ADC       },
-  {"Boot Complete",    UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE }
+// Items on the boot checklist list, as shown to the user.
+static const uint32_t INIT_LIST[] = {
+  CHKLST_BOOT_INIT_DISPLAY,
+  CHKLST_BOOT_INIT_UI,
+  CHKLST_BOOT_INIT_SPI0,
+  CHKLST_BOOT_INIT_I2C0,
+  CHKLST_BOOT_INIT_I2C1,
+  CHKLST_BOOT_INIT_MAG_GPIO,
+  CHKLST_BOOT_INIT_STORAGE,
+  CHKLST_BOOT_INIT_CONF_LOAD,
+  CHKLST_BOOT_AUDIO_STACK,
+  CHKLST_BOOT_INIT_TOUCH_READY,
+  CHKLST_BOOT_INIT_CONSOLE,
+  CHKLST_BOOT_INIT_PMU_CHARGER,
+  CHKLST_BOOT_INIT_PMU_GUAGE,
+  CHKLST_BOOT_INIT_GPS,
+  CHKLST_BOOT_INIT_COMMS,
+  CHKLST_BOOT_INIT_GPIO,
+  CHKLST_BOOT_MASK_BOOT_COMPLETE
 };
-
 uint16_t serial_timeout = 0;
-uint32_t touch_timeout  = 0;
-
 
 uAppBoot::uAppBoot() : uApp("Boot", (Image*) &display) {}
 
@@ -75,7 +47,6 @@ int8_t uAppBoot::_lc_on_preinit() {
     // TODO: Data should come in passively as a stream, and not require this.
     graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
   }
-  display.init(&spi0);
   return ret;
 }
 
@@ -129,7 +100,7 @@ int8_t uAppBoot::_process_user_input() {
     _slider_current = _slider_pending;
   }
   if (_buttons_current != _buttons_pending) {
-    if (_init_done_flags.value(UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE)) {
+    if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_MASK_BOOT_COMPLETE)) {
       // Interpret a button press as exiting APP_BOOT.
       uApp::setAppActive(AppID::APP_SELECT);
       ret = -1;
@@ -140,247 +111,67 @@ int8_t uAppBoot::_process_user_input() {
 }
 
 
+static bool todo_remove_this = false;
 
 /*
 * Draws the app.
 */
 void uAppBoot::_redraw_window() {
-  const uint8_t INIT_LIST_LEN = sizeof(INIT_LIST) / sizeof(UAppInitPoint);
+  const uint8_t INIT_LIST_LEN = sizeof(INIT_LIST) / sizeof(INIT_LIST[0]);
   const float   INIT_LIST_PERCENT = 100.0 / (float) INIT_LIST_LEN;
   const uint8_t BLOCK_WIDTH  = (96/INIT_LIST_LEN);  //INIT_LIST_PERCENT * 96;
   const uint8_t BLOCK_HEIGHT = 11;
-  bool     continue_looping = display.enabled();   // Don't loop if no display.
-  uint8_t  i = 0;
+
+  // Don't render if no display.
+  if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_DISPLAY)) {
+    if (!todo_remove_this) {
+      todo_remove_this = true;
+      FB->fill(BLACK);
+      FB->setTextColor(WHITE, BLACK);
+      FB->setCursor(14, 0);
+      FB->setTextSize(1);
+      FB->writeString("Motherflux0r");
+      FB->setTextSize(0);
+      FB->fillRect(0, 11, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
+      FB->fillRect(0, 24, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
+    }
+  }
+
+  uint8_t i = 0;
+  bool    continue_looping = true;
 
   while (continue_looping & (i < INIT_LIST_LEN)) {
-    if (!_init_sent_flags.value(INIT_LIST[i].flag_mask)) {
-      // This item has not seen an init call succeed.
-      bool ret_local = false;
-      switch (INIT_LIST[i].flag_mask) {
-        case UAPP_BOOT_FLAG_INIT_DISPLAY:
-          FB->fill(BLACK);
-          FB->setTextColor(WHITE, BLACK);
-          FB->setCursor(14, 0);
-          FB->setTextSize(1);
-          FB->writeString("Motherflux0r");
-          FB->setTextSize(0);
-          FB->fillRect(0, 11, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
-          FB->fillRect(0, 24, BLOCK_WIDTH*INIT_LIST_LEN, BLOCK_HEIGHT, YELLOW);
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_LUX:
-          ret_local = (0 == tsl2561.init());
-          break;
-        case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
-          checklist_boot.requestSteps(CHKLST_BOOT_MAG_GPIO);
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_BARO:
-          checklist_boot.requestSteps(CHKLST_BOOT_INIT_BARO);
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_GRIDEYE:
-          checklist_boot.requestSteps(CHKLST_BOOT_INIT_GRIDEYE);
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_AUDIO:
-          checklist_boot.requestSteps(CHKLST_BOOT_AUDIO_STACK);
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_TOF:
-          // tof.setTimeout(500);
-          // ret_local = (0 == tof.init());
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_UV:
-          checklist_boot.requestSteps(CHKLST_BOOT_INIT_UV);
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_TOUCH:
-          ret_local = (0 == touch->reset());
-          if (ret_local) {
-            touch_timeout = millis() + 300;
-          }
-          break;
-        case UAPP_BOOT_FLAG_INIT_IMU:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_USB:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_PMU_CHARGER:
-          ret_local = (0 == pmu.init(&i2c0));
-          break;
-        case UAPP_BOOT_FLAG_INIT_PMU_GUAGE:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_GPS:
-          ret_local = (0 == gps.init());
-          break;
-        case UAPP_BOOT_FLAG_INIT_MAG_ADC:
-          if (checklist_boot.all_steps_have_passed(UAPP_BOOT_FLAG_INIT_MAG_GPIO)) {
-            checklist_boot.requestSteps(CHKLST_BOOT_MAG_ADC);
-            ret_local = true;
-          }
-          break;
-        case UAPP_BOOT_FLAG_INIT_STORAGE:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_CONF_LOADED:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE:
-          ret_local = true;
-          break;
-        default:  return;  // TODO: Failure
+    bool dispatched = (checklist_boot.all_steps_dispatched(INIT_LIST[i]));
+    bool complete   = (checklist_boot.all_steps_have_passed(INIT_LIST[i]));
+    bool failed     = (checklist_boot.failed_steps(true) & INIT_LIST[i]);
+
+    if (dispatched) {
+      if (failed) {
+        display.fillRect(BLOCK_WIDTH*i, 11, BLOCK_WIDTH, BLOCK_HEIGHT, RED);
       }
-      if (ret_local) {
-        // If calling the init sequence succeeded, mark it as having been done.
+      else if (complete) {
+        display.fillRect(BLOCK_WIDTH*i, 11, BLOCK_WIDTH, BLOCK_HEIGHT, GREEN);
+      }
+      else {
         //draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, (0 == i), false, (INIT_LIST_PERCENT*(i+1)));
         display.fillRect(BLOCK_WIDTH*i, 11, BLOCK_WIDTH, BLOCK_HEIGHT, BLUE);
-        _init_sent_flags.set(INIT_LIST[i].flag_mask);
-        continue_looping = false;
-        _last_init_sent = millis();
-      }
-    }
-    else {
-      display.fillRect(BLOCK_WIDTH*i, 11, BLOCK_WIDTH, BLOCK_HEIGHT, GREEN);
-    }
-
-    if (!_init_done_flags.value(INIT_LIST[i].flag_mask)) {
-      // This item has not seen an init succeed.
-      bool ret_local = false;
-      switch (INIT_LIST[i].flag_mask) {
-        case UAPP_BOOT_FLAG_INIT_DISPLAY:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_LUX:
-          ret_local = tsl2561.initialized();
-          if (ret_local) {
-            tsl2561.integrationTime(TSLIntegrationTime::MS_101);
-          }
-          break;
-        case UAPP_BOOT_FLAG_INIT_MAG_GPIO:
-          if (checklist_boot.all_steps_have_passed(UAPP_BOOT_FLAG_INIT_MAG_GPIO)) {
-            // TODO: This is just to prod the compass into returning a complete
-            //   dataset. It's bogus until there is an IMU.
-            Vector3f gravity(0.0, 0.0, 1.0);
-            Vector3f gravity_err(0.002, 0.002, 0.002);
-            compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
-            ret_local = true;
-          }
-          break;
-        case UAPP_BOOT_FLAG_INIT_BARO:
-          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_BARO);
-          break;
-        case UAPP_BOOT_FLAG_INIT_GRIDEYE:
-          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_GRIDEYE);
-          break;
-        case UAPP_BOOT_FLAG_INIT_AUDIO:
-          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_AUDIO_STACK);
-          break;
-        case UAPP_BOOT_FLAG_INIT_TOF:
-          ret_local = true;
-          if (ret_local) {
-            // tof.startContinuous(100);
-          }
-          break;
-        case UAPP_BOOT_FLAG_INIT_UV:
-          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_UV);
-          break;
-        case UAPP_BOOT_FLAG_INIT_TOUCH:
-          if (touch->devFound()) {
-            touch->poll();
-            ret_local = touch->deviceReady();
-            if (ret_local) {
-              touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
-              touch->setMode(SX8634OpMode::ACTIVE);
-            }
-          }
-          break;
-        case UAPP_BOOT_FLAG_INIT_IMU:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_USB:
-          if (!Serial && (100 > serial_timeout)) {
-            serial_timeout++;
-          }
-          else {
-            if (Serial) {
-              // Drain any leading characters.
-              while (Serial.available()) {  Serial.read();   }
-            }
-            ret_local = true;
-          }
-          break;
-        case UAPP_BOOT_FLAG_INIT_PMU_CHARGER:
-          //ret_local = pmu.bq24155.initComplete();
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_PMU_GUAGE:
-          //ret_local = pmu.ltc294x.initComplete();
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_GPS:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_MAG_ADC:
-          ret_local = checklist_boot.all_steps_have_passed(CHKLST_BOOT_MAG_ADC);
-          break;
-        case UAPP_BOOT_FLAG_INIT_STORAGE:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_CONF_LOADED:
-          ret_local = true;
-          break;
-        case UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE:
-          if (SX8634OpMode::ACTIVE != touch->operationalMode()) {
-            if (touch_timeout < millis()) {
-              int tmp = touch->setMode(SX8634OpMode::ACTIVE);
-              touch_timeout = millis() + 300;
-              c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Setting touch to ACTIVE returned %d.", tmp);
-            }
-          }
-          else if (_init_sent_flags.raw == (_init_done_flags.raw | UAPP_BOOT_FLAG_INIT_BOOT_COMPLETE)) {
-            ret_local = true;
-          }
-          break;
-        default:  return;  // TODO: Failure
-      }
-      if (ret_local) {
-        // If init succeeded, mark it as complete.
-        _init_done_flags.set(INIT_LIST[i].flag_mask);
-        //draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, (0 == i), false, (INIT_LIST_PERCENT*(i+1)));
-        display.fillRect(BLOCK_WIDTH*i, 24, BLOCK_WIDTH, BLOCK_HEIGHT, BLUE);
-        const uint UNFILLED_STR_LEN = strlen(INIT_LIST[i].str);
-        char filled_list_str[17] = {0, };
-        for (uint8_t stri = 0; stri < sizeof(filled_list_str); stri++) {
-          filled_list_str[stri] = (stri < UNFILLED_STR_LEN) ? *(INIT_LIST[i].str + stri) : ' ';
-        }
-        FB->setTextColor(WHITE, BLACK);
-        FB->setCursor(0, 36);
-        FB->writeString(filled_list_str);
         continue_looping = false;
       }
-    }
-    else {
-      display.fillRect(BLOCK_WIDTH*i, 24, BLOCK_WIDTH, BLOCK_HEIGHT, GREEN);
     }
     i++;
   }
-
-  if (millis_since(_last_init_sent) >= UAPP_BOOT_INIT_TIMEOUT) {
-    for (uint8_t n = 0; n < INIT_LIST_LEN; n++) {
-      if (!_init_sent_flags.value(INIT_LIST[n].flag_mask)) {
-        _init_sent_flags.set(INIT_LIST[n].flag_mask);
-        display.fillRect(BLOCK_WIDTH*n, 11, BLOCK_WIDTH, BLOCK_HEIGHT, RED);
-      }
-      if (!_init_done_flags.value(INIT_LIST[n].flag_mask)) {
-        _init_done_flags.set(INIT_LIST[n].flag_mask);
-        display.fillRect(BLOCK_WIDTH*n, 24, BLOCK_WIDTH, BLOCK_HEIGHT, RED);
-      }
-    }
-  }
+  // if (millis_since(_last_init_sent) >= UAPP_BOOT_INIT_TIMEOUT) {
+  //   for (uint8_t n = 0; n < INIT_LIST_LEN; n++) {
+  //     if (!_init_sent_flags.value(INIT_LIST[n])) {
+  //       _init_sent_flags.set(INIT_LIST[n]);
+  //       display.fillRect(BLOCK_WIDTH*n, 11, BLOCK_WIDTH, BLOCK_HEIGHT, RED);
+  //     }
+  //     if (!_init_done_flags.value(INIT_LIST[n])) {
+  //       _init_done_flags.set(INIT_LIST[n]);
+  //       display.fillRect(BLOCK_WIDTH*n, 24, BLOCK_WIDTH, BLOCK_HEIGHT, RED);
+  //     }
+  //   }
+  // }
   return;
 }
 

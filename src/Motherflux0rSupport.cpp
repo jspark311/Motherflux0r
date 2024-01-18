@@ -384,61 +384,162 @@ void draw_graph_obj(Image* FB,
   graph.drawGraph(FB, x, y);
 }
 
-
-const DRV425Config DRV425_CONFIG;
+uint32_t touch_timeout  = 0;  // TODO: Rework...
 
 /*******************************************************************************
-* Checklist for moving out of the boot-up phase of the runtime.
+* Checklist for boot and shutdown. These checks happen once on on every runtime.
 *******************************************************************************/
 const StepSequenceList CHECKLIST_BOOT[] = {
-  { .FLAG         = CHKLST_BOOT_BUS_SPI0,
-    .LABEL        = "INIT_SPI0",
+  /* Checklist for booting up *************************************************/
+  { .FLAG         = CHKLST_BOOT_INIT_GPIO,
+    .LABEL        = "GPIO init",
     .DEP_MASK     = (0),
     .DISPATCH_FXN = []() { return 1;  },
     .POLL_FXN     = []() { return 1;  }
   },
-  { .FLAG         = CHKLST_BOOT_BUS_I2C0,
-    .LABEL        = "INIT_I2C0",
+  { .FLAG         = CHKLST_BOOT_INIT_SPI0,
+    .LABEL        = "Start spi1",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_GPIO),  // Uninitialized CS pins must be seized.
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_I2C0,
+    .LABEL        = "Start i2c0",
     .DEP_MASK     = (0),
     .DISPATCH_FXN = []() { return 1;  },
     .POLL_FXN     = []() { return (i2c0.busOnline() ? 1:0);  }
   },
-  { .FLAG         = CHKLST_BOOT_BUS_I2C1,
-    .LABEL        = "INIT_I2C1",
+  { .FLAG         = CHKLST_BOOT_INIT_I2C1,
+    .LABEL        = "Start i2c1",
     .DEP_MASK     = (0),
     .DISPATCH_FXN = []() { return 1;  },
     .POLL_FXN     = []() { return (i2c1.busOnline() ? 1:0);  }
   },
-  { .FLAG         = CHKLST_BOOT_TOUCH,
-    .LABEL        = "INIT_TOUCH",
-    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C0),
-    .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return 1;  }
+
+  { .FLAG         = CHKLST_BOOT_INIT_TOUCH_FOUND,
+    .LABEL        = "Start touch",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C0 | CHKLST_BOOT_INIT_GPIO),
+    .DISPATCH_FXN = []() {
+      if ((0 == touch->reset()) ? 1 : 0) {
+        touch_timeout = millis() + 300;
+        return 1;
+      }
+      return -1;
+    },
+    .POLL_FXN     = []() {
+      if (touch->devFound()) {
+        touch->poll();
+        if (touch->deviceReady()) {
+          touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
+          return (0 == touch->setMode(SX8634OpMode::ACTIVE) ? 1:-1);
+        }
+      }
+      return 0;
+    }
   },
-  { .FLAG         = CHKLST_BOOT_DISPLAY,
-    .LABEL        = "INIT_DISPLAY",
-    .DEP_MASK     = (CHKLST_BOOT_BUS_SPI0),
-    .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return 1;  }
+  { .FLAG         = CHKLST_BOOT_INIT_TOUCH_READY,
+    .LABEL        = "Touch ready",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_TOUCH_FOUND),
+    .DISPATCH_FXN = []() {
+      return 1;
+    },
+    .POLL_FXN     = []() {
+      if (SX8634OpMode::ACTIVE == touch->operationalMode()) {
+        return 1;
+      }
+      else if (false) {
+        // TODO: Timeout observation.
+      }
+      return 0;
+    }
   },
 
-  { .FLAG         = CHKLST_BOOT_MAG_GPIO,
-    .LABEL        = "INIT_MAG_GPIO",
-    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C1),
-    .DISPATCH_FXN = []() { return (0 == sx1503.init()   ? 1 : 0);  },
-    .POLL_FXN     = []() { return (sx1503.initialized() ? 1 : 0);  }
+  { .FLAG         = CHKLST_BOOT_INIT_DISPLAY,
+    .LABEL        = "Start display",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_SPI0),
+    .DISPATCH_FXN = []() { return (0 == display.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return (display.initialized() ? 1 : 0);  }
   },
-  { .FLAG         = CHKLST_BOOT_MAG_ADC,
-    .LABEL        = "MAG_ADC",
-    .DEP_MASK     = (CHKLST_BOOT_MAG_GPIO),
+  { .FLAG         = CHKLST_BOOT_INIT_UI,
+    .LABEL        = "Start UI",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_DISPLAY),
+    .DISPATCH_FXN = []() { return (display.enableDisplay(true) ? 1 : 0); },
+    .POLL_FXN     = []() { return (display.enabled() ? 1 : 0);  }
+  },
+
+  { .FLAG         = CHKLST_BOOT_INIT_MAG_GPIO,
+    .LABEL        = "Start mag GPIO",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C1),
+    .DISPATCH_FXN = []() { return (0 == sx1503.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() {
+      if (sx1503.initialized()) {
+        // TODO: This is just to prod the compass into returning a complete
+        //   dataset. It's bogus until there is an IMU.
+        Vector3f gravity(0.0, 0.0, 1.0);
+        Vector3f gravity_err(0.002, 0.002, 0.002);
+        compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
+        return 1;
+      }
+      return 0;
+    }
+  },
+
+  { .FLAG         = CHKLST_BOOT_INIT_PMU_GUAGE,
+    .LABEL        = "Start gas guage",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    //.POLL_FXN     = []() { return (pmu.ltc294x.initComplete() ? 1 : 0);  }
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_PMU_CHARGER,
+    .LABEL        = "Start battery",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C0 | CHKLST_BOOT_INIT_GPIO),
+    .DISPATCH_FXN = []() { return (0 == pmu.init(&i2c0) ? 1 : 0);  },
+    //.POLL_FXN     = []() { return (pmu.bq24155.initComplete() ? 1 : 0);  }
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_CONF_LOAD,
+    .LABEL        = "Load config",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_STORAGE,
+    .LABEL        = "Start storage",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_GPS,
+    .LABEL        = "Start GPS",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == gps.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_COMMS,
+    .LABEL        = "Start comm unit",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_CONSOLE,
+    .LABEL        = "Start console",
+    .DEP_MASK     = (0),
     .DISPATCH_FXN = []() {
-      if (!magneto.power()) return 0;
-      return (0 == mag_adc.init() ? 1 : 0);
+      if (Serial) {
+        // Drain any leading characters.
+        while (Serial.available()) {  Serial.read();   }
+        return 1;
+      }
+      else {
+        // TODO: Timeout case.
+      }
+      return 0;
     },
-    .POLL_FXN     = []() { return (mag_adc.adcFound()  ? 1 : 0);  }
+    .POLL_FXN     = []() { return 1;  }
   },
   { .FLAG         = CHKLST_BOOT_AUDIO_STACK,
-    .LABEL        = "AUDIO_STACK",
+    .LABEL        = "Start Audio",
     .DEP_MASK     = (0),
     .DISPATCH_FXN = []() {
       sineL.amplitude(1.0);
@@ -466,38 +567,259 @@ const StepSequenceList CHECKLIST_BOOT[] = {
     },
     .POLL_FXN     = []() { return 1;  }
   },
-  { .FLAG         = CHKLST_BOOT_INIT_BARO,
-    .LABEL        = "INIT_BARO",
-    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C1),
-    .DISPATCH_FXN = []() { return (0 == baro.init()   ? 1 : 0);  },
-    .POLL_FXN     = []() { return (baro.initialized() ? 1 : 0);  }
+
+
+  /* Checklist for shutting down **********************************************/
+  { .FLAG         = CHKLST_BOOT_DEINIT_GPIO,
+    .LABEL        = "MCU GPIO safety",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
   },
-  { .FLAG         = CHKLST_BOOT_INIT_UV,
-    .LABEL        = "INIT_UV",
-    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C1),
-    .DISPATCH_FXN = []() { return (0 == uv.init()   ? 1 : 0);  },
-    .POLL_FXN     = []() {
-      if (uv.initialized()) {
-        return ((VEML6075Err::SUCCESS == uv.setIntegrationTime(VEML6075IntTime::IT_100MS)) ? 1 : -1);
-      }
-      return 0;
-    }
+  { .FLAG         = CHKLST_BOOT_DEINIT_SPI0,
+    .LABEL        = "Stop spi0",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
   },
-  { .FLAG         = CHKLST_BOOT_INIT_GRIDEYE,
-    .LABEL        = "INIT_GRIDEYE",
-    .DEP_MASK     = (CHKLST_BOOT_BUS_I2C1),
-    .DISPATCH_FXN = []() { return (0 == grideye.init()   ? 1 : 0);  },
-    .POLL_FXN     = []() { return (grideye.initialized() ? 1 : 0);  }
+  { .FLAG         = CHKLST_BOOT_DEINIT_I2C0,
+    .LABEL        = "Stop i2c0",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DEINIT_I2C1,
+    .LABEL        = "Stop i2c1",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DEINIT_TOUCH,
+    .LABEL        = "Stop touch",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DEINIT_DISPLAY,
+    .LABEL        = "Stop display",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DEINIT_MAG_GPIO,
+    .LABEL        = "Stop mag GPIO",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DEINIT_UI,
+    .LABEL        = "Stop UI",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DEINIT_PMU_SAFE,
+    .LABEL        = "PMU safety",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DEINIT_HANGUP,
+    .LABEL        = "Comms hangup",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DEINIT_UARTS,
+    .LABEL        = "UARTs flushed",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_DEINIT_CONF_SAVE,
+    .LABEL        = "Conf save",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
   },
 };
 
 AsyncSequencer checklist_boot(CHECKLIST_BOOT, (sizeof(CHECKLIST_BOOT) / sizeof(CHECKLIST_BOOT[0])));
 
 
+
 /*******************************************************************************
 * Checklist for turning things on and off.
 *******************************************************************************/
 const StepSequenceList CHECKLIST_CYCLIC[] = {
+  /* Barometer */
+  { .FLAG         = CHKLST_CYC_BARO_INIT,
+    .LABEL        = "Baro INIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == baro.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return (baro.initialized() ? 1 : 0);  }
+  },
+  { .FLAG         = CHKLST_CYC_BARO_CONF,
+    .LABEL        = "Baro CONF",
+    .DEP_MASK     = (CHKLST_CYC_BARO_INIT),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_BARO_DEINIT,
+    .LABEL        = "Baro DEINIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* Ultraviolet */
+  { .FLAG         = CHKLST_CYC_UV_INIT,
+    .LABEL        = "UV INIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == uv.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return (uv.initialized() ? 1 : 0);  }
+  },
+  { .FLAG         = CHKLST_CYC_UV_CONF,
+    .LABEL        = "UV CONF",
+    .DEP_MASK     = (CHKLST_CYC_UV_INIT),
+    .DISPATCH_FXN = []() { return ((VEML6075Err::SUCCESS == uv.setIntegrationTime(VEML6075IntTime::IT_100MS)) ? 1 : -1);  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_UV_DEINIT,
+    .LABEL        = "UV DEINIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* Thermocam */
+  { .FLAG         = CHKLST_CYC_GRIDEYE_INIT,
+    .LABEL        = "Thermocam INIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == grideye.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return (grideye.initialized() ? 1 : 0);  }
+  },
+  { .FLAG         = CHKLST_CYC_GRIDEYE_CONF,
+    .LABEL        = "Thermocam CONF",
+    .DEP_MASK     = (CHKLST_CYC_GRIDEYE_INIT),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_GRIDEYE_DEINIT,
+    .LABEL        = "Thermocam DEINIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* Mag ADC */
+  { .FLAG         = CHKLST_CYC_MAG_ADC_INIT,
+    .LABEL        = "Mag ADC INIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() {
+      if (!magneto.power()) return 0;
+      return (0 == mag_adc.init() ? 1 : 0);
+    },
+    .POLL_FXN     = []() { return (mag_adc.adcFound()  ? 1 : 0);  }
+  },
+  { .FLAG         = CHKLST_CYC_MAG_ADC_CONF,
+    .LABEL        = "Mag ADC CONF",
+    .DEP_MASK     = (CHKLST_CYC_MAG_ADC_INIT),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_MAG_ADC_DEINIT,
+    .LABEL        = "Mag ADC DEINIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /*  */
+  { .FLAG         = CHKLST_CYC_ANA_INIT,
+    .LABEL        = "ANA(?) INIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_ANA_CONF,
+    .LABEL        = "ANA(?) CONF",
+    .DEP_MASK     = (CHKLST_CYC_ANA_INIT),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_ANA_DEINIT,
+    .LABEL        = "ANA(?) DEINIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* Lux and IR */
+  { .FLAG         = CHKLST_CYC_LUX_INIT,
+    .LABEL        = "Lux/IR INIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == tsl2561.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return (tsl2561.initialized() ? 1 : 0);  }
+  },
+  { .FLAG         = CHKLST_CYC_LUX_CONF,
+    .LABEL        = "Lux/IR CONF",
+    .DEP_MASK     = (CHKLST_CYC_LUX_INIT),
+    .DISPATCH_FXN = []() {
+      tsl2561.integrationTime(TSLIntegrationTime::MS_101);
+      return 1;
+    },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_LUX_DEINIT,
+    .LABEL        = "Lux/IR DEINIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* Inertials */
+  { .FLAG         = CHKLST_CYC_IMU_INIT,
+    .LABEL        = "IMU INIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_IMU_CONF,
+    .LABEL        = "IMU CONF",
+    .DEP_MASK     = (CHKLST_CYC_IMU_INIT),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_IMU_DEINIT,
+    .LABEL        = "IMU DEINIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* Time-of-flight depth sensor */
+  { .FLAG         = CHKLST_CYC_TOF_INIT,
+    .LABEL        = "ToF INIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+    // tof.setTimeout(500);
+    // ret_local = (0 == tof.init());
+  },
+  { .FLAG         = CHKLST_CYC_TOF_CONF,
+    .LABEL        = "ToF CONF",
+    .DEP_MASK     = (CHKLST_CYC_TOF_INIT),
+    // tof.startContinuous(100);
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_CYC_TOF_DEINIT,
+    .LABEL        = "ToF DEINIT",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
 };
 
 AsyncSequencer checklist_cyclic(CHECKLIST_CYCLIC, (sizeof(CHECKLIST_CYCLIC) / sizeof(CHECKLIST_CYCLIC[0])));
