@@ -40,6 +40,8 @@ extern SensorFilter<float> graph_array_mag_strength_z;
 extern SensorFilter<float> graph_array_time_of_flight;
 extern SensorFilter<float> graph_array_batt_voltage;
 extern SensorFilter<float> graph_array_batt_current;
+extern SensorFilter<float> graph_array_cpu_time;
+extern SensorFilter<float> graph_array_frame_rate;
 
 /* Magnetic pipeline */
 extern TripleAxisTerminus     mag_vect;   // The magnetic field vector.
@@ -51,6 +53,4 @@ extern TripleAxisSingleFilter mag_filter; // Input-side filter.
 extern TripleAxisTerminus     down;       // Gnomon conversion stage.
 extern TripleAxisFork         imu_fork;
 
-
 int8_t init_sensor_memory();
- 

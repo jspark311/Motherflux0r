@@ -13,7 +13,6 @@
 #include <TimeLib.h>
 
 #include <ManuvrDrivers.h>
-#include <ManuvrArduino.h>
 #include <Composites/ManuvrPMU/ManuvrPMU-r2.h>
 
 #include "SensorGlue.h"
@@ -336,7 +335,6 @@ uint32_t tof_update_next   = 0;      //
 
 /* Console junk... */
 ParsingConsole console(128);
-const char* console_prompt_str = "Motherflux0r # ";
 
 /* Application tracking and interrupts... */
 extern uAppBoot app_boot;
@@ -390,8 +388,8 @@ extern uAppDataMgmt app_data_mgmt;
 * ISRs
 *******************************************************************************/
 
-static bool     imu_irq_fired       = false;
-void imu_isr_fxn() {         imu_irq_fired = true;        }
+static bool imu_irq_fired = false;
+void imu_isr_fxn() {  imu_irq_fired = true;  }
 
 
 /*******************************************************************************
@@ -527,7 +525,6 @@ int8_t read_time_of_flight_sensor() {
 /*******************************************************************************
 * Battery state callback
 *******************************************************************************/
-
 int8_t battery_state_callback(ChargeState e) {
   return 0;
 }
@@ -693,7 +690,7 @@ void callback_adc_value(uint8_t chan, double voltage) {
 * Touch callbacks
 *******************************************************************************/
 
-static void cb_button(int button, bool pressed) {
+void cb_button(int button, bool pressed) {
   last_interaction = millis();
   if (pressed) {
     vibrateOn(19);
@@ -705,14 +702,14 @@ static void cb_button(int button, bool pressed) {
 }
 
 
-static void cb_slider(int slider, int value) {
+void cb_slider(int slider, int value) {
   last_interaction = millis();
   ledOn(LED_R_PIN, 30, (4095 - graph_array_ana_light.value() * 3000));
   uApp::appActive()->deliverSliderValue(value);
 }
 
 
-static void cb_longpress(int button, uint32_t duration) {
+void cb_longpress(int button, uint32_t duration) {
   ledOn(LED_G_PIN, 30, (4095 - graph_array_ana_light.value() * 3000));
 }
 
@@ -1495,122 +1492,20 @@ void setup() {
   boot_time = millis();
   checklist_boot.resetSequencer();
   checklist_cyclic.resetSequencer();
-
   checklist_boot.requestSteps(CHKLST_BOOT_MASK_BOOT_COMPLETE);
-  console_uart.init(&usb_comm_opts);
-  console_uart.readCallback(&console);    // Attach the UART to console...
-  console.setOutputTarget(&console_uart); // ...and console to UART.
-
-  console.emitPrompt(true);
-  console.setTXTerminator(LineTerm::CRLF);
-  console.setRXTerminator(LineTerm::CR);
-  console.localEcho(true);
-  console.printHelpOnFail(true);
-  console.setPromptString(console_prompt_str);
-
-  pinMode(IMU_IRQ_PIN,    GPIOMode::INPUT_PULLUP);
-  pinMode(DRV425_CS_PIN,  GPIOMode::INPUT); // Wrong
-  pinMode(ANA_LIGHT_PIN,  GPIOMode::INPUT);
-  pinMode(TOF_IRQ_PIN,    GPIOMode::INPUT);
-  pinMode(LED_R_PIN,      GPIOMode::INPUT);
-  pinMode(LED_G_PIN,      GPIOMode::INPUT);
-  pinMode(LED_B_PIN,      GPIOMode::INPUT);
-  pinMode(RADIO_ENABLE_PIN, GPIOMode::OUTPUT);
-  setPin(RADIO_ENABLE_PIN, true);
 
   AudioMemory(32);
   analogWriteResolution(12);
 
-  uint16_t serial_timeout = 0;
-  while (!Serial && (100 > serial_timeout)) {
-    serial_timeout++;
-    delay(70);
-  }
-
-  spi0.init();
-  i2c0.init();
-  i2c1.init();
-
-  comm_unit_uart.init(&comm_unit_uart_opts);
-
-  gps_uart.init(&gps_uart_opts);
-  gps_uart.readCallback(&gps);  // Attach the GPS UART to its parser.
-  gps.setCallback(location_callback);
-
   //SD.begin(BUILTIN_SDCARD);
-
-  /* Allocate memory for the filters. */
-  if (0 != init_sensor_memory()) {
-    console_uart.write("Failed to allocate memory for sensors.\n");
-  }
-
-  graph_array_cpu_time.init();
-  graph_array_frame_rate.init();
-
-  console.defineCommand("help",        '?',  "Prints help to console.", "[<specific command>]", 0, callback_help);
-  console.defineCommand("console",     '\0', "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
-  platform.configureConsole(&console);
-  console.defineCommand("touch",       '\0', "SX8634 tools", "", 0, callback_touch_tools);
-  console.defineCommand("link",        'l',  "Linked device tools.", "", 0, callback_link_tools);
-  console.defineCommand("disp",        'd',  "Display test", "", 1, callback_display_test);
-  console.defineCommand("spi",         '\0', "SPI debug.", "", 1, callback_spi_debug);
-  #if defined(CONFIG_C3P_I2CADAPTER_ENABLE_CONSOLE)
-    console.defineCommand("i2c",         '\0', "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
-  #endif
-  console.defineCommand("log",         '\0', "Logger tools", "", 0, callback_logger_tools);
-  console.defineCommand("led",         '\0', "LED Test", "", 1, callback_led_test);
-  console.defineCommand("vib",         'v',  "Vibrator test", "", 0, callback_vibrator_test);
-  console.defineCommand("aout",        '\0', "Mix volumes for the headphones.", "", 4, callback_aout_mix);
-  console.defineCommand("fft",         '\0', "Mix volumes for the FFT.", "", 4, callback_fft_mix);
-  console.defineCommand("synth",       '\0', "Synth parameters.", "", 2, callback_synth_set);
-  console.defineCommand("sensor",      's',  "Sensor tools", "", 0, callback_sensor_tools);
-  console.defineCommand("mag",         'M',  "Magnetometer tools", "[info|gpio|adc]", 0, callback_magnetometer_fxns);
-  console.defineCommand("sfi",         '\0', "Sensor filter info.", "", 0, callback_sensor_filter_info);
-  console.defineCommand("mfi",         '\0', "Meta filter info.", "", 1, callback_meta_filter_info);
-  console.defineCommand("sfs",         '\0', "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
-  console.defineCommand("mfs",         '\0', "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
-  console.defineCommand("app",         'a',  "Select active application.", "", 0, callback_active_app);
-  console.defineCommand("prof",        'P',  "Dump application profiler.", "<app | sch>", 1, callback_print_app_profiler);
-  console.defineCommand("vol",         '\0', "Audio volume.", "", 0, callback_audio_volume);
-  console.defineCommand("conf",        'c',  "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
-  console.defineCommand("pmu",         'p',  "PMU tools", "[info|punch|charging|aux|reset|init|refresh|verbosity]", 1, callback_pmu_tools);
-  console.defineCommand("hwstate",     '\0', "Hardware state checklists.", "", 0, callback_checklist_dump);
-  console.init();
-
-  StringBuilder ptc("Motherflux0r ");
-  ptc.concat(TEST_PROG_VERSION);
-  ptc.concat("\t Build date " __DATE__ " " __TIME__ "\n");
-  console_uart.pushBuffer(&ptc);
-
-  sx1503.assignBusInstance(&i2c1);
 
   mag_adc.setReferenceRange(3.6, 0.0);
   mag_adc.setMCLKFrequency(19660800.0);   // 19.6608 MHz
-  mag_adc.setAdapter(&spi0);
   mag_adc.valueCallback(callback_adc_value);
   mag_adc.setCircuitSettleTime(10);
-
-  mag_filter.init();
   magneto.attachPipe(&mag_filter);   // Connect the driver to its pipeline.
 
-  pmu.attachCallback(battery_state_callback);
-
   touch = new SX8634(&_touch_opts);
-  touch->assignBusInstance(&i2c0);
-  touch->setButtonFxn(cb_button);
-  touch->setSliderFxn(cb_slider);
-  touch->setLongpressFxn(cb_longpress);
-
-  tsl2561.assignBusInstance(&i2c1);
-  uv.assignBusInstance(&i2c1);
-  baro.assignBusInstance(&i2c1);
-  grideye.assignBusInstance(&i2c1);
-  // tof.assignBusInstance(&i2c1);
-
-  while (!console_uart.flushed()) {
-   console_uart.poll();
-  }
-
 
   //C3PScheduler::getInstance()->addSchedule(&schedule_i2c0);
   //C3PScheduler::getInstance()->addSchedule(&schedule_i2c1);
@@ -1752,7 +1647,7 @@ void loop() {
   if (frame_rate_limiter.expired()) {
     frame_rate_limiter.reset();
     stopwatch_display.markStart();
-    if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_UI)) {
+    if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_DISPLAY)) {
       uApp::appActive()->refresh();
       stopwatch_display.markStop();
       // For tracking framerate, convert from period in micros to hz...

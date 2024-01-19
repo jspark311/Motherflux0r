@@ -111,7 +111,6 @@ int8_t uAppBoot::_process_user_input() {
 }
 
 
-static bool todo_remove_this = false;
 
 /*
 * Draws the app.
@@ -124,8 +123,8 @@ void uAppBoot::_redraw_window() {
 
   // Don't render if no display.
   if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_DISPLAY)) {
-    if (!todo_remove_this) {
-      todo_remove_this = true;
+    if (!_first_frame_written) {
+      _first_frame_written = true;
       FB->fill(BLACK);
       FB->setTextColor(WHITE, BLACK);
       FB->setCursor(14, 0);
@@ -137,14 +136,10 @@ void uAppBoot::_redraw_window() {
     }
   }
 
-  uint8_t i = 0;
-  bool    continue_looping = true;
-
-  while (continue_looping & (i < INIT_LIST_LEN)) {
+  for (int i = 0; i < INIT_LIST_LEN; i++) {
     bool dispatched = (checklist_boot.all_steps_dispatched(INIT_LIST[i]));
     bool complete   = (checklist_boot.all_steps_have_passed(INIT_LIST[i]));
     bool failed     = (checklist_boot.failed_steps(true) & INIT_LIST[i]);
-
     if (dispatched) {
       if (failed) {
         display.fillRect(BLOCK_WIDTH*i, 11, BLOCK_WIDTH, BLOCK_HEIGHT, RED);
@@ -155,10 +150,8 @@ void uAppBoot::_redraw_window() {
       else {
         //draw_progress_bar_horizontal(0, 11, 95, 12, GREEN, (0 == i), false, (INIT_LIST_PERCENT*(i+1)));
         display.fillRect(BLOCK_WIDTH*i, 11, BLOCK_WIDTH, BLOCK_HEIGHT, BLUE);
-        continue_looping = false;
       }
     }
-    i++;
   }
   // if (millis_since(_last_init_sent) >= UAPP_BOOT_INIT_TIMEOUT) {
   //   for (uint8_t n = 0; n < INIT_LIST_LEN; n++) {

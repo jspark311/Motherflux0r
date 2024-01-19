@@ -1,7 +1,53 @@
-#include "Motherflux0r.h"
 #include <inttypes.h>
 #include <stdint.h>
 #include <math.h>
+
+#include "Motherflux0r.h"
+#include "uApp.h"
+
+/* Console handler prototypes */
+int callback_help(StringBuilder*, StringBuilder*);
+int callback_console_tools(StringBuilder*, StringBuilder*);
+int callback_touch_tools(StringBuilder*, StringBuilder*);
+int callback_link_tools(StringBuilder*, StringBuilder*);
+int callback_display_test(StringBuilder*, StringBuilder*);
+int callback_spi_debug(StringBuilder*, StringBuilder*);
+int callback_i2c_tools(StringBuilder*, StringBuilder*);
+int callback_logger_tools(StringBuilder*, StringBuilder*);
+int callback_led_test(StringBuilder*, StringBuilder*);
+int callback_vibrator_test(StringBuilder*, StringBuilder*);
+int callback_aout_mix(StringBuilder*, StringBuilder*);
+int callback_fft_mix(StringBuilder*, StringBuilder*);
+int callback_synth_set(StringBuilder*, StringBuilder*);
+int callback_sensor_tools(StringBuilder*, StringBuilder*);
+int callback_magnetometer_fxns(StringBuilder*, StringBuilder*);
+int callback_sensor_filter_info(StringBuilder*, StringBuilder*);
+int callback_meta_filter_info(StringBuilder*, StringBuilder*);
+int callback_sensor_filter_set_strat(StringBuilder*, StringBuilder*);
+int callback_meta_filter_set_strat(StringBuilder*, StringBuilder*);
+int callback_active_app(StringBuilder*, StringBuilder*);
+int callback_print_app_profiler(StringBuilder*, StringBuilder*);
+int callback_audio_volume(StringBuilder*, StringBuilder*);
+int callback_conf_tools(StringBuilder*, StringBuilder*);
+int callback_pmu_tools(StringBuilder*, StringBuilder*);
+int callback_checklist_dump(StringBuilder*, StringBuilder*);
+
+void cb_button(int button, bool pressed);
+void cb_slider(int slider, int value);
+void cb_longpress(int button, uint32_t duration);
+
+void callback_adc_value(uint8_t chan, double voltage);
+int8_t battery_state_callback(ChargeState);
+int8_t location_callback(LocationFrame*);
+
+extern UARTOpts comm_unit_uart_opts;
+extern UARTOpts gps_uart_opts;
+extern UARTOpts usb_comm_opts;
+
+extern uint32_t boot_time;     // millis() at boot.
+extern uint32_t config_time;   // millis() at end of setup().
+
+extern uAppBoot app_boot;
 
 
 static uint32_t off_time_vib      = 0;      // millis() when vibrator should be disabled.
@@ -9,6 +55,7 @@ static uint32_t off_time_led_r    = 0;      // millis() when LED_R should be dis
 static uint32_t off_time_led_g    = 0;      // millis() when LED_G should be disabled.
 static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be disabled.
 
+const char* const CONSOLE_PROMPT_STR = "Motherflux0r # ";
 
 /*******************************************************************************
 * The program has a set of configurations that it defines and loads at runtime.
@@ -64,7 +111,7 @@ ConfRecordValidation<UsrConfKey> usr_conf(0, &USR_CONF_LIST);
 * LED and vibrator control
 * Only have enable functions since disable is done by timer in the main loop.
 *******************************************************************************/
-void ledOn(uint8_t idx, uint32_t duration, uint16_t intensity = 3500) {
+void ledOn(uint8_t idx, uint32_t duration, uint16_t intensity) {
   uint32_t* millis_ptr = nullptr;
   switch (idx) {
     case LED_R_PIN:
@@ -86,7 +133,7 @@ void ledOn(uint8_t idx, uint32_t duration, uint16_t intensity = 3500) {
 }
 
 
-void vibrateOn(uint32_t duration, uint16_t intensity = 4095) {
+void vibrateOn(uint32_t duration, uint16_t intensity) {
   analogWrite(VIBRATOR_PIN, intensity);
   off_time_vib = millis() + duration;
 }
@@ -391,153 +438,7 @@ uint32_t touch_timeout  = 0;  // TODO: Rework...
 *******************************************************************************/
 const StepSequenceList CHECKLIST_BOOT[] = {
   /* Checklist for booting up *************************************************/
-  { .FLAG         = CHKLST_BOOT_INIT_GPIO,
-    .LABEL        = "GPIO init",
-    .DEP_MASK     = (0),
-    .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return 1;  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_SPI0,
-    .LABEL        = "Start spi1",
-    .DEP_MASK     = (CHKLST_BOOT_INIT_GPIO),  // Uninitialized CS pins must be seized.
-    .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return 1;  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_I2C0,
-    .LABEL        = "Start i2c0",
-    .DEP_MASK     = (0),
-    .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return (i2c0.busOnline() ? 1:0);  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_I2C1,
-    .LABEL        = "Start i2c1",
-    .DEP_MASK     = (0),
-    .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return (i2c1.busOnline() ? 1:0);  }
-  },
-
-  { .FLAG         = CHKLST_BOOT_INIT_TOUCH_FOUND,
-    .LABEL        = "Start touch",
-    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C0 | CHKLST_BOOT_INIT_GPIO),
-    .DISPATCH_FXN = []() {
-      if ((0 == touch->reset()) ? 1 : 0) {
-        touch_timeout = millis() + 300;
-        return 1;
-      }
-      return -1;
-    },
-    .POLL_FXN     = []() {
-      if (touch->devFound()) {
-        touch->poll();
-        if (touch->deviceReady()) {
-          touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
-          return (0 == touch->setMode(SX8634OpMode::ACTIVE) ? 1:-1);
-        }
-      }
-      return 0;
-    }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_TOUCH_READY,
-    .LABEL        = "Touch ready",
-    .DEP_MASK     = (CHKLST_BOOT_INIT_TOUCH_FOUND),
-    .DISPATCH_FXN = []() {
-      return 1;
-    },
-    .POLL_FXN     = []() {
-      if (SX8634OpMode::ACTIVE == touch->operationalMode()) {
-        return 1;
-      }
-      else if (false) {
-        // TODO: Timeout observation.
-      }
-      return 0;
-    }
-  },
-
-  { .FLAG         = CHKLST_BOOT_INIT_DISPLAY,
-    .LABEL        = "Start display",
-    .DEP_MASK     = (CHKLST_BOOT_INIT_SPI0),
-    .DISPATCH_FXN = []() { return (0 == display.init()   ? 1 : 0);  },
-    .POLL_FXN     = []() { return (display.initialized() ? 1 : 0);  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_UI,
-    .LABEL        = "Start UI",
-    .DEP_MASK     = (CHKLST_BOOT_INIT_DISPLAY),
-    .DISPATCH_FXN = []() { return (display.enableDisplay(true) ? 1 : 0); },
-    .POLL_FXN     = []() { return (display.enabled() ? 1 : 0);  }
-  },
-
-  { .FLAG         = CHKLST_BOOT_INIT_MAG_GPIO,
-    .LABEL        = "Start mag GPIO",
-    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C1),
-    .DISPATCH_FXN = []() { return (0 == sx1503.init()   ? 1 : 0);  },
-    .POLL_FXN     = []() {
-      if (sx1503.initialized()) {
-        // TODO: This is just to prod the compass into returning a complete
-        //   dataset. It's bogus until there is an IMU.
-        Vector3f gravity(0.0, 0.0, 1.0);
-        Vector3f gravity_err(0.002, 0.002, 0.002);
-        compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
-        return 1;
-      }
-      return 0;
-    }
-  },
-
-  { .FLAG         = CHKLST_BOOT_INIT_PMU_GUAGE,
-    .LABEL        = "Start gas guage",
-    .DEP_MASK     = (0),
-    .DISPATCH_FXN = []() { return 1;  },
-    //.POLL_FXN     = []() { return (pmu.ltc294x.initComplete() ? 1 : 0);  }
-    .POLL_FXN     = []() { return 1;  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_PMU_CHARGER,
-    .LABEL        = "Start battery",
-    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C0 | CHKLST_BOOT_INIT_GPIO),
-    .DISPATCH_FXN = []() { return (0 == pmu.init(&i2c0) ? 1 : 0);  },
-    //.POLL_FXN     = []() { return (pmu.bq24155.initComplete() ? 1 : 0);  }
-    .POLL_FXN     = []() { return 1;  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_CONF_LOAD,
-    .LABEL        = "Load config",
-    .DEP_MASK     = (0),
-    .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return 1;  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_STORAGE,
-    .LABEL        = "Start storage",
-    .DEP_MASK     = (0),
-    .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return 1;  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_GPS,
-    .LABEL        = "Start GPS",
-    .DEP_MASK     = (0),
-    .DISPATCH_FXN = []() { return (0 == gps.init()   ? 1 : 0);  },
-    .POLL_FXN     = []() { return 1;  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_COMMS,
-    .LABEL        = "Start comm unit",
-    .DEP_MASK     = (0),
-    .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return 1;  }
-  },
-  { .FLAG         = CHKLST_BOOT_INIT_CONSOLE,
-    .LABEL        = "Start console",
-    .DEP_MASK     = (0),
-    .DISPATCH_FXN = []() {
-      if (Serial) {
-        // Drain any leading characters.
-        while (Serial.available()) {  Serial.read();   }
-        return 1;
-      }
-      else {
-        // TODO: Timeout case.
-      }
-      return 0;
-    },
-    .POLL_FXN     = []() { return 1;  }
-  },
+  /* Audio stack, which takes lots of memory and set behind the scenes. */
   { .FLAG         = CHKLST_BOOT_AUDIO_STACK,
     .LABEL        = "Start Audio",
     .DEP_MASK     = (0),
@@ -566,6 +467,290 @@ const StepSequenceList CHECKLIST_BOOT[] = {
       return 1;
     },
     .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* Large memory allocations */
+  { .FLAG         = CHKLST_BOOT_INIT_BIG_MEM,
+    .LABEL        = "BigMem",
+    .DEP_MASK     = (CHKLST_BOOT_AUDIO_STACK),
+    .DISPATCH_FXN = []() {
+      int8_t ret = 1;
+      const char* const ALLOC_FAIL_STR = "Failed to allocate memory for";
+      // Do not re-attempt this step unless checks are made harder. BigMem
+      //   either fails, or not. It could be made non-blocking, but we want
+      //   the ability to gracefully retain a console (and other features),
+      //   even in the event that memory was somewhat over-budgeted.
+      if (0 != init_sensor_memory()) {  // Allocate memory for the filters.
+        c3p_log(LOG_LEV_DEBUG, "BOOT_CHKLST", "%s sensors.\n", ALLOC_FAIL_STR);
+        ret = -1;
+      }
+      if (0 != graph_array_cpu_time.init()) {
+        c3p_log(LOG_LEV_DEBUG, "BOOT_CHKLST", "%s CPU profiler.\n", ALLOC_FAIL_STR);
+        ret = -1;
+      }
+      if (0 != graph_array_frame_rate.init()) {
+        c3p_log(LOG_LEV_DEBUG, "BOOT_CHKLST", "%s UI profiler.\n", ALLOC_FAIL_STR);
+        ret = -1;
+      }
+      if (0 != mag_filter.init()) {
+        c3p_log(LOG_LEV_DEBUG, "BOOT_CHKLST", "%s mag_filter.\n", ALLOC_FAIL_STR);
+        ret = -1;
+      }
+      return ret;
+    },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* BusQueues and GPIO are fairly important. These also run early. */
+  { .FLAG         = CHKLST_BOOT_INIT_GPIO,
+    .LABEL        = "GPIO init",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() {
+      pinMode(IMU_IRQ_PIN,    GPIOMode::INPUT_PULLUP);
+      pinMode(DRV425_CS_PIN,  GPIOMode::INPUT); // Wrong
+      pinMode(ANA_LIGHT_PIN,  GPIOMode::INPUT);
+      pinMode(TOF_IRQ_PIN,    GPIOMode::INPUT);
+      pinMode(LED_R_PIN,      GPIOMode::INPUT);
+      pinMode(LED_G_PIN,      GPIOMode::INPUT);
+      pinMode(LED_B_PIN,      GPIOMode::INPUT);
+      pinMode(RADIO_ENABLE_PIN, GPIOMode::OUTPUT);
+      setPin(RADIO_ENABLE_PIN, true);
+      return 1;
+    },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_SPI0,
+    .LABEL        = "Start spi1",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_GPIO),  // Uninitialized CS pins must be seized.
+    .DISPATCH_FXN = []() { return (0 == spi0.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() {
+      int8_t ret = 1;
+      if (1 == ret) {
+        display.setBus(&spi0);
+        mag_adc.setAdapter(&spi0);
+      }
+      return ret;
+    }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_I2C0,
+    .LABEL        = "Start i2c0",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == i2c0.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() {
+      int8_t ret = (i2c0.busOnline() ? 1:0);
+      if (1 == ret) {
+        touch->assignBusInstance(&i2c0);
+      }
+      return ret;
+    }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_I2C1,
+    .LABEL        = "Start i2c1",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == i2c1.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() {
+      int8_t ret = (i2c1.busOnline() ? 1:0);
+      if (1 == ret) {
+        sx1503.assignBusInstance(&i2c1);
+        tsl2561.assignBusInstance(&i2c1);
+        uv.assignBusInstance(&i2c1);
+        baro.assignBusInstance(&i2c1);
+        grideye.assignBusInstance(&i2c1);
+        // tof.assignBusInstance(&i2c1);
+      }
+      return ret;
+    }
+  },
+
+  /* Touch board discovery and conf */
+  { .FLAG         = CHKLST_BOOT_INIT_TOUCH_FOUND,
+    .LABEL        = "Start touch",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C0 | CHKLST_BOOT_INIT_GPIO),
+    .DISPATCH_FXN = []() {
+      if ((0 == touch->reset()) ? 1 : 0) {
+        touch_timeout = millis() + 300;
+        return 1;
+      }
+      return -1;
+    },
+    .POLL_FXN     = []() { return (touch->devFound() ? 1:0);  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_TOUCH_READY,
+    .LABEL        = "Touch ready",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_TOUCH_FOUND),
+    .DISPATCH_FXN = []() {
+      if (touch->deviceReady()) {
+        touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
+        touch->setButtonFxn(cb_button);
+        touch->setSliderFxn(cb_slider);
+        touch->setLongpressFxn(cb_longpress);
+        return (0 == touch->setMode(SX8634OpMode::ACTIVE) ? 1:-1);
+      }
+      return 0;
+    },
+    .POLL_FXN     = []() {
+      if (SX8634OpMode::ACTIVE == touch->operationalMode()) {
+        return 1;
+      }
+      else if (false) {
+        // TODO: Timeout observation.
+      }
+      return 0;
+    }
+  },
+
+  /* Display and UI */
+  { .FLAG         = CHKLST_BOOT_INIT_DISPLAY,
+    .LABEL        = "Start display",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_SPI0),
+    .DISPATCH_FXN = []() { return (0 == display.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() { return (display.initialized() ? 1 : 0);  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_UI,
+    .LABEL        = "Start UI",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_DISPLAY),
+    .DISPATCH_FXN = []() { return (display.enabled() ? 1 : 0); },
+    .POLL_FXN     = []() { return (app_boot.firstFrameWritten() ? 1 : 0);  }
+  },
+
+  /* Magnetometer GPIO expander and pipeline */
+  { .FLAG         = CHKLST_BOOT_INIT_MAG_GPIO,
+    .LABEL        = "Start mag GPIO",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C1),
+    .DISPATCH_FXN = []() { return (0 == sx1503.init()   ? 1 : 0);  },
+    .POLL_FXN     = []() {
+      if (sx1503.initialized()) {
+        // TODO: This is just to prod the compass into returning a complete
+        //   dataset. It's bogus until there is an IMU.
+        Vector3f gravity(0.0, 0.0, 1.0);
+        Vector3f gravity_err(0.002, 0.002, 0.002);
+        compass.pushVector(SpatialSense::ACC, &gravity, &gravity_err);   // Set gravity, initially.
+        return 1;
+      }
+      return 0;
+    }
+  },
+
+  /* Power controller */
+  { .FLAG         = CHKLST_BOOT_INIT_PMU_GUAGE,
+    .LABEL        = "Start gas guage",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C0 | CHKLST_BOOT_INIT_PMU_CHARGER),
+    .DISPATCH_FXN = []() { return 1;  },
+    //.POLL_FXN     = []() { return (pmu.ltc294x.initComplete() ? 1 : 0);  }
+    .POLL_FXN     = []() {
+      pmu.attachCallback(battery_state_callback);
+      return 1;
+    }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_PMU_CHARGER,
+    .LABEL        = "Start battery",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_I2C0 | CHKLST_BOOT_INIT_GPIO),
+    .DISPATCH_FXN = []() { return (0 == pmu.init(&i2c0) ? 1 : 0);  },
+    //.POLL_FXN     = []() { return (pmu.bq24155.initComplete() ? 1 : 0);  }
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* Storage and non-volatile configuration */
+  { .FLAG         = CHKLST_BOOT_INIT_STORAGE,
+    .LABEL        = "Start storage",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_CONF_LOAD,
+    .LABEL        = "Load config",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_STORAGE),
+    .DISPATCH_FXN = []() { return 1;  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* UART-based faculties */
+  { .FLAG         = CHKLST_BOOT_INIT_GPS,
+    .LABEL        = "Start GPS",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == gps_uart.init(&gps_uart_opts) ? 1 : 0);  },
+    .POLL_FXN     = []() {
+      if (0 == gps.init()) {
+        gps.setCallback(location_callback);
+        gps_uart.readCallback(&gps);  // Attach the GPS UART to its parser.
+        return 1;
+      }
+      return -1;
+    }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_COMMS,
+    .LABEL        = "Start comm unit",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == comm_unit_uart.init(&comm_unit_uart_opts) ? 1 : -1);  },
+    .POLL_FXN     = []() { return 1;  }
+  },
+
+  /* USB serial and console */
+  { .FLAG         = CHKLST_BOOT_INIT_USB,
+    .LABEL        = "Start USB",
+    .DEP_MASK     = (0),
+    .DISPATCH_FXN = []() { return (0 == console_uart.init(&usb_comm_opts) ? 1 : -1);  },
+    .POLL_FXN     = []() {
+      if (Serial) {
+        while (Serial.available()) { Serial.read(); } // Drain any leading characters...
+        console_uart.readCallback(&console);          // ...attach the UART to console...
+        console.setOutputTarget(&console_uart);       // ...and console to UART.
+        return 1;
+      }
+      return ((millis_since(boot_time) > 10000) ? -1 : 0);
+    }
+  },
+  { .FLAG         = CHKLST_BOOT_INIT_CONSOLE,
+    .LABEL        = "Start console",
+    .DEP_MASK     = (CHKLST_BOOT_INIT_USB),
+    .DISPATCH_FXN = []() {
+      // Push a boot banner to the UART.
+      StringBuilder ptc("Motherflux0r ");
+      ptc.concat(TEST_PROG_VERSION);
+      ptc.concat("\t Build date " __DATE__ " " __TIME__ "\n");
+      console_uart.pushBuffer(&ptc);
+      // Stall until the boot banner is written out.
+      while (!console_uart.flushed()) {   console_uart.poll();  }
+      return 1;
+    },
+    .POLL_FXN     = []() {
+      console.defineCommand("help",        '?',  "Prints help to console.", "[<specific command>]", 0, callback_help);
+      console.defineCommand("console",     '\0', "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
+      platform.configureConsole(&console);
+      console.defineCommand("touch",       '\0', "SX8634 tools", "", 0, callback_touch_tools);
+      console.defineCommand("link",        'l',  "Linked device tools.", "", 0, callback_link_tools);
+      console.defineCommand("disp",        'd',  "Display test", "", 1, callback_display_test);
+      console.defineCommand("spi",         '\0', "SPI debug.", "", 1, callback_spi_debug);
+      #if defined(CONFIG_C3P_I2CADAPTER_ENABLE_CONSOLE)
+      console.defineCommand("i2c",         '\0', "I2C tools", "Usage: i2c <bus> <action> [addr]", 1, callback_i2c_tools);
+      #endif
+      console.defineCommand("log",         '\0', "Logger tools", "", 0, callback_logger_tools);
+      console.defineCommand("led",         '\0', "LED Test", "", 1, callback_led_test);
+      console.defineCommand("vib",         'v',  "Vibrator test", "", 0, callback_vibrator_test);
+      console.defineCommand("aout",        '\0', "Mix volumes for the headphones.", "", 4, callback_aout_mix);
+      console.defineCommand("fft",         '\0', "Mix volumes for the FFT.", "", 4, callback_fft_mix);
+      console.defineCommand("synth",       '\0', "Synth parameters.", "", 2, callback_synth_set);
+      console.defineCommand("sensor",      's',  "Sensor tools", "", 0, callback_sensor_tools);
+      console.defineCommand("mag",         'M',  "Magnetometer tools", "[info|gpio|adc]", 0, callback_magnetometer_fxns);
+      console.defineCommand("sfi",         '\0', "Sensor filter info.", "", 0, callback_sensor_filter_info);
+      console.defineCommand("mfi",         '\0', "Meta filter info.", "", 1, callback_meta_filter_info);
+      console.defineCommand("sfs",         '\0', "Sensor filter strategy set.", "", 2, callback_sensor_filter_set_strat);
+      console.defineCommand("mfs",         '\0', "Meta filter strategy set.", "", 2, callback_meta_filter_set_strat);
+      console.defineCommand("app",         'a',  "Select active application.", "", 0, callback_active_app);
+      console.defineCommand("prof",        'P',  "Dump application profiler.", "<app | sch>", 1, callback_print_app_profiler);
+      console.defineCommand("vol",         '\0', "Audio volume.", "", 0, callback_audio_volume);
+      console.defineCommand("conf",        'c',  "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
+      console.defineCommand("pmu",         'p',  "PMU tools", "[info|punch|charging|aux|reset|init|refresh|verbosity]", 1, callback_pmu_tools);
+      console.defineCommand("hwstate",     '\0', "Hardware state checklists.", "", 0, callback_checklist_dump);
+      console.setTXTerminator(LineTerm::CRLF);
+      console.setRXTerminator(LineTerm::CR);
+      console.emitPrompt(true);
+      console.localEcho(true);
+      console.printHelpOnFail(true);
+      console.setPromptString(CONSOLE_PROMPT_STR);
+      console.init();
+      return 1;
+    }
   },
 
 

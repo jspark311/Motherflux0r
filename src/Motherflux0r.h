@@ -1,6 +1,9 @@
 #include <inttypes.h>
 #include <stdint.h>
 
+/* ManuvrPlatform */
+#include <ManuvrArduino.h>
+
 /* CppPotpourri */
 #include <CppPotpourri.h>
 #include <StringBuilder.h>
@@ -250,8 +253,8 @@ void draw_graph_obj(Image* FB,
 #define CHKLST_BOOT_INIT_GPIO        0x00004000  // MCU-hosted GPIO pin quirks and initial pin setup.
 #define CHKLST_BOOT_INIT_CONSOLE     0x00008000  // Begin responding to console input.
 #define CHKLST_BOOT_INIT_TOUCH_READY 0x00010000  //
-//#define CHKLST_BOOT_INIT_          0x00020000  //
-//#define CHKLST_BOOT_INIT_          0x00040000  //
+#define CHKLST_BOOT_INIT_BIG_MEM     0x00020000  // Do our large memory allocations.
+#define CHKLST_BOOT_INIT_USB         0x00040000  // The USB abstraction.
 //#define CHKLST_BOOT_INIT_          0x00080000  //
 #define CHKLST_BOOT_DEINIT_TOUCH     0x00100000  // Tear down the touch driver.
 #define CHKLST_BOOT_DEINIT_GPIO      0x00200000  // Safe any MCU GPIO pins.
@@ -271,7 +274,7 @@ void draw_graph_obj(Image* FB,
   CHKLST_BOOT_INIT_DISPLAY | CHKLST_BOOT_INIT_TOUCH_READY | CHKLST_BOOT_INIT_UI | \
   CHKLST_BOOT_INIT_GPS | CHKLST_BOOT_INIT_CONSOLE | CHKLST_BOOT_INIT_COMMS | \
   CHKLST_BOOT_INIT_PMU_GUAGE | CHKLST_BOOT_INIT_PMU_CHARGER | CHKLST_BOOT_INIT_CONF_LOAD | \
-  CHKLST_BOOT_INIT_MAG_GPIO | CHKLST_BOOT_AUDIO_STACK)
+  CHKLST_BOOT_INIT_BIG_MEM | CHKLST_BOOT_INIT_MAG_GPIO | CHKLST_BOOT_AUDIO_STACK)
 
 
 /*
@@ -329,6 +332,11 @@ extern AsyncSequencer checklist_cyclic;  // Hardware state checklist.
 extern SPIAdapter spi0;
 extern I2CAdapter i2c0;
 extern I2CAdapter i2c1;
+
+extern PlatformUART console_uart;
+extern PlatformUART comm_unit_uart;
+extern PlatformUART gps_uart;
+extern ParsingConsole console;
 
 extern SSD1331 display;
 extern SX8634* touch;

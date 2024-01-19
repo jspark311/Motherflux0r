@@ -175,6 +175,8 @@ class uAppBoot : public uApp {
     uAppBoot();
     ~uAppBoot();
 
+    inline bool firstFrameWritten() {   return _first_frame_written;  };
+
   protected:
     int8_t _lc_on_preinit();
     int8_t _lc_on_active();
@@ -184,9 +186,7 @@ class uAppBoot : public uApp {
     void   _redraw_window();
 
   private:
-    uint32_t _last_init_sent = 0;
-    FlagContainer32  _init_sent_flags;
-    FlagContainer32  _init_done_flags;
+    bool _first_frame_written = false;
 };
 
 
