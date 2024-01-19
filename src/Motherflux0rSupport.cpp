@@ -903,6 +903,7 @@ const StepSequenceList CHECKLIST_CYCLIC[] = {
     .DEP_MASK     = (0),
     .DISPATCH_FXN = []() {
       if (!magneto.power()) return 0;
+      sleep_ms(10);
       return (0 == mag_adc.init() ? 1 : 0);
     },
     .POLL_FXN     = []() { return (mag_adc.adcFound()  ? 1 : 0);  }
@@ -910,8 +911,9 @@ const StepSequenceList CHECKLIST_CYCLIC[] = {
   { .FLAG         = CHKLST_CYC_MAG_ADC_CONF,
     .LABEL        = "Mag ADC CONF",
     .DEP_MASK     = (CHKLST_CYC_MAG_ADC_INIT),
+    //.DISPATCH_FXN = []() { return ((0 == mag_adc.init()) ? 1 : 0);  },
     .DISPATCH_FXN = []() { return 1;  },
-    .POLL_FXN     = []() { return 1;  }
+    .POLL_FXN     = []() { return ((MCP356xMode::CONTINUOUS == mag_adc.readMode()) ? 1 : 0);  }
   },
   { .FLAG         = CHKLST_CYC_MAG_ADC_DEINIT,
     .LABEL        = "Mag ADC DEINIT",

@@ -193,7 +193,7 @@ void uAppTricorder::_redraw_window() {
   FB->setTextSize(0);
   FB->setCursor(0, 12);
   FB->writeString("Mag: ");
-  if (magneto.configured() && sx1503.initialized()) {
+  if (mag_adc.adcConfigured() && sx1503.initialized()) {
     if (magneto.power()) {
       FB->setTextColor(GREEN, BLACK);
       FB->writeString("RUNNING\n");

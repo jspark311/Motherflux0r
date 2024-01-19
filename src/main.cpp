@@ -298,7 +298,7 @@ SX8634* touch = nullptr;
 /* Sensor representations... */
 SX1503   sx1503(SX_CONFIG, SX1503_SERIALIZE_SIZE);
 MCP356x  mag_adc(DRV425_ADC_IRQ_PIN, DRV425_CS_PIN, 255, 1, &MCP3564_CONF_OBJ);
-DRV425   magneto(&sx1503, &mag_adc, &DRV425_CONFIG);
+DRV425   magneto((GPIOWrapper*) &sx1503, &DRV425_CONFIG);
 
 GridEYE grideye(0x69, AMG8866_IRQ_PIN);
 VEML6075 uv;
@@ -318,7 +318,6 @@ StopWatch stopwatch_sensor_uv;
 StopWatch stopwatch_sensor_grideye;
 StopWatch stopwatch_sensor_imu;
 StopWatch stopwatch_sensor_lux;
-StopWatch stopwatch_sensor_mag;
 StopWatch stopwatch_sensor_gps;
 StopWatch stopwatch_sensor_tof;
 StopWatch stopwatch_touch_poll;
@@ -485,30 +484,6 @@ int8_t read_thermopile_sensor() {
     }
   }
   graph_array_therm_mean.feedFilter(graph_array_therm_frame.value());
-  return ret;
-}
-
-/*
-* Reads the magnetometer and adds the data to the pile.
-*/
-int8_t read_magnetometer_sensor() {
-  int8_t ret = -1;
-  stopwatch_sensor_mag.markStart();
-  int8_t poll_ret = magneto.poll();
-  switch (poll_ret) {
-    case -5: // if not initialized and enabled.
-    case -4: // if not calibrated.
-    case -3: // if the ADC needed to be read, but doing so failed.
-    case -2: // if the GPIO needed to be read, but doing so failed.
-    case -1: // if we experienced a fault signal from the sensor.
-      break;
-    case 0:  // if nothing needs doing.
-    case 1:  // if new ADC data is ready.
-    case 2:  // if new compass data is ready.
-      stopwatch_sensor_mag.markStop();
-      ret = 0;
-      break;
-  }
   return ret;
 }
 
@@ -680,9 +655,43 @@ int8_t callback_3axis(SpatialSense s, Vector3f* dat, Vector3f* err, uint32_t seq
 /*******************************************************************************
 * ADC callbacks
 *******************************************************************************/
+double  diff_chans[3]  = {0.0d, 0.0d, 0.0d};
+uint8_t adc_chans_seen = 0;
 
 void callback_adc_value(uint8_t chan, double voltage) {
-  c3p_log(LOG_LEV_INFO, "main", "callback_adc_value(%u, %.5fV).", chan, voltage);
+  uint8_t chan_idx  = 2;
+  uint8_t chan_mask = 0;
+
+  switch (chan) {
+    case 8:   chan_idx--;
+    case 9:   chan_idx--;
+    case 10:
+      chan_mask = (1 << chan_idx);
+      if (adc_chans_seen & chan_mask) {
+        // Some piece of clockwork skipped. We aren't cycling continuously.
+      }
+      else {
+        adc_chans_seen |= chan_mask;
+        diff_chans[chan_idx] = voltage;
+        if (7 == adc_chans_seen) {
+          Vector3f64 ana_vect(diff_chans[0], diff_chans[1], diff_chans[2]);
+          int8_t mag_ret = magneto.provideAnalogVector(&ana_vect);
+          if (0 != mag_ret) {
+            c3p_log(LOG_LEV_WARN, "main", "Magnetometer rejected vector (%d).", mag_ret);
+          }
+          adc_chans_seen = 0;
+          diff_chans[0] = 0.0d;
+          diff_chans[1] = 0.0d;
+          diff_chans[2] = 0.0d;
+        }
+      }
+      break;
+    case 12:
+      break;
+    default:
+      c3p_log(LOG_LEV_INFO, "main", "callback_adc_value(%u, %.5fV).", chan, voltage);
+      break;
+  }
 }
 
 
@@ -730,7 +739,21 @@ int callback_touch_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 int callback_magnetometer_fxns(StringBuilder* text_return, StringBuilder* args) {
-  return magneto.console_handler(text_return, args);
+  int ret = 0;
+  char* cmd = args->position_trimmed(0);
+  // We interdict if the command is something specific to this application.
+  if (0 == StringBuilder::strcasecmp(cmd, "adc")) {
+    args->drop_position(0);  // Drop this cmd and defer to the MCP356x's console handler.
+    ret = mag_adc.console_handler(text_return, args);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "gpio")) {
+    args->drop_position(0);  // Drop this cmd and defer to the SX1503's console handler.
+    ret = sx1503.console_handler(text_return, args);
+  }
+  else {
+    ret = magneto.console_handler(text_return, args);
+  }
+  return ret;
 }
 
 int callback_pmu_tools(StringBuilder* text_return, StringBuilder* args) {
@@ -1200,7 +1223,7 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
         stopwatch_sensor_grideye.reset();
         stopwatch_sensor_imu.reset();
         stopwatch_sensor_lux.reset();
-        stopwatch_sensor_mag.reset();
+        //stopwatch_sensor_mag.reset();
         stopwatch_sensor_gps.reset();
         stopwatch_sensor_tof.reset();
         stopwatch_touch_poll.reset();
@@ -1212,7 +1235,7 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
       stopwatch_sensor_imu.printDebug("IMU", text_return);
       stopwatch_sensor_lux.printDebug("TSL2561", text_return);
       stopwatch_sensor_tof.printDebug("ToF", text_return);
-      stopwatch_sensor_mag.printDebug("Magnetometer", text_return);
+      //stopwatch_sensor_mag.printDebug("Magnetometer", text_return);
       stopwatch_sensor_gps.printDebug("GPS", text_return);
       stopwatch_touch_poll.printDebug("Touch", text_return);
     }
@@ -1492,7 +1515,9 @@ void setup() {
   boot_time = millis();
   checklist_boot.resetSequencer();
   checklist_cyclic.resetSequencer();
+
   checklist_boot.requestSteps(CHKLST_BOOT_MASK_BOOT_COMPLETE);
+  checklist_cyclic.requestSteps(CHKLST_CYC_MAG_ADC_CONF);
 
   AudioMemory(32);
   analogWriteResolution(12);
@@ -1533,14 +1558,20 @@ void spi_spin() {
 
 void loop() {
   C3PScheduler* scheduler = C3PScheduler::getInstance();
-  //scheduler->advanceScheduler();
-  //scheduler->serviceSchedules();
+  scheduler->advanceScheduler();
+  scheduler->serviceSchedules();
 
   if (!checklist_boot.request_fulfilled()) {
     if (0 < checklist_boot.poll()) {
       // Actions were taken.
     }
   }
+  else if (!checklist_cyclic.request_fulfilled()) {
+    if (0 < checklist_cyclic.poll()) {
+      // Actions were taken.
+    }
+  }
+
   stopwatch_main_loop_time.markStart();
   //last_interaction = millis();
 
@@ -1576,17 +1607,19 @@ void loop() {
     sx1503.poll();
     if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_SPI0)) {
       mag_adc.poll();
-      read_magnetometer_sensor();
     }
   }
 
 
-  //if (imu_irq_fired) {
-  //  imu_irq_fired = false;
-  //  stopwatch_sensor_imu.markStart();
-  //  read_imu();
-  //  stopwatch_sensor_imu.markStop();
-  //}
+  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_IMU_INIT)) {
+    if (imu_irq_fired) {
+      imu_irq_fired = false;
+      //  stopwatch_sensor_imu.markStart();
+      //  read_imu();
+      //  stopwatch_sensor_imu.markStop();
+    }
+  }
+
 
   // if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_BARO)) {
   //   stopwatch_sensor_baro.markStart();

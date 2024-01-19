@@ -150,9 +150,9 @@ int8_t uAppMagnetometer::_process_user_input() {
       if (_buttons_pending & 0x0004) {
         switch (_modal_id) {
           case UAPP_SUBMODAL_TRICORDER_MAG_CONF:
-            switch (magneto.getBandwidth()) {
-              case DRV425Bandwidth::BW0:   magneto.setBandwidth(DRV425Bandwidth::BW1);  break;
-              case DRV425Bandwidth::BW1:   magneto.setBandwidth(DRV425Bandwidth::BW0);  break;
+            switch (magneto.bandwidth()) {
+              case DRV425Bandwidth::BW0:   magneto.bandwidth(DRV425Bandwidth::BW1);  break;
+              case DRV425Bandwidth::BW1:   magneto.bandwidth(DRV425Bandwidth::BW0);  break;
             }
             break;
           case UAPP_SUBMODAL_TRICORDER_MAG_STATS:
@@ -355,7 +355,7 @@ void uAppMagnetometer::_redraw_window() {
         FB->setTextColor(WHITE, BLACK);
         FB->writeString("Bandwidth:  ");
         FB->setTextColor(CYAN, BLACK);
-        FB->writeString((DRV425Bandwidth::BW0 == magneto.getBandwidth()) ? "BW_0" : "BW_1");
+        FB->writeString((DRV425Bandwidth::BW0 == magneto.bandwidth()) ? "BW_0" : "BW_1");
 
         static const uint32_t OSR_RATIO_VALUES[] = {
           32,      64,   128,   256,   512,  1024,  2048,  4096,
@@ -382,7 +382,7 @@ void uAppMagnetometer::_redraw_window() {
       FB->setTextSize(0);
       FB->setCursor(0, 12);
       FB->writeString("Mag: ");
-      if (magneto.configured() && sx1503.initialized()) {
+      if (mag_adc.adcConfigured() && sx1503.initialized()) {
         if (magneto.power()) {
           FB->setTextColor(GREEN, BLACK);
           FB->writeString("RUNNING\n");
