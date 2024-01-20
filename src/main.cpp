@@ -183,7 +183,6 @@ const SSD13xxOpts disp_opts(
 );
 
 SSD1331 display(&disp_opts);
-MillisTimeout frame_rate_limiter(50);
 
 
 /*******************************************************************************
@@ -346,6 +345,8 @@ extern uAppStandby app_standby;
 extern uAppConfigurator app_config;
 extern uAppComms app_comms;
 extern uAppDataMgmt app_data_mgmt;
+extern uAppDataMgmt app_magnetometer;
+
 
 // class TestPollable : public C3PPollable {
 //   public:
@@ -363,23 +364,20 @@ extern uAppDataMgmt app_data_mgmt;
 // TestPollable test_pollable;
 
 /* Schedules... */
-// C3PScheduledPolling schedule_i2c0("i2c0_svc",    5109,  -1, false,  (C3PPollable*) &i2c0);
-// C3PScheduledPolling schedule_i2c1("i2c1_svc",    30109, -1, false,  (C3PPollable*) &i2c1);
-// C3PScheduledPolling schedule_spi0("spi0_svc",    1102,  -1, false,  (C3PPollable*) &spi0);
 // C3PScheduledPolling schedule_usb("usb_svc",      6083,  -1, false,  (C3PPollable*) &console_uart);
 // C3PScheduledPolling schedule_gps("gps_svc",      10083, -1, false,  (C3PPollable*) &gps_uart);
 // C3PScheduledPolling schedule_comms("comms_svc",  10983, -1, false,  (C3PPollable*) &comm_unit_uart);
-// C3PScheduledLambda schedule_ui {
-//   "ui_svc",
-//   100000,
-//   -1,      // Repeats forever if enabled.
-//   true,    // Enabled.
-//   []() {
-//     uApp::appActive()->refresh();
-//     //graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
-//     return 0;
-//   }
-// };
+C3PScheduledLambda schedule_ui {
+  "ui_svc",
+  40000,
+  -1,      // Repeats forever if enabled.
+  false,   // Disabled.
+  []() {
+    uApp::appActive()->refresh();
+    graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
+    return 0;
+  }
+};
 
 
 
@@ -417,84 +415,6 @@ void link_callback_message(uint32_t tag, M2MMsg* msg) {
   //printf("%s\n\n", (const char*) log.string());
 }
 
-
-
-
-/*******************************************************************************
-* Sensor service functions
-*******************************************************************************/
-
-/*
-* Reads the VEML6075 and adds the data to the pile.
-*/
-int8_t read_uv_sensor() {
-  int8_t ret = 0;
-  graph_array_uva.feedFilter(uv.uva());
-  graph_array_uvb.feedFilter(uv.uvb());
-  graph_array_uvi.feedFilter(uv.index());
-  return ret;
-}
-
-
-/*
-* Reads the BME280 and adds the data to the pile.
-*/
-int8_t read_baro_sensor() {
-  int8_t ret = 0;
-  graph_array_humidity.feedFilter(baro.hum());
-  graph_array_air_temp.feedFilter(baro.temp());
-  graph_array_pressure.feedFilter(baro.pres());
-  return ret;
-}
-
-
-/*
-* Reads the IMU and optionally integrates for orientation.
-*/
-int8_t read_imu() {
-  int8_t ret = 0;
-  imu.getAGMT();
-  if (false) {
-    imu.clearInterrupts();
-  }
-  return ret;
-}
-
-
-/*
-* Reads the TSL2561 and adds the data to the pile.
-*/
-int8_t read_visible_sensor() {
-  int8_t ret = 0;
-  ret = graph_array_visible.feedFilter(1.0 * tsl2561.getLux());
-  graph_array_broad_ir.feedFilter(1.0 * tsl2561.getIR());
-  return ret;
-}
-
-
-/*
-* Reads the GridEye sensor and adds the data to the pile.
-*/
-int8_t read_thermopile_sensor() {
-  int8_t ret = 0;
-  for (uint8_t i = 0; i < 8; i++) {
-    for (uint8_t n = 0; n < 8; n++) {
-      uint8_t pix_idx = (7 - i) | (n << 3);  // Sensor is rotated 90-deg.
-      graph_array_therm_frame.feedFilter(grideye.getPixelTemperature(pix_idx));
-    }
-  }
-  graph_array_therm_mean.feedFilter(graph_array_therm_frame.value());
-  return ret;
-}
-
-
-int8_t read_time_of_flight_sensor() {
-  uint32_t tof_value = tof.readRangeContinuousMillimeters();
-  if (!tof.timeoutOccurred()) {
-    graph_array_time_of_flight.feedFilter(tof_value);
-  }
-  return 0;
-}
 
 
 /*******************************************************************************
@@ -689,7 +609,7 @@ void callback_adc_value(uint8_t chan, double voltage) {
     case 12:
       break;
     default:
-      c3p_log(LOG_LEV_INFO, "main", "callback_adc_value(%u, %.5fV).", chan, voltage);
+      c3p_log(LOG_LEV_DEBUG, "main", "callback_adc_value(%u, %.5fV).", chan, voltage);
       break;
   }
 }
@@ -947,6 +867,7 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
     app_tricorder.printStopwatch(text_return);
     app_root.printStopwatch(text_return);
     app_synthbox.printStopwatch(text_return);
+    app_magnetometer.printStopwatch(text_return);
     app_standby.printStopwatch(text_return);
     app_config.printStopwatch(text_return);
     app_comms.printStopwatch(text_return);
@@ -956,7 +877,6 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
   else if (0 == StringBuilder::strcasecmp(cmd, "sch")) {
     C3PScheduler::getInstance()->printDebug(text_return);
   }
-
   else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
     app_boot.resetStopwatch();
     app_meta.resetStopwatch();
@@ -964,6 +884,7 @@ int callback_print_app_profiler(StringBuilder* text_return, StringBuilder* args)
     app_tricorder.resetStopwatch();
     app_root.resetStopwatch();
     app_synthbox.resetStopwatch();
+    app_magnetometer.resetStopwatch();
     app_standby.resetStopwatch();
     app_config.resetStopwatch();
     app_comms.resetStopwatch();
@@ -1141,7 +1062,7 @@ int callback_sensor_tools(StringBuilder* text_return, StringBuilder* args) {
           case SensorID::THERMOPILE:     ret_local = grideye.init(&i2c1);          break;
           //case SensorID::TOF:            ret_local = tof.init(&i2c1);              break;
           //case SensorID::BATT_VOLTAGE:       break;
-          case SensorID::IMU:            ret_local = read_imu();               break;
+          //case SensorID::IMU:            ret_local = read_imu();               break;
           //case SensorID::MIC:                break;
           case SensorID::GPS:            ret_local = gps.init();               break;
           //case SensorID::LIGHT:              break;
@@ -1507,6 +1428,85 @@ void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
 }
 
 
+
+/*******************************************************************************
+* Sensor service functions
+*******************************************************************************/
+
+/*
+* Reads the VEML6075 and adds the data to the pile.
+*/
+int8_t read_uv_sensor() {
+  int8_t ret = 0;
+  graph_array_uva.feedFilter(uv.uva());
+  graph_array_uvb.feedFilter(uv.uvb());
+  graph_array_uvi.feedFilter(uv.index());
+  return ret;
+}
+
+
+/*
+* Reads the BME280 and adds the data to the pile.
+*/
+int8_t read_baro_sensor() {
+  int8_t ret = 0;
+  graph_array_humidity.feedFilter(baro.hum());
+  graph_array_air_temp.feedFilter(baro.temp());
+  graph_array_pressure.feedFilter(baro.pres());
+  return ret;
+}
+
+
+/*
+* Reads the IMU and optionally integrates for orientation.
+*/
+int8_t read_imu() {
+  int8_t ret = 0;
+  imu.getAGMT();
+  if (false) {
+    imu.clearInterrupts();
+  }
+  return ret;
+}
+
+
+/*
+* Reads the TSL2561 and adds the data to the pile.
+*/
+int8_t read_visible_sensor() {
+  int8_t ret = 0;
+  ret = graph_array_visible.feedFilter(1.0 * tsl2561.getLux());
+  graph_array_broad_ir.feedFilter(1.0 * tsl2561.getIR());
+  return ret;
+}
+
+
+/*
+* Reads the GridEye sensor and adds the data to the pile.
+*/
+int8_t read_thermopile_sensor() {
+  int8_t ret = 0;
+  for (uint8_t i = 0; i < 8; i++) {
+    for (uint8_t n = 0; n < 8; n++) {
+      uint8_t pix_idx = (7 - i) | (n << 3);  // Sensor is rotated 90-deg.
+      graph_array_therm_frame.feedFilter(grideye.getPixelTemperature(pix_idx));
+    }
+  }
+  graph_array_therm_mean.feedFilter(graph_array_therm_frame.value());
+  return ret;
+}
+
+
+int8_t read_time_of_flight_sensor() {
+  uint32_t tof_value = tof.readRangeContinuousMillimeters();
+  if (!tof.timeoutOccurred()) {
+    graph_array_time_of_flight.feedFilter(tof_value);
+  }
+  return 0;
+}
+
+
+
 /*******************************************************************************
 * Setup function
 *******************************************************************************/
@@ -1518,6 +1518,10 @@ void setup() {
 
   checklist_boot.requestSteps(CHKLST_BOOT_MASK_BOOT_COMPLETE);
   checklist_cyclic.requestSteps(CHKLST_CYC_MAG_ADC_CONF);
+  checklist_cyclic.requestSteps(CHKLST_CYC_LUX_INIT);
+  checklist_cyclic.requestSteps(CHKLST_CYC_GRIDEYE_CONF);
+  checklist_cyclic.requestSteps(CHKLST_CYC_UV_CONF);
+  checklist_cyclic.requestSteps(CHKLST_CYC_BARO_CONF);
 
   AudioMemory(32);
   analogWriteResolution(12);
@@ -1532,13 +1536,10 @@ void setup() {
 
   touch = new SX8634(&_touch_opts);
 
-  //C3PScheduler::getInstance()->addSchedule(&schedule_i2c0);
-  //C3PScheduler::getInstance()->addSchedule(&schedule_i2c1);
-  //C3PScheduler::getInstance()->addSchedule(&schedule_spi0);
   //C3PScheduler::getInstance()->addSchedule(&schedule_usb);
   //C3PScheduler::getInstance()->addSchedule(&schedule_gps);
   //C3PScheduler::getInstance()->addSchedule(&schedule_comms);
-  //C3PScheduler::getInstance()->addSchedule(&schedule_ui);
+  C3PScheduler::getInstance()->addSchedule(&schedule_ui);
 
   config_time = millis();
 }
@@ -1549,18 +1550,22 @@ void setup() {
 *******************************************************************************/
 
 void spi_spin() {
-  int respin = 16;
+  int respin = 2;
   while ((respin-- > 0) && (PollResult::ACTION == spi0.poll())) {}
-  respin = 16;
+  respin = 2;
   while ((respin-- > 0) && (0 < spi0.service_callback_queue())) {}
 }
 
 
 void loop() {
+  //////////////////////////////////////////////////////////////////////////////
+  // Scheduler service
   C3PScheduler* scheduler = C3PScheduler::getInstance();
   scheduler->advanceScheduler();
   scheduler->serviceSchedules();
 
+  //////////////////////////////////////////////////////////////////////////////
+  // Checklist polling
   if (!checklist_boot.request_fulfilled()) {
     if (0 < checklist_boot.poll()) {
       // Actions were taken.
@@ -1571,16 +1576,17 @@ void loop() {
       // Actions were taken.
     }
   }
-
   stopwatch_main_loop_time.markStart();
-  //last_interaction = millis();
 
-  // Completely drain the SPI callback queue.
+  //////////////////////////////////////////////////////////////////////////////
+  // BusQueue polling
   spi_spin();
   i2c0.poll();
   i2c1.poll();
-  //last_interaction = millis();
 
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Boot conditional service blocks
   if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_GPS)) {
     gps_uart.poll();
   }
@@ -1605,67 +1611,8 @@ void loop() {
   /* Poll each sensor class. */
   if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_MAG_GPIO)) {
     sx1503.poll();
-    if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_SPI0)) {
-      mag_adc.poll();
-    }
   }
 
-
-  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_IMU_INIT)) {
-    if (imu_irq_fired) {
-      imu_irq_fired = false;
-      //  stopwatch_sensor_imu.markStart();
-      //  read_imu();
-      //  stopwatch_sensor_imu.markStop();
-    }
-  }
-
-
-  // if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_BARO)) {
-  //   stopwatch_sensor_baro.markStart();
-  //   if (0 < baro.poll()) {
-  //     read_baro_sensor();
-  //     stopwatch_sensor_baro.markStop();
-  //   }
-  // }
-
-  // stopwatch_sensor_uv.markStart();
-  // if (0 < uv.poll()) {
-  //   if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_UV)) {
-  //     read_uv_sensor();
-  //     stopwatch_sensor_uv.markStop();
-  //   }
-  // }
-
-  stopwatch_sensor_lux.markStart();
-  if (0 < tsl2561.poll()) {
-    read_visible_sensor();
-    stopwatch_sensor_lux.markStop();
-  }
-
-  // if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_GRIDEYE)) {
-  //   if (grideye.enabled()) {
-  //     stopwatch_sensor_grideye.markStart();
-  //     if (0 < grideye.poll()) {
-  //       read_thermopile_sensor();
-  //       stopwatch_sensor_grideye.markStop();
-  //     }
-  //   }
-  // }
-
-  //if (tof_update_next <= millis_now) {
-  //  stopwatch_sensor_tof.markStart();
-  //  read_time_of_flight_sensor();
-  //  stopwatch_sensor_tof.markStop();
-  //  tof_update_next = millis_now + 100;
-  //}
-
-  if ((last_interaction + 100000) <= millis_now) {
-    // After 100 seconds, time-out the display.
-    if (&app_standby != uApp::appActive()) {
-      uApp::setAppActive(AppID::HOT_STANDBY);
-    }
-  }
   if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_PMU_CHARGER | CHKLST_BOOT_INIT_PMU_GUAGE)) {
     switch (pmu.poll()) {
       case 1:
@@ -1677,14 +1624,60 @@ void loop() {
     }
   }
 
-  if (frame_rate_limiter.expired()) {
-    frame_rate_limiter.reset();
-    stopwatch_display.markStart();
-    if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_DISPLAY)) {
-      uApp::appActive()->refresh();
-      stopwatch_display.markStop();
-      // For tracking framerate, convert from period in micros to hz...
-      graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Cyclic conditional service blocks
+  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_IMU_INIT)) {
+    if (imu_irq_fired) {
+      imu_irq_fired = false;
+      //read_imu();
+    }
+  }
+
+  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_BARO_INIT)) {
+    if (0 < baro.poll()) {
+      read_baro_sensor();
+    }
+  }
+
+  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_UV_INIT)) {
+    if (0 < uv.poll()) {
+      read_uv_sensor();
+    }
+  }
+
+  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_GRIDEYE_INIT)) {
+    if (0 < grideye.poll()) {
+      read_thermopile_sensor();
+    }
+  }
+
+  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_MAG_ADC_INIT)) {
+    mag_adc.poll();
+  }
+
+  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_ANA_INIT)) {
+  }
+
+  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_LUX_INIT)) {
+    if (0 < tsl2561.poll()) {
+      read_visible_sensor();
+    }
+  }
+
+  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_TOF_INIT)) {
+    //  read_time_of_flight_sensor();
+    //  stopwatch_sensor_tof.markStop();
+    //  tof_update_next = millis_now + 100;
+  }
+
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Last interaction polling
+  if ((last_interaction + 100000) <= millis_now) {
+    // After 100 seconds, time-out the display.
+    if (&app_standby != uApp::appActive()) {
+      uApp::setAppActive(AppID::HOT_STANDBY);
     }
   }
 

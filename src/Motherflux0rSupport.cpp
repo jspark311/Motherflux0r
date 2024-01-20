@@ -48,7 +48,7 @@ extern uint32_t boot_time;     // millis() at boot.
 extern uint32_t config_time;   // millis() at end of setup().
 
 extern uAppBoot app_boot;
-
+extern C3PScheduledLambda schedule_ui;
 
 static uint32_t off_time_vib      = 0;      // millis() when vibrator should be disabled.
 static uint32_t off_time_led_r    = 0;      // millis() when LED_R should be disabled.
@@ -580,7 +580,7 @@ const StepSequenceList CHECKLIST_BOOT[] = {
     .DEP_MASK     = (CHKLST_BOOT_INIT_TOUCH_FOUND),
     .DISPATCH_FXN = []() {
       if (touch->deviceReady()) {
-        touch->setLongpress(800, 0);   // 800ms is a long-press. No rep.
+        touch->setLongpress(TOUCH_DWELL_LONG_PRESS, 0);   // Set long-press. No rep.
         touch->setButtonFxn(cb_button);
         touch->setSliderFxn(cb_slider);
         touch->setLongpressFxn(cb_longpress);
@@ -609,7 +609,14 @@ const StepSequenceList CHECKLIST_BOOT[] = {
   { .FLAG         = CHKLST_BOOT_INIT_UI,
     .LABEL        = "Start UI",
     .DEP_MASK     = (CHKLST_BOOT_INIT_DISPLAY),
-    .DISPATCH_FXN = []() { return (display.enabled() ? 1 : 0); },
+    .DISPATCH_FXN = []() {
+      int8_t ret = 0;
+      if (display.enabled()) {
+        schedule_ui.enabled(true);
+        ret = 1;
+      }
+      return ret;
+    },
     .POLL_FXN     = []() { return (app_boot.firstFrameWritten() ? 1 : 0);  }
   },
 
