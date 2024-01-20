@@ -524,7 +524,7 @@ const StepSequenceList CHECKLIST_BOOT[] = {
     .DEP_MASK     = (CHKLST_BOOT_INIT_GPIO),  // Uninitialized CS pins must be seized.
     .DISPATCH_FXN = []() { return (0 == spi0.init()   ? 1 : 0);  },
     .POLL_FXN     = []() {
-      int8_t ret = 1;
+      int8_t ret = (spi0.busOnline() ? 1:0);
       if (1 == ret) {
         display.setBus(&spi0);
         mag_adc.setAdapter(&spi0);
@@ -539,7 +539,7 @@ const StepSequenceList CHECKLIST_BOOT[] = {
     .POLL_FXN     = []() {
       int8_t ret = (i2c0.busOnline() ? 1:0);
       if (1 == ret) {
-        touch->assignBusInstance(&i2c0);
+        touch->setAdapter(&i2c0);
       }
       return ret;
     }
@@ -551,12 +551,12 @@ const StepSequenceList CHECKLIST_BOOT[] = {
     .POLL_FXN     = []() {
       int8_t ret = (i2c1.busOnline() ? 1:0);
       if (1 == ret) {
-        sx1503.assignBusInstance(&i2c1);
-        tsl2561.assignBusInstance(&i2c1);
-        uv.assignBusInstance(&i2c1);
-        baro.assignBusInstance(&i2c1);
-        grideye.assignBusInstance(&i2c1);
-        // tof.assignBusInstance(&i2c1);
+        sx1503.setAdapter(&i2c1);
+        tsl2561.setAdapter(&i2c1);
+        uv.setAdapter(&i2c1);
+        baro.setAdapter(&i2c1);
+        grideye.setAdapter(&i2c1);
+        // tof.setAdapter(&i2c1);
       }
       return ret;
     }
