@@ -57,6 +57,11 @@ static uint32_t off_time_led_b    = 0;      // millis() when LED_B should be dis
 
 const char* const CONSOLE_PROMPT_STR = "Motherflux0r # ";
 
+float glbl_graph_data_1[96];
+float glbl_graph_data_2[96];
+float glbl_graph_data_3[96];
+
+
 /*******************************************************************************
 * The program has a set of configurations that it defines and loads at runtime.
 * This defines everything required to handle that conf fluidly and safely.
@@ -366,32 +371,25 @@ void draw_graph_obj(Image* FB,
   const uint32_t  LAST_SIDX_1 = filter1->lastIndex();
   const uint32_t  DATA_IDX_1  = (1 + LAST_SIDX_1 + strict_abs_delta(DATA_SIZE_1, (uint32_t) w)) % DATA_SIZE_1;
   const float*    F_MEM_PTR_1 = filter1->memPtr();
-  float tmp_data_1[DATA_SIZE_1];
-  for (uint32_t i = 0; i < DATA_SIZE_1; i++) {
-    tmp_data_1[i] = *(F_MEM_PTR_1 + ((i + LAST_SIDX_1) % DATA_SIZE_1));
-  }
 
   const uint32_t  DATA_SIZE_2 = filter2->windowSize();
   const uint32_t  LAST_SIDX_2 = filter2->lastIndex();
   const uint32_t  DATA_IDX_2  = (1 + LAST_SIDX_2 + strict_abs_delta(DATA_SIZE_2, (uint32_t) w)) % DATA_SIZE_2;
   const float*    F_MEM_PTR_2 = filter2->memPtr();
-  float tmp_data_2[DATA_SIZE_2];
-  for (uint32_t i = 0; i < DATA_SIZE_2; i++) {
-    tmp_data_2[i] = *(F_MEM_PTR_2 + ((i + LAST_SIDX_2) % DATA_SIZE_2));
-  }
 
   const uint32_t  DATA_SIZE_3 = filter3->windowSize();
   const uint32_t  LAST_SIDX_3 = filter3->lastIndex();
   const uint32_t  DATA_IDX_3  = (1 + LAST_SIDX_3 + strict_abs_delta(DATA_SIZE_3, (uint32_t) w)) % DATA_SIZE_3;
   const float*    F_MEM_PTR_3 = filter3->memPtr();
-  float tmp_data_3[DATA_SIZE_3];
-  for (uint32_t i = 0; i < DATA_SIZE_3; i++) {
-    tmp_data_3[i] = *(F_MEM_PTR_3 + ((i + LAST_SIDX_3) % DATA_SIZE_3));
+  for (uint32_t i = 0; i < sizeof(glbl_graph_data_1); i++) {
+    glbl_graph_data_1[i] = *(F_MEM_PTR_1 + ((i + LAST_SIDX_1) % DATA_SIZE_1));
+    glbl_graph_data_2[i] = *(F_MEM_PTR_2 + ((i + LAST_SIDX_2) % DATA_SIZE_2));
+    glbl_graph_data_3[i] = *(F_MEM_PTR_3 + ((i + LAST_SIDX_3) % DATA_SIZE_3));
   }
 
   graph.trace0.color        = color1;
-  graph.trace0.dataset      = tmp_data_1;
-  graph.trace0.data_len     = DATA_SIZE_1;
+  graph.trace0.dataset      = glbl_graph_data_1;
+  graph.trace0.data_len     = w;
   graph.trace0.enabled      = true;
   graph.trace0.autoscale_x  = false;
   graph.trace0.autoscale_y  = true;
@@ -400,11 +398,11 @@ void draw_graph_obj(Image* FB,
   graph.trace0.show_value   = opt2;
   graph.trace0.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
   graph.trace0.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
-  graph.trace0.offset_x     = DATA_IDX_1;
+  graph.trace0.offset_x     = 0;
 
   graph.trace1.color        = color2;
-  graph.trace1.dataset      = tmp_data_2;
-  graph.trace1.data_len     = DATA_SIZE_2;
+  graph.trace1.dataset      = glbl_graph_data_2;
+  graph.trace1.data_len     = w;
   graph.trace1.enabled      = true;
   graph.trace1.autoscale_x  = false;
   graph.trace1.autoscale_y  = true;
@@ -413,11 +411,11 @@ void draw_graph_obj(Image* FB,
   graph.trace1.show_value   = opt2;
   graph.trace1.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
   graph.trace1.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
-  graph.trace1.offset_x     = DATA_IDX_2;
+  graph.trace1.offset_x     = 0;
 
   graph.trace2.color        = color3;
-  graph.trace2.dataset      = tmp_data_3;
-  graph.trace2.data_len     = DATA_SIZE_3;
+  graph.trace2.dataset      = glbl_graph_data_3;
+  graph.trace2.data_len     = w;
   graph.trace2.enabled      = true;
   graph.trace2.autoscale_x  = false;
   graph.trace2.autoscale_y  = true;
@@ -426,7 +424,7 @@ void draw_graph_obj(Image* FB,
   graph.trace2.show_value   = opt2;
   graph.trace2.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
   graph.trace2.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
-  graph.trace2.offset_x     = DATA_IDX_3;
+  graph.trace2.offset_x     = 0;
 
   graph.drawGraph(FB, x, y);
 }
@@ -568,12 +566,17 @@ const StepSequenceList CHECKLIST_BOOT[] = {
     .DEP_MASK     = (CHKLST_BOOT_INIT_I2C0 | CHKLST_BOOT_INIT_GPIO),
     .DISPATCH_FXN = []() {
       if ((0 == touch->reset()) ? 1 : 0) {
-        touch_timeout = millis() + 300;
+        touch_timeout = millis();
         return 1;
       }
       return -1;
     },
-    .POLL_FXN     = []() { return (touch->devFound() ? 1:0);  }
+    .POLL_FXN     = []() {
+      if (millis_since(touch_timeout) > 300) {
+        return -1;
+      }
+      return (touch->devFound() ? 1:0);
+    }
   },
   { .FLAG         = CHKLST_BOOT_INIT_TOUCH_READY,
     .LABEL        = "Touch ready",
@@ -910,6 +913,7 @@ const StepSequenceList CHECKLIST_CYCLIC[] = {
     .DEP_MASK     = (0),
     .DISPATCH_FXN = []() {
       if (!magneto.power()) return 0;
+      mag_adc.verbosity(LOG_LEV_ERROR);
       sleep_ms(10);
       return (0 == mag_adc.init() ? 1 : 0);
     },

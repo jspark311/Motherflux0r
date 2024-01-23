@@ -41,8 +41,6 @@ enum class AppLifecycle : uint8_t {
   INACTIVE      = 4   //
 };
 
-extern SSD1331 display;
-
 
 /* Class flags */
 #define UAPP_FLAG_LIFECYC_SM_MASK  0x00000007  //
@@ -77,8 +75,8 @@ extern SSD1331 display;
 #define UAPP_MODAL_COMMS_SERIAL         0x06
 
 
-
 /*******************************************************************************
+* UI module base class
 *******************************************************************************/
 class uApp {
   public:
@@ -170,6 +168,9 @@ class uApp {
 * Specific derived classes
 *******************************************************************************/
 
+/*
+* The boot/shutdown screen
+*/
 class uAppBoot : public uApp {
   public:
     uAppBoot();
@@ -190,6 +191,10 @@ class uAppBoot : public uApp {
 };
 
 
+
+/*
+* The root screen
+*/
 class uAppRoot : public uApp {
   public:
     uAppRoot();
@@ -206,6 +211,9 @@ class uAppRoot : public uApp {
 
 
 
+/*
+* General sensor usage
+*/
 class uAppTricorder : public uApp {
   public:
     uAppTricorder();
@@ -243,13 +251,18 @@ class uAppMagnetometer : public uApp {
     uAppMagnetometer();
     ~uAppMagnetometer();
 
-  protected:
+  private:
+    ImageGraph<float> _graph;
+
     int8_t _lc_on_preinit();
     int8_t _lc_on_active();
     int8_t _lc_on_teardown();
     int8_t _lc_on_inactive();
     int8_t _process_user_input();
     void   _redraw_window();
+
+    void   _render_mag_unready();
+    int8_t _rerender_graph();
 };
 
 

@@ -11,7 +11,9 @@
 #define UAPP_SUBMODAL_TRICORDER_MAG_CONF   0x04
 
 
-uAppMagnetometer::uAppMagnetometer() : uApp("Magnetometer", (Image*) &display) {}
+uAppMagnetometer::uAppMagnetometer() :
+  uApp("Magnetometer", (Image*) &display),
+  _graph(display.x(), 53) {}
 
 uAppMagnetometer::~uAppMagnetometer() {}
 
@@ -29,6 +31,30 @@ uAppMagnetometer::~uAppMagnetometer() {}
 int8_t uAppMagnetometer::_lc_on_preinit() {
   int8_t ret = 1;
   FB->fill(BLACK);
+
+  _graph.fg_color = 0xFFFFFFFF;
+
+  _graph.trace0.color        = COLOR_X_AXIS;
+  _graph.trace0.autoscale_x  = false;
+  _graph.trace0.autoscale_y  = true;
+  _graph.trace0.show_x_range = false;
+  _graph.trace0.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
+  _graph.trace0.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
+
+  _graph.trace1.color        = COLOR_Y_AXIS;
+  _graph.trace1.autoscale_x  = false;
+  _graph.trace1.autoscale_y  = true;
+  _graph.trace1.show_x_range = false;
+  _graph.trace1.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
+  _graph.trace1.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
+
+  _graph.trace2.color        = COLOR_Z_AXIS;
+  _graph.trace2.autoscale_x  = false;
+  _graph.trace2.autoscale_y  = true;
+  _graph.trace2.show_x_range = false;
+  _graph.trace2.grid_lock_x  = false;   // Default is to allow the grid to scroll with the starting offset.
+  _graph.trace2.grid_lock_y  = false;   // Default is to allow the grid to scroll with any range shift.
+
   redraw_app_window();
   //if (nullptr != wakelock_mag) {   wakelock_mag->acquire();   }
   return ret;
@@ -219,9 +245,128 @@ int8_t uAppMagnetometer::_process_user_input() {
 }
 
 
+/*******************************************************************************
+* Render functions
+*******************************************************************************/
+
+void uAppMagnetometer::_render_mag_unready() {
+  StringBuilder tmp_str;
+  FB->setTextColor(WHITE, BLACK);
+  FB->setCursor(0, 0);
+  FB->setTextSize(0);
+  FB->writeString("Mag not ready\n");
+  FB->setCursor(0, 12);
+
+  FB->setTextColor(GREY, BLACK);
+  FB->writeString("Power:       ");
+  if (magneto.power()) {  FB->setTextColor(GREEN,  BLACK);  FB->writeString(" On\n");   }
+  else {                  FB->setTextColor(0x03E0, BLACK);  FB->writeString("Off\n");  }
+
+  FB->setTextColor(GREY, BLACK);
+  FB->writeString("GPIO Init:   ");
+  if (sx1503.initialized()) {  FB->setTextColor(GREEN,  BLACK);  FB->writeString("Yes\n");   }
+  else {                       FB->setTextColor(0x03E0, BLACK);  FB->writeString(" No\n");  }
+
+  FB->setTextColor(GREY, BLACK);
+  FB->writeString("ADC: ");
+  uint16_t color = 0x03E0;
+  switch (mag_adc.currentState()) {
+    case MCP356xState::POST_INIT:
+    case MCP356xState::CLK_MEASURE:
+    case MCP356xState::CALIBRATION:
+    case MCP356xState::USR_CONF:
+      color = YELLOW;
+      break;
+    case MCP356xState::IDLE:
+    case MCP356xState::READING:
+      color = GREEN;
+      break;
+    default:
+      break;
+  }
+  FB->setTextColor(color,  BLACK);
+  tmp_str.concatf("%11s\n", MCP356x::stateStr(mag_adc.currentState()));
+  FB->writeString((char*) tmp_str.string());
+  tmp_str.clear();
+
+  FB->setTextColor(GREY, BLACK);
+  FB->writeString("Filter:  ");
+  if (mag_filter.windowFull()) {
+    color = GREEN;
+    tmp_str.concat("  Ready\n");
+  }
+  else {
+    color = (0 < mag_filter.totalSamples()) ? YELLOW : GREY;
+    tmp_str.concatf(
+      "%d/%d\n",
+      mag_filter.totalSamples(),
+      mag_filter.windowSize()
+    );
+  }
+  FB->setTextColor(color, BLACK);
+  FB->writeString((char*) tmp_str.string());
+  tmp_str.clear();
+}
+
+
+
+
+int8_t uAppMagnetometer::_rerender_graph() {
+  const uint16_t TOP_MARGIN     = 10;
+  const uint16_t GRAPH_HEIGHT   = 53;
+  //const uint8_t GRAPH_WIDTH    = _cluttered_display() ? (96-(COMPASS_SIZE+ELEMENT_MARGIN)) : 96;
+  const uint16_t GRAPH_WIDTH    = sizeof(glbl_graph_data_1) / sizeof(glbl_graph_data_1[0]);
+  const uint16_t GRAPH_H_OFFSET = FB->x() - GRAPH_WIDTH;
+  Vector3f* mag_vect_ptr = mag_vect.getData();
+  FB->setTextColor(WHITE, BLACK);
+  FB->setCursor(0, 0);
+  StringBuilder tmp_val_str;
+  tmp_val_str.concatf("%.4f uT   ", mag_vect_ptr->length());
+  FB->writeString(&tmp_val_str);
+
+  const uint32_t  DATA_SIZE = mag_filter.windowSize();
+  const uint32_t  LAST_SIDX = mag_filter.lastIndex();
+  const Vector3f* F_MEM_PTR = mag_filter.memPtr();
+
+  for (uint32_t i = 0; i < GRAPH_WIDTH; i++) {
+    Vector3f* vect = (F_MEM_PTR + (((LAST_SIDX + DATA_SIZE) - (GRAPH_WIDTH - i)) % DATA_SIZE));
+    glbl_graph_data_1[i] = vect->x;
+    glbl_graph_data_2[i] = vect->y;
+    glbl_graph_data_3[i] = vect->z;
+  }
+
+
+  _graph.trace0.data_len     = GRAPH_WIDTH;
+  _graph.trace1.data_len     = GRAPH_WIDTH;
+  _graph.trace2.data_len     = GRAPH_WIDTH;
+
+  _graph.trace0.offset_x     = 0;
+  _graph.trace1.offset_x     = 0;
+  _graph.trace2.offset_x     = 0;
+
+  _graph.trace0.show_y_range = _cluttered_display();
+  _graph.trace1.show_y_range = _cluttered_display();
+  _graph.trace2.show_y_range = _cluttered_display();
+
+  _graph.trace0.show_value   = _render_text_value();
+  _graph.trace1.show_value   = _render_text_value();
+  _graph.trace2.show_value   = _render_text_value();
+
+  _graph.trace0.dataset      = glbl_graph_data_1;
+  _graph.trace1.dataset      = glbl_graph_data_2;
+  _graph.trace2.dataset      = glbl_graph_data_3;
+
+  _graph.trace0.enabled      = true;
+  _graph.trace1.enabled      = true;
+  _graph.trace2.enabled      = true;
+
+  _graph.drawGraph(FB, 0, TOP_MARGIN);
+  return 0;
+}
+
 
 /*
-* Draws the tricorder app.
+* uApp redraw function
 */
 void uAppMagnetometer::_redraw_window() {
   const uint8_t TOP_MARGIN     = 10;
@@ -326,27 +471,16 @@ void uAppMagnetometer::_redraw_window() {
       break;
 
     case UAPP_SUBMODAL_TRICORDER_MAG_GRAPH:
-      if (graph_array_mag_strength_z.dirty()) {
-        //const uint8_t GRAPH_WIDTH    = _cluttered_display() ? (96-(COMPASS_SIZE+ELEMENT_MARGIN)) : 96;
-        const uint8_t GRAPH_WIDTH    = FB->x();
-        const uint8_t GRAPH_H_OFFSET = FB->x() - GRAPH_WIDTH;
-        Vector3f* mag_vect_ptr = mag_vect.getData();
-        FB->setTextColor(WHITE, BLACK);
-        FB->setCursor(0, 0);
-        tmp_val_str.clear();
-        tmp_val_str.concatf("%.4f uT   ", mag_vect_ptr->length());
-        FB->writeString(&tmp_val_str);
-        draw_graph_obj(FB,
-          GRAPH_H_OFFSET, TOP_MARGIN, GRAPH_WIDTH, GRAPH_HEIGHT,
-          COLOR_X_AXIS, COLOR_Y_AXIS, COLOR_Z_AXIS,
-          true, false, _render_text_value(),
-          &graph_array_mag_strength_x, &graph_array_mag_strength_y, &graph_array_mag_strength_z
-        );
+      if (mag_filter.windowFull()) {
+        _rerender_graph();
+      }
+      else {
+        _render_mag_unready();
       }
       break;
 
     case UAPP_SUBMODAL_TRICORDER_MAG_CONF:
-      if (compass.dataReady()) {
+      if (true) {
         FB->setCursor(0, 0);
         FB->setTextColor(WHITE, BLACK);
         FB->writeString("Mag settings: ");
@@ -379,23 +513,7 @@ void uAppMagnetometer::_redraw_window() {
 
     default:
       redraw_app_window();
-      FB->setTextSize(0);
-      FB->setCursor(0, 12);
-      FB->writeString("Mag: ");
-      if (mag_adc.adcConfigured() && sx1503.initialized()) {
-        if (magneto.power()) {
-          FB->setTextColor(GREEN, BLACK);
-          FB->writeString("RUNNING\n");
-        }
-        else {
-          FB->setTextColor(YELLOW, BLACK);
-          FB->writeString("OFF\n");
-        }
-      }
-      else {
-        FB->setTextColor(0x03E0, BLACK);
-        FB->writeString("FAULT\n");
-      }
+      _render_mag_unready();
       break;
   }
 }

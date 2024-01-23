@@ -371,4 +371,8 @@ extern AudioAmplifier           ampR;
 extern AudioAmplifier           ampL;
 extern AudioAnalyzeFFT256       fft256_1;
 
+
+extern float glbl_graph_data_1[96];
+extern float glbl_graph_data_2[96];
+extern float glbl_graph_data_3[96];
 #endif    // __MOTHERFLUX0R_H__

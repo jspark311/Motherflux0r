@@ -141,9 +141,9 @@ UARTOpts usb_comm_opts {
   .padding       = 0
 };
 
-SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 16);
-I2CAdapter i2c0(&i2c0_opts);
-I2CAdapter i2c1(&i2c1_opts);
+SPIAdapter spi0(0, SPISCK_PIN, SPIMOSI_PIN, SPIMISO_PIN, 16, 24);
+I2CAdapter i2c0(&i2c0_opts, 4, 24);
+I2CAdapter i2c1(&i2c1_opts, 8, 24);
 
 PlatformUART console_uart(0, 255, 255, 255, 255, 8192, 2048);
 PlatformUART comm_unit_uart(1, COMM_RX_PIN, COMM_TX_PIN, 255, 255, 2048, 2048);
@@ -1652,7 +1652,7 @@ void loop() {
     }
   }
 
-  if (checklist_cyclic.all_steps_have_passed(CHKLST_CYC_MAG_ADC_INIT)) {
+  if (magneto.power()) {
     mag_adc.poll();
   }
 
