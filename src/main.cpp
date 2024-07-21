@@ -3,7 +3,7 @@
 
 #include <math.h>
 #include <StringBuilder.h>
-#include <SensorFilter.h>
+#include <TimeSeries/SensorFilter.h>
 #include <C3PLogger.h>
 #include <uuid.h>
 
@@ -394,7 +394,7 @@ void imu_isr_fxn() {  imu_irq_fired = true;  }
 *******************************************************************************/
 void link_callback_state(M2MLink* cb_link) {
   StringBuilder log;
-  log.concatf("Link (0x%x) entered state %s\n", cb_link->linkTag(), M2MLink::sessionStateStr(cb_link->getState()));
+  log.concatf("Link (0x%x) entered state %s\n", cb_link->linkTag(), M2MLink::sessionStateStr(cb_link->currentState()));
   //printf("%s\n\n", (const char*) log.string());
 }
 

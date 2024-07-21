@@ -1,7 +1,6 @@
-#include <CppPotpourri.h>
-#include <SensorFilter.h>
-#include "uApp.h"
 #include "Motherflux0r.h"
+#include <CppPotpourri.h>
+#include "uApp.h"
 
     // TODO: Put things into reset states.
     // TODO: Power off non-essential rails.

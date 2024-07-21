@@ -1,5 +1,4 @@
 #include <CppPotpourri.h>
-#include <SensorFilter.h>
 #include "ICM20948.h"
 #include "DRV425.h"
 #include "uApp.h"

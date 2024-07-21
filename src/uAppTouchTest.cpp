@@ -1,7 +1,6 @@
-#include <CppPotpourri.h>
-#include <SensorFilter.h>
-#include "uApp.h"
 #include "Motherflux0r.h"
+#include <CppPotpourri.h>
+#include "uApp.h"
 
 /* Externs... */
 extern SX8634* touch;

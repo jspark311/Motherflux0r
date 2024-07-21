@@ -1,8 +1,7 @@
+#include "Motherflux0r.h"
 #include <CppPotpourri.h>
-#include <SensorFilter.h>
 #include <Audio.h>
 #include "uApp.h"
-#include "Motherflux0r.h"
 
 static const uint16_t BIN_INDICIES[] = {
   0,   0,   1,   1,   2,   2,   3,   3,   4,   4,   5,   5,   6,   6,   7,   7,

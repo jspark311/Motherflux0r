@@ -8,7 +8,7 @@
 #include <CppPotpourri.h>
 #include <StringBuilder.h>
 #include <AsyncSequencer.h>
-#include <SensorFilter.h>
+#include <TimeSeries/SensorFilter.h>
 #include <Image/Image.h>
 #include <Image/ImageUtils.h>
 

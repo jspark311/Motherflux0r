@@ -1,4 +1,4 @@
-#include "SensorFilter.h"
+#include "TimeSeries/SensorFilter.h"
 #include "Pipes/TripleAxisPipe/TripleAxisPipe.h"
 #include "Pipes/TripleAxisPipe/TripleAxisCompass.h"
 #include "ManuvrDrivers.h"

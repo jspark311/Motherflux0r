@@ -704,7 +704,7 @@ const StepSequenceList CHECKLIST_BOOT[] = {
       if (Serial) {
         while (Serial.available()) { Serial.read(); } // Drain any leading characters...
         console_uart.readCallback(&console);          // ...attach the UART to console...
-        console.setOutputTarget(&console_uart);       // ...and console to UART.
+        console.setEfferant(&console_uart);           // ...and console to UART.
         return 1;
       }
       return ((millis_since(boot_time) > 10000) ? -1 : 0);
@@ -752,7 +752,7 @@ const StepSequenceList CHECKLIST_BOOT[] = {
       console.defineCommand("conf",        'c',  "Dump/set conf key.", "[usr|cal|pack] [conf_key] [value]", 1, callback_conf_tools);
       console.defineCommand("pmu",         'p',  "PMU tools", "[info|punch|charging|aux|reset|init|refresh|verbosity]", 1, callback_pmu_tools);
       console.defineCommand("hwstate",     '\0', "Hardware state checklists.", "", 0, callback_checklist_dump);
-      console.setTXTerminator(LineTerm::CRLF);
+      //console.setTXTerminator(LineTerm::CRLF);
       console.setRXTerminator(LineTerm::CR);
       console.emitPrompt(true);
       console.localEcho(true);
