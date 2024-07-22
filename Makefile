@@ -21,7 +21,7 @@ export ARDUINO_LIBS     = $(TEENSY_PATH)/hardware/avr/1.59.0/libraries
 export TEENSY_CORE_PATH = $(TEENSY_PATH)/hardware/avr/1.59.0/cores/teensy4
 
 TOOLCHAIN          = $(TEENSY_PATH)/tools/teensy-compile/11.3.1/arm
-TEENSY_LOADER_PATH = $(TEENSY_PATH)/tools/teensy-tools/1.59.0/teensy
+TEENSY_LOADER_PATH = tools/teensy_loader_cli/teensy_loader_cli
 FORMAT             = ihex
 
 # This is where we will store compiled libs and the final output.
@@ -46,6 +46,10 @@ CXXFLAGS    += -DCONFIG_C3P_CBOR
 CXXFLAGS    += -DCONFIG_C3P_IMG_SUPPORT
 CXXFLAGS    += -DCONFIG_C3P_M2M_SUPPORT
 CXXFLAGS    += -DCONFIG_C3P_I2CADAPTER_ENABLE_CONSOLE
+CXXFLAGS    += -DCONFIG_C3P_CONSOLE_REBOOT_TOOL
+CXXFLAGS    += -DCONFIG_C3P_CONSOLE_PFINFO_TOOL
+CXXFLAGS    += -DCONFIG_C3P_CONSOLE_GPIO_TOOL
+
 
 CFLAGS       = -Wall -nostdlib
 CFLAGS      += -DF_CPU=$(CPU_SPEED)
@@ -156,4 +160,4 @@ clean:
 
 fullclean: clean
 	rm -rf $(OUTPUT_PATH)
-	#$(MAKE) clean -C lib
+	$(MAKE) clean -C lib

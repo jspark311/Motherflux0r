@@ -7,24 +7,24 @@
 *******************************************************************************/
 
 /* Data buffers for sensors. */
-SensorFilter<float> graph_array_pressure(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_humidity(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_air_temp(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_psu_temp(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_uva(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_uvb(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_uvi(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_ana_light(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_visible(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_broad_ir(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_therm_mean(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_therm_frame(64, FilteringStrategy::MOVING_AVG);
-SensorFilter<float> graph_array_mag_strength_x(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_mag_strength_y(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_mag_strength_z(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_time_of_flight(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_batt_voltage(96, FilteringStrategy::RAW);
-SensorFilter<float> graph_array_batt_current(96, FilteringStrategy::RAW);
+TimeSeries<float> graph_array_pressure(96);
+TimeSeries<float> graph_array_humidity(96);
+TimeSeries<float> graph_array_air_temp(96);
+TimeSeries<float> graph_array_psu_temp(96);
+TimeSeries<float> graph_array_uva(96);
+TimeSeries<float> graph_array_uvb(96);
+TimeSeries<float> graph_array_uvi(96);
+TimeSeries<float> graph_array_ana_light(96);
+TimeSeries<float> graph_array_visible(96);
+TimeSeries<float> graph_array_broad_ir(96);
+TimeSeries<float> graph_array_therm_mean(96);
+TimeSeries<float> graph_array_therm_frame(64);
+TimeSeries<float> graph_array_mag_strength_x(96);
+TimeSeries<float> graph_array_mag_strength_y(96);
+TimeSeries<float> graph_array_mag_strength_z(96);
+TimeSeries<float> graph_array_time_of_flight(96);
+TimeSeries<float> graph_array_batt_voltage(96);
+TimeSeries<float> graph_array_batt_current(96);
 
 
 /*

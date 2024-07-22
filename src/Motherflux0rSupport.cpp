@@ -326,7 +326,7 @@ void render_button_icon(uint8_t sym, int x, int y, uint16_t color) {
 void draw_graph_obj(Image* FB,
   PixUInt x, PixUInt y, PixUInt w, PixUInt h, uint32_t color,
   bool opt1, bool opt2, bool opt3,
-  SensorFilter<float>* filter
+  TimeSeries<float>* filter
 )
 {
   ImageGraph<float> graph(w, h);
@@ -361,7 +361,7 @@ void draw_graph_obj(Image* FB,
 void draw_graph_obj(Image* FB,
   PixUInt x, PixUInt y, PixUInt w, PixUInt h, uint32_t color1, uint32_t color2, uint32_t color3,
   bool opt1, bool opt2, bool opt3,
-  SensorFilter<float>* filter1, SensorFilter<float>* filter2, SensorFilter<float>* filter3
+  TimeSeries<float>* filter1, TimeSeries<float>* filter2, TimeSeries<float>* filter3
 )
 {
   ImageGraph<float> graph(w, h);

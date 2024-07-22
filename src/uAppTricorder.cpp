@@ -550,7 +550,7 @@ void uAppTricorder::_render_photometry() {
     FB->writeString(" / ");
     FB->setTextColor(RED, BLACK);
     FB->writeString("IR");
-    graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
+    graph_array_ana_light.feedSeries(analogRead(ANA_LIGHT_PIN) / 1024.0);
     draw_graph_obj(FB,
       0, 10, 96, 53, YELLOW, 0xF140, RED,
       true, _cluttered_display(), _render_text_value(),

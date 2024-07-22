@@ -1,4 +1,4 @@
-#include "TimeSeries/SensorFilter.h"
+#include "TimeSeries/TimeSeries.h"
 #include "Pipes/TripleAxisPipe/TripleAxisPipe.h"
 #include "Pipes/TripleAxisPipe/TripleAxisCompass.h"
 #include "ManuvrDrivers.h"
@@ -20,28 +20,28 @@ extern VL53L0X tof;
 extern GPSWrapper gps;
 extern LocationFrame current_location;
 
-/* SensorFilters. These are the memory hogs. */
-extern SensorFilter<float> graph_array_pressure;
-extern SensorFilter<float> graph_array_humidity;
-extern SensorFilter<float> graph_array_air_temp;
-extern SensorFilter<float> graph_array_psu_temp;
-extern SensorFilter<float> graph_array_uva;
-extern SensorFilter<float> graph_array_uvb;
-extern SensorFilter<float> graph_array_uvi;
-extern SensorFilter<float> graph_array_ana_light;
-extern SensorFilter<float> graph_array_visible;
-extern SensorFilter<float> graph_array_broad_ir;
-extern SensorFilter<float> graph_array_therm_mean;
-extern SensorFilter<float> graph_array_therm_frame;
-//extern SensorFilter<float> graph_array_mag_confidence;
-extern SensorFilter<float> graph_array_mag_strength_x;
-extern SensorFilter<float> graph_array_mag_strength_y;
-extern SensorFilter<float> graph_array_mag_strength_z;
-extern SensorFilter<float> graph_array_time_of_flight;
-extern SensorFilter<float> graph_array_batt_voltage;
-extern SensorFilter<float> graph_array_batt_current;
-extern SensorFilter<float> graph_array_cpu_time;
-extern SensorFilter<float> graph_array_frame_rate;
+/* TimeSeriess. These are the memory hogs. */
+extern TimeSeries<float> graph_array_pressure;
+extern TimeSeries<float> graph_array_humidity;
+extern TimeSeries<float> graph_array_air_temp;
+extern TimeSeries<float> graph_array_psu_temp;
+extern TimeSeries<float> graph_array_uva;
+extern TimeSeries<float> graph_array_uvb;
+extern TimeSeries<float> graph_array_uvi;
+extern TimeSeries<float> graph_array_ana_light;
+extern TimeSeries<float> graph_array_visible;
+extern TimeSeries<float> graph_array_broad_ir;
+extern TimeSeries<float> graph_array_therm_mean;
+extern TimeSeries<float> graph_array_therm_frame;
+//extern TimeSeries<float> graph_array_mag_confidence;
+extern TimeSeries<float> graph_array_mag_strength_x;
+extern TimeSeries<float> graph_array_mag_strength_y;
+extern TimeSeries<float> graph_array_mag_strength_z;
+extern TimeSeries<float> graph_array_time_of_flight;
+extern TimeSeries<float> graph_array_batt_voltage;
+extern TimeSeries<float> graph_array_batt_current;
+extern TimeSeries<float> graph_array_cpu_time;
+extern TimeSeries<float> graph_array_frame_rate;
 
 /* Magnetic pipeline */
 extern TripleAxisTerminus     mag_vect;   // The magnetic field vector.

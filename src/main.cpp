@@ -321,8 +321,8 @@ StopWatch stopwatch_sensor_gps;
 StopWatch stopwatch_sensor_tof;
 StopWatch stopwatch_touch_poll;
 
-SensorFilter<float> graph_array_cpu_time(96, FilteringStrategy::MOVING_MED);
-SensorFilter<float> graph_array_frame_rate(96, FilteringStrategy::RAW);
+TimeSeries<float> graph_array_cpu_time(96);
+TimeSeries<float> graph_array_frame_rate(96);
 
 
 /* Cheeseball async support stuff. */
@@ -374,7 +374,7 @@ C3PScheduledLambda schedule_ui {
   false,   // Disabled.
   []() {
     uApp::appActive()->refresh();
-    graph_array_frame_rate.feedFilter(1000000.0 / (1+stopwatch_display.meanTime()));
+    graph_array_frame_rate.feedSeries(1000000.0 / (1+stopwatch_display.meanTime()));
     return 0;
   }
 };
@@ -549,15 +549,15 @@ int8_t callback_3axis(SpatialSense s, Vector3f* dat, Vector3f* err, uint32_t seq
     case SpatialSense::BEARING:
       // TODO: Move calculation into Compass class.
       // TODO: Should be a confidence value.
-      //graph_array_mag_confidence.feedFilter(compass.getError()->length());
+      //graph_array_mag_confidence.feedSeries(compass.getError()->length());
       ret = -1;
       break;
     case SpatialSense::MAG:
       {
         Vector3f* mag_fv = mag_filter.getData();
-        graph_array_mag_strength_x.feedFilter(mag_fv->x);
-        graph_array_mag_strength_y.feedFilter(mag_fv->y);
-        graph_array_mag_strength_z.feedFilter(mag_fv->z);
+        graph_array_mag_strength_x.feedSeries(mag_fv->x);
+        graph_array_mag_strength_y.feedSeries(mag_fv->y);
+        graph_array_mag_strength_z.feedSeries(mag_fv->z);
         ret = 0;
       }
       break;
@@ -1184,24 +1184,24 @@ int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args)
         break;
       case SensorID::BARO:
         text_return->concat("Baro Filters:\n");
-        graph_array_humidity.printFilter(text_return);
-        graph_array_air_temp.printFilter(text_return);
-        graph_array_pressure.printFilter(text_return);
-        graph_array_psu_temp.printFilter(text_return);
+        graph_array_humidity.printSeries(text_return);
+        graph_array_air_temp.printSeries(text_return);
+        graph_array_pressure.printSeries(text_return);
+        graph_array_psu_temp.printSeries(text_return);
         break;
       case SensorID::LIGHT:
-        graph_array_ana_light.printFilter(text_return);
+        graph_array_ana_light.printSeries(text_return);
         break;
       case SensorID::UV:
         text_return->concat("UV Filters:\n");
-        graph_array_uva.printFilter(text_return);
-        graph_array_uvb.printFilter(text_return);
-        graph_array_uvi.printFilter(text_return);
+        graph_array_uva.printSeries(text_return);
+        graph_array_uvb.printSeries(text_return);
+        graph_array_uvi.printSeries(text_return);
         break;
       case SensorID::THERMOPILE:
         text_return->concat("GridEye Filters:\n");
-        graph_array_therm_mean.printFilter(text_return);
-        graph_array_therm_frame.printFilter(text_return);
+        graph_array_therm_mean.printSeries(text_return);
+        graph_array_therm_frame.printSeries(text_return);
         break;
       case SensorID::BATT_VOLTAGE:
       case SensorID::IMU:
@@ -1211,7 +1211,7 @@ int callback_sensor_filter_info(StringBuilder* text_return, StringBuilder* args)
         break;
       case SensorID::LUX:
         text_return->concat("Lux Filters:\n");
-        graph_array_visible.printFilter(text_return);
+        graph_array_visible.printSeries(text_return);
         break;
       default:
         text_return->concatf("Unsupported sensor: %d\n", arg0);
@@ -1231,11 +1231,11 @@ int callback_meta_filter_info(StringBuilder* text_return, StringBuilder* args) {
     switch (arg0) {
       case 0:
         text_return->concat("CPU Time Filter:\n");
-        graph_array_cpu_time.printFilter(text_return);
+        graph_array_cpu_time.printSeries(text_return);
         break;
       case 1:
         text_return->concat("Framerate Filter:\n");
-        graph_array_frame_rate.printFilter(text_return);
+        graph_array_frame_rate.printSeries(text_return);
         break;
       default:
         text_return->concatf("Unsupported filter: %d\n", arg0);
@@ -1254,64 +1254,6 @@ int callback_sensor_filter_set_strat(StringBuilder* text_return, StringBuilder* 
   uint8_t arg2 = (2 < args->count()) ? args->position_as_int(2) : 255;
 
   switch ((SensorID) arg0) {
-    case SensorID::MAGNETOMETER:  ret = mag_filter.setStrategy((FilteringStrategy) arg1);   break;
-    case SensorID::BARO:
-      switch (arg2) {
-        case 0:    ret = graph_array_humidity.setStrategy((FilteringStrategy) arg1);   break;
-        case 1:    ret = graph_array_air_temp.setStrategy((FilteringStrategy) arg1);   break;
-        case 2:    ret = graph_array_pressure.setStrategy((FilteringStrategy) arg1);   break;
-        case 255:
-          if (0 == graph_array_humidity.setStrategy((FilteringStrategy) arg1)) {
-            if (0 == graph_array_air_temp.setStrategy((FilteringStrategy) arg1)) {
-              ret = graph_array_pressure.setStrategy((FilteringStrategy) arg1);
-            }
-          }
-          break;
-        default:
-          ret = -3;
-          break;
-      }
-      break;
-    case SensorID::LIGHT:    ret = graph_array_ana_light.setStrategy((FilteringStrategy) arg1);   break;
-    case SensorID::UV:
-      switch (arg2) {
-        case 0:    ret = graph_array_uva.setStrategy((FilteringStrategy) arg1);   break;
-        case 1:    ret = graph_array_uvb.setStrategy((FilteringStrategy) arg1);   break;
-        case 2:    ret = graph_array_uvi.setStrategy((FilteringStrategy) arg1);   break;
-        case 255:
-          if (0 == graph_array_uva.setStrategy((FilteringStrategy) arg1)) {
-            if (0 == graph_array_uvb.setStrategy((FilteringStrategy) arg1)) {
-              ret = graph_array_uvi.setStrategy((FilteringStrategy) arg1);
-            }
-          }
-          break;
-        default:
-          ret = -3;
-          break;
-      }
-      break;
-    case SensorID::THERMOPILE:
-      switch (arg2) {
-        case 0:    ret = graph_array_therm_frame.setStrategy((FilteringStrategy) arg1);  break;
-        case 1:    ret = graph_array_therm_mean.setStrategy((FilteringStrategy) arg1);   break;
-        case 255:
-          if (0 == graph_array_therm_frame.setStrategy((FilteringStrategy) arg1)) {
-            ret = graph_array_therm_mean.setStrategy((FilteringStrategy) arg1);
-          }
-          break;
-        default:
-          ret = -3;
-          break;
-      }
-      break;
-    case SensorID::BATT_VOLTAGE:
-    case SensorID::IMU:
-    case SensorID::MIC:
-    case SensorID::GPS:
-      break;
-    //case SensorID::PSU_TEMP:      ret = graph_array_psu_temp.setStrategy((FilteringStrategy) arg1);    break;
-    case SensorID::TOF:           ret = graph_array_time_of_flight.setStrategy((FilteringStrategy) arg1);    break;
-    case SensorID::LUX:           ret = graph_array_visible.setStrategy((FilteringStrategy) arg1);     break;
     default:
       text_return->concatf("Unsupported sensor: %d\n", arg0);
       return -1;
@@ -1331,8 +1273,6 @@ int callback_meta_filter_set_strat(StringBuilder* text_return, StringBuilder* ar
   int arg0 = args->position_as_int(0);
   uint8_t arg1 = args->position_as_int(1);
   switch (arg0) {
-    case 0:    ret = graph_array_cpu_time.setStrategy((FilteringStrategy) arg1);     break;
-    case 1:    ret = graph_array_frame_rate.setStrategy((FilteringStrategy) arg1);   break;
     default:
       text_return->concatf("Unsupported filter: %d\n", arg0);
       return -1;
@@ -1438,9 +1378,9 @@ void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
 */
 int8_t read_uv_sensor() {
   int8_t ret = 0;
-  graph_array_uva.feedFilter(uv.uva());
-  graph_array_uvb.feedFilter(uv.uvb());
-  graph_array_uvi.feedFilter(uv.index());
+  graph_array_uva.feedSeries(uv.uva());
+  graph_array_uvb.feedSeries(uv.uvb());
+  graph_array_uvi.feedSeries(uv.index());
   return ret;
 }
 
@@ -1450,9 +1390,9 @@ int8_t read_uv_sensor() {
 */
 int8_t read_baro_sensor() {
   int8_t ret = 0;
-  graph_array_humidity.feedFilter(baro.hum());
-  graph_array_air_temp.feedFilter(baro.temp());
-  graph_array_pressure.feedFilter(baro.pres());
+  graph_array_humidity.feedSeries(baro.hum());
+  graph_array_air_temp.feedSeries(baro.temp());
+  graph_array_pressure.feedSeries(baro.pres());
   return ret;
 }
 
@@ -1475,8 +1415,8 @@ int8_t read_imu() {
 */
 int8_t read_visible_sensor() {
   int8_t ret = 0;
-  ret = graph_array_visible.feedFilter(1.0 * tsl2561.getLux());
-  graph_array_broad_ir.feedFilter(1.0 * tsl2561.getIR());
+  ret = graph_array_visible.feedSeries(1.0 * tsl2561.getLux());
+  graph_array_broad_ir.feedSeries(1.0 * tsl2561.getIR());
   return ret;
 }
 
@@ -1489,10 +1429,10 @@ int8_t read_thermopile_sensor() {
   for (uint8_t i = 0; i < 8; i++) {
     for (uint8_t n = 0; n < 8; n++) {
       uint8_t pix_idx = (7 - i) | (n << 3);  // Sensor is rotated 90-deg.
-      graph_array_therm_frame.feedFilter(grideye.getPixelTemperature(pix_idx));
+      graph_array_therm_frame.feedSeries(grideye.getPixelTemperature(pix_idx));
     }
   }
-  graph_array_therm_mean.feedFilter(graph_array_therm_frame.value());
+  graph_array_therm_mean.feedSeries(graph_array_therm_frame.value());
   return ret;
 }
 
@@ -1500,7 +1440,7 @@ int8_t read_thermopile_sensor() {
 int8_t read_time_of_flight_sensor() {
   uint32_t tof_value = tof.readRangeContinuousMillimeters();
   if (!tof.timeoutOccurred()) {
-    graph_array_time_of_flight.feedFilter(tof_value);
+    graph_array_time_of_flight.feedSeries(tof_value);
   }
   return 0;
 }
@@ -1616,8 +1556,8 @@ void loop() {
   if (checklist_boot.all_steps_have_passed(CHKLST_BOOT_INIT_PMU_CHARGER | CHKLST_BOOT_INIT_PMU_GUAGE)) {
     switch (pmu.poll()) {
       case 1:
-        graph_array_batt_voltage.feedFilter(pmu.battVoltage());
-        graph_array_batt_current.feedFilter(pmu.ltc294x.batteryCurrent());
+        graph_array_batt_voltage.feedSeries(pmu.battVoltage());
+        graph_array_batt_current.feedSeries(pmu.ltc294x.batteryCurrent());
         break;
       default:
         break;
@@ -1683,5 +1623,5 @@ void loop() {
 
   console_uart.poll();
   stopwatch_main_loop_time.markStop();
-  graph_array_cpu_time.feedFilter(stopwatch_main_loop_time.meanTime()/1000.0);
+  graph_array_cpu_time.feedSeries(stopwatch_main_loop_time.meanTime()/1000.0);
 }

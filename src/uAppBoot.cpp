@@ -45,7 +45,7 @@ int8_t uAppBoot::_lc_on_preinit() {
   for (uint8_t i = 0; i < 100; i++) {
     // Collect a baseline for use in tuning display intensity.
     // TODO: Data should come in passively as a stream, and not require this.
-    graph_array_ana_light.feedFilter(analogRead(ANA_LIGHT_PIN) / 1024.0);
+    graph_array_ana_light.feedSeries(analogRead(ANA_LIGHT_PIN) / 1024.0);
   }
   return ret;
 }

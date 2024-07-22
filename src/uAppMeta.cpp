@@ -4,8 +4,8 @@
 #include "uApp.h"
 #include "Motherflux0r.h"
 
-extern SensorFilter<float> graph_array_frame_rate;
-extern SensorFilter<float> graph_array_cpu_time;
+extern TimeSeries<float> graph_array_frame_rate;
+extern TimeSeries<float> graph_array_cpu_time;
 extern StopWatch stopwatch_main_loop_time;
 //extern StopWatch stopwatch_main_loop_time;
 

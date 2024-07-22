@@ -114,7 +114,7 @@ SOURCES_C   += $(ARDUINO_LIBS)/Audio/data_windows.c
 SOURCES_C   += $(ARDUINO_LIBS)/Audio/data_spdif.c
 SOURCES_C   += $(ARDUINO_LIBS)/Audio/utility/sqrt_integer.c
 
-SOURCES_CPP  = $(ARDUINO_LIBS)/Audio/analyze_rms.cpp
+SOURCES_CPP += $(ARDUINO_LIBS)/Audio/analyze_rms.cpp
 SOURCES_CPP += $(ARDUINO_LIBS)/Audio/analyze_fft256.cpp
 SOURCES_CPP += $(ARDUINO_LIBS)/Audio/Quantizer.cpp
 SOURCES_CPP += $(ARDUINO_LIBS)/Audio/analyze_fft1024.cpp
@@ -219,6 +219,7 @@ SOURCES_CPP += CppPotpourri/src/EnumeratedTypeCodes.cpp
 SOURCES_CPP += CppPotpourri/src/CppPotpourri.cpp
 SOURCES_CPP += CppPotpourri/src/Quaternion.cpp
 SOURCES_CPP += CppPotpourri/src/Meta/Bikeshed/SensorWrapper.cpp
+SOURCES_CPP += CppPotpourri/src/TimeSeries/TimeSeries.cpp
 SOURCES_CPP += CppPotpourri/src/TimeSeries/SensorFilter.cpp
 SOURCES_CPP += CppPotpourri/src/StringBuilder.cpp
 SOURCES_CPP += CppPotpourri/src/Battery.cpp
